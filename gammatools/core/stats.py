@@ -5,20 +5,21 @@
 """
 
 __author__   = "Matthew Wood <mdwood@slac.stanford.edu>"
-__date__     = "$Date: 2013/07/22 00:02:56 $"
+__date__     = "$Date: 2013/10/20 23:53:52 $"
 
 import numpy as np
 import copy
 from scipy.interpolate import UnivariateSpline
 import scipy.optimize as opt
 import matplotlib.pyplot as plt
+from histogram import makeHistModel
 
 class HistBootstrap(object):
     def __init__(self,hist,fn):
 
         self._fn = fn
         self._hist = hist
-        self._x = np.array(hist._xedges)
+        self._x = np.array(hist.edges(),copy=True)
         self._ncounts = copy.copy(hist._counts)
 
     def bootstrap(self,niter=1000,**kwargs):
@@ -66,8 +67,8 @@ class HistQuantileBkgFn(object):
     """
     def __init__(self,hcounts,bkg_fn,nbkg):
 
-        self._xedge = np.array(hcounts._xedges)
-        self._ncounts = copy.copy(hcounts._counts)
+        self._xedge = np.array(hcounts.edges())
+        self._ncounts = copy.copy(hcounts.counts())
         self._ncounts = np.concatenate(([0],self._ncounts))
         self._bkg_fn = bkg_fn
         self._nbkg = nbkg
@@ -106,8 +107,8 @@ class HistQuantileBkgFn(object):
         nedge = len(self._ncounts[self._xedge<=xmax])
         xedge = self._xedge[:nedge]
 
-        from histogram import makeHistModel
-
+        
+        
         h = makeHistModel(xedge,self._ncounts[1:nedge],5)
 
 
@@ -169,7 +170,7 @@ class HistQuantileBkgHist(object):
 
     def __init__(self,hon,hoff,alpha):
 
-        self._xedges = np.array(hon._xedges)
+        self._xedges = np.array(hon.edges())
 
         self._non = copy.copy(hon._counts)
         self._noff = copy.copy(hoff._counts)
@@ -187,7 +188,6 @@ class HistQuantileBkgHist(object):
 
         nedge = len(self._non)
 
-        from histogram import makeHistModel
         
         hon = makeHistModel(self._xedges,self._non[1:],5)
         hoff = makeHistModel(self._xedges,self._noff[1:],5)
@@ -281,7 +281,7 @@ class HistQuantile(object):
 
     def __init__(self,hist):
 
-        self._x = np.array(hist._xedges)
+        self._x = np.array(hist.edges(),copy=True)
         self._ncounts = copy.copy(hist._counts)
         self._ncounts = np.concatenate(([0],self._ncounts))
 
@@ -315,7 +315,7 @@ class HistQuantile(object):
     @staticmethod
     def quantile(h,fraction=0.68):
         counts = np.concatenate(([0],h._counts))
-        return HistQuantile.array_quantile(h._xedges,counts,fraction)
+        return HistQuantile.array_quantile(h.edges(),counts,fraction)
         
     @staticmethod
     def array_quantile(edges,ncounts,fraction=0.68):
@@ -337,7 +337,7 @@ class HistQuantile(object):
         
         counts = np.concatenate(([0],h._counts))
         counts_cum = np.cumsum(counts)
-        fn_ncdf = UnivariateSpline(h._xedges,counts_cum,s=0,k=2)
+        fn_ncdf = UnivariateSpline(h.edges(),counts_cum,s=0,k=2)
         return fn_ncdf(x)
 
         

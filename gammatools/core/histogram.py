@@ -8,13 +8,16 @@
 @author Matthew Wood <mdwood@slac.stanford.edu>
 """
 
+__source__   = "$Source: /nfs/slac/g/glast/ground/cvs/users/mdwood/python/histogram.py,v $"
 __author__   = "Matthew Wood <mdwood@slac.stanford.edu>"
+__date__     = "$Date: 2013/10/20 23:59:49 $"
+__revision__ = "$Revision: 1.30 $, $Author: mdwood $"
 
 import sys
 import numpy as np
 import copy
 import matplotlib.pyplot as plt
-import stats
+#import stats
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import brentq
 
@@ -28,7 +31,7 @@ def makeHistModel(xedge,ncount,min_count=5):
     h = h.rebin_mincount(min_count)
 
     ncum = np.concatenate(([0],np.cumsum(h._counts)))
-    fn = UnivariateSpline(h._xedges,ncum,s=0,k=2)
+    fn = UnivariateSpline(h.edges(),ncum,s=0,k=2)
     mu_count = fn(xedge[1:])-fn(xedge[:-1])
     mu_count[mu_count<0] = 0
 
@@ -302,9 +305,9 @@ class Histogram(object):
 
         h = copy.deepcopy(self)
 
-        for i in range(self._nbins):
-            xhi = fn(self._axis.edges()[i+1])
-            xlo = fn(self._axis.edges()[i])
+        for i in range(self.axis().nbins()):
+            xhi = fn(self.axis().edges()[i+1])
+            xlo = fn(self.axis().edges()[i])
             
             area = xhi - xlo
 
@@ -379,6 +382,8 @@ class Histogram(object):
 
     def quantile(self,fraction=0.68,**kwargs):
 
+        import stats
+        
         return stats.HistQuantile(self).eval(fraction,**kwargs)
 
     def chi2(self,hmodel):
@@ -893,6 +898,8 @@ class Histogram2D(object):
     
     def quantile(self,iaxis=0,fraction=0.68,**kwargs):
 
+        import stats
+        
         hq = Histogram(self._xedges)
 
         for i in range(self.nbins(0)):
