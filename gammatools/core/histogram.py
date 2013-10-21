@@ -8,10 +8,7 @@
 @author Matthew Wood <mdwood@slac.stanford.edu>
 """
 
-__source__   = "$Source: /nfs/slac/g/glast/ground/cvs/users/mdwood/python/histogram.py,v $"
 __author__   = "Matthew Wood <mdwood@slac.stanford.edu>"
-__date__     = "$Date: 2013/10/08 03:00:55 $"
-__revision__ = "$Revision: 1.29 $, $Author: mdwood $"
 
 import sys
 import numpy as np
