@@ -101,15 +101,14 @@ class FigureSubplot(object):
         self._data_styles.append(style)
 
     def add_hist(self,h,**kwargs):
-
-        if isinstance(h,Histogram):        
+        
+        if isinstance(h,Histogram2D):  
+            self._hist2d.append(h)
+            self._hist2d_styles.append({})
+        else:
             style = self.get_style(**kwargs)
             self._hist.append(h)
             self._hist_styles.append(style)
-        elif isinstance(h,Histogram2D):  
-            self._hist2d.append(h)
-            self._hist2d_styles.append({})
-
 
     def normalize(self,**kwargs):
 
@@ -380,13 +379,13 @@ class FigTool(object):
                   'colors' : FigTool.colors,
                   'linestyles' : FigTool.linestyles,
                   'legend_loc' : 'lower right',
-                  'format' : format,
+                  'format' : 'png',
                   'fig_prefix' : None,
                   'fig_dir' : './' }
 
         for k, v in style.iteritems():
             if k in kwargs: style[k] = kwargs[k]
-            elif k in opts.__dict__:
+            elif not opts is None and k in opts.__dict__:
 #                if isinstance(v[0],list)
                 style[k] = opts.__dict__[k]
         
