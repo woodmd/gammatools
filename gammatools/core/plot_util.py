@@ -1,6 +1,7 @@
 import os
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
+from scipy.interpolate import UnivariateSpline
 import itertools
 import copy
 import numpy as np
@@ -31,6 +32,7 @@ class FigureSubplot(object):
                   'ylabel' : None,
                   'xlim'   : None,
                   'ylim'   : None,
+                  'ylim_ratio' : None,
                   'title'  : None,
                   'logy'   : False,
                   'logx'   : False,
@@ -117,23 +119,36 @@ class FigureSubplot(object):
         if 'norm_index' in kwargs: norm_index = kwargs['norm_index']
 
         if len(self._hist) > 0:
+            x = copy.deepcopy(self._hist[norm_index].center())
             y = copy.deepcopy(self._hist[norm_index].counts())
-        else: y = copy.deepcopy(self._data[norm_index][1])
+        else:
+            x = copy.deepcopy(self._data[norm_index][0])
+            y = copy.deepcopy(self._data[norm_index][1])
 
-        msk = y>0
+        fn = UnivariateSpline(x,np.log10(y),k=1,s=0)
+        
+#        msk = y>0
         for i in range(len(self._data)):
-            
-            self._data[i][1][msk] /= y[msk]            
-            self._data[i][1][~msk] = 0.0
 
+            msk = (self._data[i][0] >= x[0]*0.95) & \
+                (self._data[i][0] <= x[-1]*1.05)
+            ynorm = 10**fn(self._data[i][0][msk])
+
+            self._data[i][0] = self._data[i][0][msk]
+            self._data[i][1] = self._data[i][1][msk]
+            self._data[i][1] /= ynorm
+            
             if not self._data[i][2] is None:
-                self._data[i][2][~msk] = 0.0
-                self._data[i][2][msk] /= y[msk]
+                self._data[i][2] = self._data[i][2][msk]
+                self._data[i][2] /= ynorm
+
             
         for i in range(len(self._hist)):
+
+            ynorm = 10**fn(self._hist[i].center())
             
-            self._hist[i]._counts /= y
-            self._hist[i]._var /= y**2
+            self._hist[i]._counts /= ynorm
+            self._hist[i]._var /= ynorm**2
             
     def plot(self,ax,**kwargs):
         
@@ -204,6 +219,7 @@ class Figure(object):
                   'zlabel' : None,
                   'xlim'   : None,
                   'ylim'   : None,
+                  'ylim_ratio' : None,
                   'title'  : None,
                   'logy'   : False,
                   'markers' : None,
@@ -248,7 +264,9 @@ class Figure(object):
         self.normalize(**kwargs)
 
         kwargs['logy'] = False
-        if 'ylim' in kwargs: kwargs.pop('ylim')
+        kwargs['ylim'] = self._style['ylim_ratio']
+        
+#        if 'ylim' in kwargs: kwargs.pop('ylim')
         
         self.plot(**kwargs)
         
@@ -280,7 +298,7 @@ class Figure(object):
             subp_kwargs['ylabel'] = 'Ratio'
             subp_kwargs['legend'] = False
             subp_kwargs['logy'] = False
-            subp_kwargs['ylim'] = None            
+            subp_kwargs['ylim'] = kwargs['ylim_ratio']        
             kwargs['xlabel'] = None
             
             self._subplots[i].plot(ax0,**kwargs)
@@ -305,9 +323,9 @@ class Figure(object):
         style.update(kwargs)
         
         if style['style'] is None or style['style'] == 'normal':
-            self._plot(**kwargs)
-        elif style['style'] == 'ratio': self._plot_ratio_onepane(**kwargs)
-        elif style['style'] == 'ratio2': self._plot_ratio_twopane(**kwargs)
+            self._plot(**style)
+        elif style['style'] == 'ratio': self._plot_ratio_onepane(**style)
+        elif style['style'] == 'ratio2': self._plot_ratio_twopane(**style)
         
     def _plot(self,**kwargs):
 
