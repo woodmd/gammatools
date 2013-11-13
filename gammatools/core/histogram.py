@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 #import stats
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import brentq
+from util import *
 
 def makeHistModel(xedge,ncount,min_count=5):
 
@@ -130,8 +131,22 @@ class Histogram(object):
     defined with an input bin edge array.  Supports multiplication,
     addition, and division by a scalar or another histogram object."""
 
+    default_draw_style = { 'marker' : None,
+                           'color' : None,
+                           'drawstyle' : 'default',
+                           'markerfacecolor' : None,
+                           'markeredgecolor' : None,
+                           'linestyle' : None,
+                           'linewidth' : 1,
+                           'label' : None }
+
+    default_style = { 'hist_style' : 'errorbar',
+                      'xerr' : True, 'yerr' : True,
+                      'max_frac_error' : None }
+
+
     def __init__(self,xedges = [0.0,1.0],nbins = 10,label = '__nolabel__',
-                 counts=None,var=None):
+                 counts=None,var=None,style=None):
 
         self._axis = Axis(xedges,nbins)
 
@@ -143,7 +158,11 @@ class Histogram(object):
 
         self._underflow = 0
         self._overflow = 0
-        self._label=label
+
+        self._style = copy.deepcopy(dict(Histogram.default_style.items() + 
+                                         Histogram.default_draw_style.items()))
+        if not style is None: update_dict(self._style,style)
+        self._style['label'] = label
         
     def iterbins(self):
         """Return an iterator object that steps over the bins in this
@@ -199,49 +218,54 @@ class Histogram(object):
         xmax = hist.GetBinLowEdge(n+1)
         
         h = Histogram((xmin,xmax),n,label)
-
-        
-        
         h._counts = np.array([hist.GetBinContent(i) for i in range(1, n + 1)])
-        h._var = np.array([hist.GetBinError(  i)**2 for i in range(1, n + 1)])
+        h._var = np.array([hist.GetBinError(i)**2 for i in range(1, n + 1)])
         h._underflow = hist.GetBinContent(0)
         h._overflow = hist.GetBinContent(n+1)
         
         return h
 
+    def update_style(self,style):
+        update_dict(self._style,style)
+
     def axis(self):
         return self._axis
     
+    def label(self):
+        return self._style['label']
+
     def bin_width(self,i=0):
         return self._axis.bin_width(i)
 
-    def errorbar(self, xerr=True, yerr=True, label_rotation=0,
+    def errorbar(self, label_rotation=0,
                  label_alignment='center', ax=None, msk=None, 
                  counts=None, x=None,**kwargs):
         """
-        Generate a matplotlib errorbar figure.
+        Draw this histogram in the 'errorbar' style.
 
         All additional keyword arguments will be passed to
         :func:`matplotlib.pyplot.errorbar`.
         """
-
-        if msk is None:
-            msk = np.empty(self._axis.nbins(),dtype='bool'); msk.fill(True)
-        
-        if xerr:
-            kwargs['xerr'] = self._axis.width()[msk]/2.
-        if yerr:
-            kwargs['yerr'] = np.sqrt(self._var[msk])
-        if not kwargs.has_key('fmt'):
-            kwargs['fmt'] = '.'
-        if not kwargs.has_key('label'):
-            kwargs['label'] = self._label
+        style = copy.deepcopy(self._style)
+        style.update(kwargs)
 
         if ax is None: ax = plt.gca()
         if counts is None: counts = self._counts
         if x is None: x = self._axis.center()
 
-        errorbar = ax.errorbar(x[msk], counts[msk],**kwargs)
+        if msk is None:
+            msk = np.empty(len(counts),dtype='bool'); msk.fill(True)
+        
+        xerr = None
+        yerr = None
+
+        if style['xerr']: xerr = self._axis.width()[msk]/2.
+        if style['yerr']: yerr = np.sqrt(self._var[msk])
+        if not style.has_key('fmt'): style['fmt'] = '.'
+    
+        clear_dict_by_keys(style,Histogram.default_draw_style.keys(),False)
+
+        errorbar = ax.errorbar(x[msk], counts[msk],xerr=xerr,yerr=yerr,**style)
         self._prepare_xaxis(label_rotation, label_alignment)
         return errorbar
 
@@ -255,8 +279,10 @@ class Histogram(object):
                 weights=counts,**kwargs)
         
     
-    def plot(self,style='errorbar',ax=None,msk=None,max_frac_error=None,
-             overflow=False,**kwargs):
+    def plot(self,ax=None,msk=None,overflow=False,**kwargs):
+
+        style = copy.deepcopy(self._style)
+        style.update(kwargs)
 
         if ax is None: ax = plt.gca()
         if msk is None:
@@ -270,29 +296,39 @@ class Histogram(object):
         else:
             c = self._counts
 
-        if not max_frac_error is None:
+        if not style['max_frac_error'] is None:
             msk = np.sqrt(self._var)/self._counts <= max_frac_error
             
-        if style == 'errorbar':
-            return self.errorbar(ax=ax,counts=c,msk=msk,**kwargs)
-        elif style == 'line':
-            return ax.plot(self._axis.center(),c,**kwargs)
-        elif style == 'filled':
-            return self.hist(ax=ax,histtype='bar',
-                             linewidth=0,counts=c,
-                             **kwargs)
-        elif style == 'step':
+        if style['hist_style'] == 'errorbar':
+            return self.errorbar(ax=ax,counts=c,msk=msk,**style)
+        elif style['hist_style'] == 'line':
+            return ax.plot(self._axis.center(),c,**style)
+        elif style['hist_style'] == 'filled':
 
-            c = np.concatenate(([0],c))
+            draw_style = copy.deepcopy(style)
+            clear_dict_by_keys(draw_style,
+                               Histogram.default_draw_style.keys(),False)
+            clear_dict_by_vals(draw_style,None)
+            draw_style['linewidth'] = 0
+            del draw_style['linestyle']
+            del draw_style['marker']
+            del draw_style['drawstyle']
+
+            return self.hist(ax=ax,histtype='bar',counts=c,**draw_style)
+        elif style['hist_style'] == 'step':
+
+            c = np.concatenate(([0],c,[0]))
+            edges = np.concatenate((self._axis.edges(),
+                                    [self._axis.edges()[-1]]))
+#            msk = np.concatenate((msk,[True]))
+            style['xerr'] = False
+            style['yerr'] = False
+            style['fmt'] = '-'
+            style['drawstyle'] = 'steps-pre'
+            style['marker'] = 'None'
             return self.errorbar(ax=ax,counts=c,
-                                 xerr=False,yerr=False, fmt='-',
-                                 drawstyle='steps-pre',
-                                 x=self._axis.edges(),
-                                 **kwargs)
+                                 x=edges,**style)
 
-#            return self.hist(ax=ax,histtype='step',
-#                             linewidth=1,counts=c,
-#                             **kwargs)
         else:
             print 'Unrecognized style ', style
             sys.exit(1)
@@ -657,8 +693,12 @@ class Histogram(object):
         
 class Histogram2D(object):
 
+    default_draw_style = { 'interpolation' : 'nearest' }
+    default_style = { 'keep_aspect' : True, 'logz' : False }
+
     def __init__(self,xedges = [0.0,1.0], yedges = [0.0,1.0], nxbins = 1,
-                 nybins=1, label = '__nolabel__', counts=None, var=None):
+                 nybins=1, label = '__nolabel__', counts=None, var=None,
+                 style=None):
         
         self._xmin = xedges[0]
         self._xmax = xedges[-1]
@@ -699,7 +739,11 @@ class Histogram2D(object):
         if not var is None: self._var = var
         else: self._var = np.zeros(shape=(self._nxbins,self._nybins))
 
-        self._label=label
+        self._style = dict(Histogram2D.default_style.items() + 
+                           Histogram2D.default_draw_style.items())
+
+        if not style is None: update_dict(self._style,style)
+        self._style['label'] = label
 
         
     @staticmethod
@@ -745,6 +789,9 @@ class Histogram2D(object):
                 h._var[ix-1][iy-1] = hist.GetBinError(ix,iy)**2
 
         return h
+
+    def update_style(self,style):
+        update_dict(self._style,style)
 
     def nbins(self,idim=None):
         """Return the number of bins in this histogram."""
@@ -997,32 +1044,34 @@ class Histogram2D(object):
         return Histogram2D(self._xedges,self._yedges,counts=counts,var=var)
 
 
-    def plot(self,keep_aspect=False,ax=None,logz=False,**kwargs):
+    def plot(self,ax=None,**kwargs):
+
+        style = copy.deepcopy(self._style)
+        style.update(kwargs)
 
         dx = self._xmax - self._xmin
         dy = self._ymax - self._ymin
 
         aspect_ratio = 1
-
-        if not keep_aspect:
-            aspect_ratio=dx/dy
+        if not style['keep_aspect']: aspect_ratio=dx/dy
 
         if ax is None: ax = plt.gca()
             
-        if not kwargs.has_key('interpolation'):
-            kwargs['interpolation']='nearest'
-
         from matplotlib.colors import NoNorm, LogNorm, Normalize
 
-        if logz: norm = LogNorm()
+        if style['logz']: norm = LogNorm()
         else: norm = Normalize()
+
+        print style
         
+        clear_dict_by_keys(style,Histogram2D.default_draw_style.keys(),False)
+
         return ax.imshow(self._counts.transpose(),
                          origin='lower',
                          aspect=aspect_ratio,norm=norm,
                          extent=[self._xmin, self._xmax, 
                                  self._ymin, self._ymax],
-                         **kwargs)
+                         **style)
 
 #                   vmin=vmin,vmax=vmax)
 
@@ -1097,16 +1146,3 @@ if __name__ == '__main__':
 
     print h1d._xedges
         
-    sys.exit()
-    
-    fig = plt.figure()
-
-    h2d = Histogram2D([0.,1.],10,[0.,5.],10)
-
-    h2d.fill([0,4,2,3,5],[1,5,4,3,2])
-
-    h2d.plot()
-    
-
-    plt.show()
-

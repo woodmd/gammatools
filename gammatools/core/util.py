@@ -1,10 +1,42 @@
 import os
 import errno
-
 import numpy as np
 import scipy.special as spfn
 import re
-from algebra import Vector3D
+
+
+
+def update_dict(d0,d1):
+    """Recursively update the contents of a python dictionary from
+    another python dictionary."""
+
+    if d1 is None: return
+
+    for k, v in d0.iteritems():
+        
+        if not k in d1: continue
+
+        if isinstance(v,dict) and isinstance(d1[k],dict):
+            update_dict(d0[k],d1[k])
+        else: d0[k] = d1[k]
+        
+def clear_dict_by_vals(d,vals):
+
+    if not isinstance(vals,list): vals = [vals]
+
+    for k in d.keys(): 
+        if d[k] in vals: del d[k]
+
+def clear_dict_by_keys(d,keys,clear_if_present=True):
+
+    if not isinstance(keys,list): keys = [keys]
+
+    for k in d.keys(): 
+        if clear_if_present and k in keys: 
+            del d[k]
+        if not clear_if_present and not k in keys: 
+            del d[k]
+
 
 def dispatch_jobs(exe,args,opts,queue='xlong',resources='rhel60'):
     for x in args:

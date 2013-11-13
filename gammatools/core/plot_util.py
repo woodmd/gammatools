@@ -6,14 +6,15 @@ import itertools
 import copy
 import numpy as np
 from histogram import *
+from series import *
+from util import update_dict
 
-__source__   = "$Source: /nfs/slac/g/glast/ground/cvs/users/kadrlica/eventSelect/python/pPlotUtils.py,v $"
 __author__   = "Matthew Wood (mdwood@slac.stanford.edu)"
 __abstract__ = ""
-__date__     = "$Date: 2013/09/09 07:18:06 $"
-__revision__ = "$Revision: 1.3 $, $Author: mdwood $"
 
 def set_font_size(ax,size):
+    """Update the font size for all elements in a matplotlib axis
+    object."""
 
     for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
                  ax.get_xticklabels() + ax.get_yticklabels()):
@@ -25,6 +26,7 @@ def get_cycle_element(cycle,index):
 
     
 class FigureSubplot(object):
+    """Class implementing a single pane in a matplotlib figure. """
 
     def __init__(self,**kwargs):
 
@@ -44,17 +46,12 @@ class FigureSubplot(object):
                   'legend_fontsize' : 8,
                   'legend'   : True }
 
-        for k, v in style.iteritems():
-            if k in kwargs: style[k] = kwargs[k]
+        update_dict(style,kwargs)
             
         self._style = style
         self._data = []
         self._hist = []
         self._hist2d = []
-        self._hist_styles = []
-        self._hist2d_styles = []
-        self._data_styles = []
-
         self._color_index = 0
         self._linestyle_index = 0
         self._marker_index = 0
@@ -66,18 +63,13 @@ class FigureSubplot(object):
         self.set_style('title',title)
         
     def get_style(self,**kwargs):
-
-        style = { 'marker' : None,
-                  'color' : None,
-                  'linestyle' : None,
-                  'linewidth' : 1,
-                  'label' : None,
-                  'max_frac_error' : None,
-                  'msk' : None }
-
-        for k, v in style.iteritems():
-            if k in kwargs: style[k] = kwargs[k]
             
+        style = { 'color'     : None,
+                  'marker'    : None,
+                  'linestyle' : None  }
+        
+        style.update(kwargs)
+
         if style['color'] is None:
             style['color'] = get_cycle_element(self._style['colors'],
                                                self._color_index)
@@ -87,6 +79,7 @@ class FigureSubplot(object):
             style['marker'] = get_cycle_element(self._style['markers'],
                                                 self._marker_index)
             self._marker_index += 1
+
         if style['linestyle'] is None:
             style['linestyle'] =  get_cycle_element(self._style['linestyles'],
                                                     self._linestyle_index)
@@ -95,22 +88,25 @@ class FigureSubplot(object):
         return copy.deepcopy(style)
         
     def add_data(self,x,y,yerr=None,**kwargs):
-
-        if not yerr is None: yerr = np.array(yerr)
         
         style = self.get_style(**kwargs)
-        self._data.append([np.array(x),np.array(y),yerr])
-        self._data_styles.append(style)
+        s = Series(x,y,yerr,style)
+        s.update_style(style)
+        self._data.append(s)
 
     def add_hist(self,h,**kwargs):
         
+        h = copy.deepcopy(h)
+        style = self.get_style(**kwargs)
+        h.update_style(style)
+
+        print style
+
         if isinstance(h,Histogram2D):  
             self._hist2d.append(h)
-            self._hist2d_styles.append({})
         else:
-            style = self.get_style(**kwargs)
             self._hist.append(h)
-            self._hist_styles.append(style)
+
 
     def normalize(self,**kwargs):
 
@@ -121,26 +117,24 @@ class FigureSubplot(object):
             x = copy.deepcopy(self._hist[norm_index].center())
             y = copy.deepcopy(self._hist[norm_index].counts())
         else:
-            x = copy.deepcopy(self._data[norm_index][0])
-            y = copy.deepcopy(self._data[norm_index][1])
+            x = copy.deepcopy(self._data[norm_index].x())
+            y = copy.deepcopy(self._data[norm_index].y())
 
         fn = UnivariateSpline(x,np.log10(y),k=1,s=0)
         
 #        msk = y>0
         for i in range(len(self._data)):
 
-            msk = (self._data[i][0] >= x[0]*0.95) & \
-                (self._data[i][0] <= x[-1]*1.05)
-            ynorm = 10**fn(self._data[i][0][msk])
+            msk = (self._data[i].x() >= x[0]*0.95) & \
+                (self._data[i].x() <= x[-1]*1.05)
+            ynorm = 10**fn(self._data[i].x()[msk])
 
-            self._data[i][0] = self._data[i][0][msk]
-            self._data[i][1] = self._data[i][1][msk]
-            self._data[i][1] /= ynorm
+            self._data[i]._x = self._data[i].x()[msk]
+            self._data[i]._y = self._data[i].y()[msk]/ynorm
             
-            if not self._data[i][2] is None:
-                self._data[i][2] = self._data[i][2][msk]
-                self._data[i][2] /= ynorm
-
+            if not self._data[i]._yerr is None:
+                self._data[i]._yerr = self._data[i].yerr()[msk]
+                self._data[i]._yerr /= ynorm
             
         for i in range(len(self._hist)):
 
@@ -152,8 +146,7 @@ class FigureSubplot(object):
     def plot(self,ax,**kwargs):
         
         style = copy.deepcopy(self._style)
-        for k, v in kwargs.iteritems():
-            if k in style: style[k] = v
+        update_dict(style,kwargs)
             
         logy = style['logy']
         if 'logy' in kwargs: logy = kwargs.pop('logy')
@@ -169,22 +162,13 @@ class FigureSubplot(object):
 
         labels = []
             
-        for i in range(len(self._data)):
+        for i, s in enumerate(self._data):
+            labels.append(s.label())
+            s.plot(ax=ax)
 
-            if not self._data_styles[i]['label'] is None:
-                labels.append(self._data_styles[i]['label'])
-
-            self._data_styles[i].pop('max_frac_error')
-            self._data_styles[i].pop('msk')
-            ax.errorbar(self._data[i][0],self._data[i][1],self._data[i][2],
-                        **self._data_styles[i])
-
-        for i in range(len(self._hist)):
-
-            if not self._hist_styles[i]['label'] is None:
-                labels.append(self._hist_styles[i]['label'])
-            
-            self._hist[i].plot(ax=ax,**self._hist_styles[i])
+        for i, h in enumerate(self._hist):
+            labels.append(h.label())            
+            h.plot(ax=ax)
 
         for i in range(len(self._hist2d)):
             self._hist2d[i].plot(ax=ax,logz=logz)
@@ -192,8 +176,8 @@ class FigureSubplot(object):
         ax.grid(True)
         if len(labels) > 0 and style['legend']:
             ax.legend(prop={'size' : style['legend_fontsize']},
-                      loc=style['legend_loc'],ncol=1)       
-#        ax.legend(prop={'size':8},loc=style['loc'],ncol=2)
+                      loc=style['legend_loc'],ncol=1)
+
         if not style['ylabel'] is None:
             ax.set_ylabel(style['ylabel'])
         if not style['xlabel'] is None:
@@ -231,9 +215,8 @@ class Figure(object):
                   'fig_dir' : './',
                   'figscale' : 1.0,
                   'subplots_per_fig' : 1 }
-        
-        for k,v in style.iteritems():            
-            if k in kwargs: style[k] = kwargs[k]
+ 
+        update_dict(style,kwargs)
 
         self._style = style
         self._figlabel = figlabel
@@ -249,8 +232,10 @@ class Figure(object):
         for i in range(n):        
             style = copy.deepcopy(self._style)
 
-            for k, v in style.iteritems():
-                if k in kwargs: style[k] = kwargs[k]
+            update_dict(style,kwargs)
+
+#            for k, v in style.iteritems():
+#                if k in kwargs: style[k] = kwargs[k]
         
             self._subplots.append(FigureSubplot(**style))
 
@@ -404,7 +389,6 @@ class FigTool(object):
         for k, v in style.iteritems():
             if k in kwargs: style[k] = kwargs[k]
             elif not opts is None and k in opts.__dict__:
-#                if isinstance(v[0],list)
                 style[k] = opts.__dict__[k]
         
         self._fig_dir = style['fig_dir']
@@ -457,13 +441,46 @@ if __name__ == '__main__':
     ft = FigTool(opts)
 
     fig = ft.create(1,'theta_cut',
-                    xlabel='Energy [log${10}$(E/GeV)]',
-                    ylabel='Cut Value [deg]')
+                    xlabel='X Label [X Unit]',
+                    ylabel='Y Label [Y Unit]',
+                    markers=['d','x','+'])
 
     fig[0].add_data(x0,y0,label='label1')
     fig[0].add_data(x0,y1,label='label2')
 
-
     fig.plot(style='ratio2')
+
+    fig1 = ft.create(1,'theta_cut',
+                    xlabel='Energy [log${10}$(E/GeV)]',
+                    ylabel='Cut Value [deg]',colors=['r','grey','maroon'])
+
+    h0 = Histogram([-3,3],100)
+    h1 = Histogram([-3,3],100)
+    h2 = Histogram([-4,4],100)
+
+    h0.fill(np.random.normal(0,1.0,size=10000))
+    h1.fill(np.random.normal(0,0.5,size=10000))
+    h2.fill(np.random.normal(0,3.0,size=10000))
+
+    fig1[0].add_hist(h0,label='label1',hist_style='filled')
+    fig1[0].add_hist(h1,label='label2',hist_style='errorbar')
+    fig1[0].add_hist(h2,label='label3',hist_style='step',linestyle='-')
+
+    fig1.plot(xlim=[-5,5],legend_loc='upper right')
+
+    fig2 = ft.create(1,'theta_cut',
+                    xlabel='Energy [log${10}$(E/GeV)]',
+                    ylabel='Cut Value [deg]',colors=['r','grey','maroon'])
+
+    h3 = Histogram2D([-3,3],[-3,3],100,100)
+
+    x = np.random.normal(0,0.5,size=100000)
+    y = np.random.normal(0,1.0,size=100000)
+
+    h3.fill(x,y)
+
+    fig2[0].add_hist(h3,logz=True)
+
+    fig2.plot()
 
     plt.show()
