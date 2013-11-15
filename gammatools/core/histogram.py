@@ -8,7 +8,6 @@
 @author Matthew Wood <mdwood@slac.stanford.edu>
 """
 
-__source__   = "$Source: /nfs/slac/g/glast/ground/cvs/users/mdwood/python/histogram.py,v $"
 __author__   = "Matthew Wood <mdwood@slac.stanford.edu>"
 __date__     = "$Date: 2013/10/20 23:59:49 $"
 __revision__ = "$Revision: 1.30 $, $Author: mdwood $"
@@ -17,7 +16,6 @@ import sys
 import numpy as np
 import copy
 import matplotlib.pyplot as plt
-#import stats
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import brentq
 from util import *
@@ -25,7 +23,7 @@ from util import *
 def makeHistModel(xedge,ncount,min_count=5):
 
     if np.sum(ncount) == 0: return Histogram(xedge)
-    
+
     h = Histogram(xedge)
     h._counts = copy.deepcopy(ncount)
     h._var = copy.deepcopy(ncount)
@@ -41,17 +39,17 @@ def makeHistModel(xedge,ncount,min_count=5):
 class HistogramIterator(object):
     """Iterator module that steps over the bins of a one-dimensional
     histogram."""
-    
+
     def __init__(self,ibin,h):
         self._ibin = ibin
         self._h = h
 
     def set_counts(self,counts):
         self._h._counts[self._ibin] = counts
-        
+
     def bin(self):
         return self._ibin
-        
+
     def counts(self):
         return self._h.counts(self._ibin)
 
@@ -63,16 +61,16 @@ class HistogramIterator(object):
 
     def hi_edge(self):
         return self._h.axis().edges()[self._ibin+1]
-    
+
     def next(self):
-        
+
         self._ibin += 1
 
         if self._ibin == self._h.nbins():
             raise StopIteration
-        else:                
+        else:
             return self
-    
+
     def __iter__(self):
         return self
 
@@ -85,17 +83,17 @@ class Axis(object):
         if len(edges) == 1:
             print 'Input array for bin edges must have at least two elements.'
             sys.exit(1)
-        
+
         edges = np.array(edges,copy=True)
         if len(edges) > 2: self._nbins = len(edges)-1
         else:
             self._nbins = nbins
             edges = np.linspace(edges[0],edges[-1],self._nbins+1)
-        
+
         self._edges = edges
         self._xmin = self._edges[0]
         self._xmax = self._edges[-1]
-        self._center = 0.5*(self._edges[1:] + self._edges[:-1])        
+        self._center = 0.5*(self._edges[1:] + self._edges[:-1])
         self._err = 0.5*(self._edges[1:] - self._edges[:-1])
         self._width = 2*self._err
 
@@ -107,24 +105,24 @@ class Axis(object):
 
     def hi_edge(self):
         return self._edges[-1]
-    
+
     def edges(self):
         return self._edges
-    
+
     def width(self):
         return self._width
 
     def center(self):
         return self._center
-    
+
     def bin_width(self,i=0):
         return self._width[i]
 
     def valToBin(self,x):
         ibin = np.digitize(np.array(x,ndmin=1),self._edges)-1
         return ibin
-        
-    
+
+
 class Histogram(object):
     """One-dimensional histogram class.  Each bin is assigned both a
     content value and an error.  Non-equidistant bin edges can be
@@ -159,16 +157,16 @@ class Histogram(object):
         self._underflow = 0
         self._overflow = 0
 
-        self._style = copy.deepcopy(dict(Histogram.default_style.items() + 
+        self._style = copy.deepcopy(dict(Histogram.default_style.items() +
                                          Histogram.default_draw_style.items()))
         if not style is None: update_dict(self._style,style)
         self._style['label'] = label
-        
+
     def iterbins(self):
         """Return an iterator object that steps over the bins in this
         histogram."""
         return HistogramIterator(-1,self)
-        
+
     @staticmethod
     def createEfficiencyHistogram(htot,hcut,label = '__nolabel__'):
         """Create a histogram of cut efficiency."""
@@ -188,7 +186,7 @@ class Histogram(object):
         from ROOT import gDirectory
 
         draw = '%s>>hist'%(varname)
-            
+
         if not hdef is None:
             draw += '(%i,%f,%f)'%(hdef[0],hdef[1],hdef[2])
 
@@ -199,8 +197,8 @@ class Histogram(object):
         h = gDirectory.Get('hist')
         h.SetDirectory(0)
         return Histogram.createFromTH1(h)
-        
-        
+
+
     @staticmethod
     def createFromArray(xedge,counts,var=None,label = '__nolabel__'):
         """Create a histogram from arrays containing bin edge and counts."""
@@ -216,13 +214,13 @@ class Histogram(object):
         n = hist.GetNbinsX()
         xmin = hist.GetBinLowEdge(1)
         xmax = hist.GetBinLowEdge(n+1)
-        
-        h = Histogram((xmin,xmax),n,label)
+
+        h = Histogram([xmin,xmax],n,label)
         h._counts = np.array([hist.GetBinContent(i) for i in range(1, n + 1)])
         h._var = np.array([hist.GetBinError(i)**2 for i in range(1, n + 1)])
         h._underflow = hist.GetBinContent(0)
         h._overflow = hist.GetBinContent(n+1)
-        
+
         return h
 
     def update_style(self,style):
@@ -230,7 +228,7 @@ class Histogram(object):
 
     def axis(self):
         return self._axis
-    
+
     def label(self):
         return self._style['label']
 
@@ -238,7 +236,7 @@ class Histogram(object):
         return self._axis.bin_width(i)
 
     def errorbar(self, label_rotation=0,
-                 label_alignment='center', ax=None, msk=None, 
+                 label_alignment='center', ax=None, msk=None,
                  counts=None, x=None,**kwargs):
         """
         Draw this histogram in the 'errorbar' style.
@@ -255,15 +253,16 @@ class Histogram(object):
 
         if msk is None:
             msk = np.empty(len(counts),dtype='bool'); msk.fill(True)
-        
+
         xerr = None
         yerr = None
 
         if style['xerr']: xerr = self._axis.width()[msk]/2.
         if style['yerr']: yerr = np.sqrt(self._var[msk])
         if not style.has_key('fmt'): style['fmt'] = '.'
-    
+
         clear_dict_by_keys(style,Histogram.default_draw_style.keys(),False)
+        clear_dict_by_vals(style,None)
 
         errorbar = ax.errorbar(x[msk], counts[msk],xerr=xerr,yerr=yerr,**style)
         self._prepare_xaxis(label_rotation, label_alignment)
@@ -274,11 +273,11 @@ class Histogram(object):
         if ax is None: ax = plt.gca()
         if counts is None: counts = self._counts
 
-        ax.hist(self._axis.center(), self._axis.nbins(), 
+        ax.hist(self._axis.center(), self._axis.nbins(),
                 range=[self._axis.lo_edge(),self._axis.hi_edge()],
                 weights=counts,**kwargs)
-        
-    
+
+
     def plot(self,ax=None,msk=None,overflow=False,**kwargs):
 
         style = copy.deepcopy(self._style)
@@ -288,8 +287,8 @@ class Histogram(object):
         if msk is None:
             msk = np.empty(self._axis.nbins(),dtype='bool')
             msk.fill(True)
-        
-        if overflow: 
+
+        if overflow:
             c = copy.deepcopy(self._counts)
             c[0] += self._underflow
             c[-1] += self._overflow
@@ -298,7 +297,7 @@ class Histogram(object):
 
         if not style['max_frac_error'] is None:
             msk = np.sqrt(self._var)/self._counts <= max_frac_error
-            
+
         if style['hist_style'] == 'errorbar':
             return self.errorbar(ax=ax,counts=c,msk=msk,**style)
         elif style['hist_style'] == 'line':
@@ -332,7 +331,7 @@ class Histogram(object):
         else:
             print 'Unrecognized style ', style
             sys.exit(1)
-    
+
     def clear(self):
         self._counts[:] = 0
         self._var[:] = 0
@@ -344,7 +343,7 @@ class Histogram(object):
         for i in range(self.axis().nbins()):
             xhi = fn(self.axis().edges()[i+1])
             xlo = fn(self.axis().edges()[i])
-            
+
             area = xhi - xlo
 
             h._counts[i] /= area
@@ -363,7 +362,7 @@ class Histogram(object):
     def center(self):
         """Return array of bin centers."""
         return self._axis.center()
-        
+
     def edges(self):
         """Return array of bin edges."""
         return self._axis.edges()
@@ -371,13 +370,13 @@ class Histogram(object):
     def width(self):
         """Return array of bin edges."""
         return self._axis.width()
-    
+
     def underflow(self):
         return self._underflow
 
     def overflow(self):
         return self._overflow
-    
+
     def err(self,ibin=None):
         if ibin == None: return np.sqrt(self._var)
         else: return np.sqrt(self._var[ibin])
@@ -385,17 +384,17 @@ class Histogram(object):
     def var(self,ibin=None):
         if ibin == None: return self._var
         else: return self._var[ibin]
-    
+
     def sum(self,overflow=False):
         """Return the sum of counts in this histogram."""
         if overflow:
             return np.sum(self._counts) + self._overflow + self._underflow
         else:
             return np.sum(self._counts)
-            
+
     def cumulative(self,lhs=True):
         """Convert this histogram to its cumulative distribution."""
-        
+
         if lhs:
             counts = np.cumsum(self._counts)
             var = np.cumsum(self._var)
@@ -403,33 +402,33 @@ class Histogram(object):
             counts = np.cumsum(self._counts[::-1])[::-1]
             var = np.cumsum(self._var[::-1])[::-1]
 
-        return Histogram(self._axis.edges(),label=self._label,
+        return Histogram(self._axis.edges(),label=self.label(),
                          counts=counts,var=var)
-                        
+
     def getBinByValue(self,x):
         return np.argmin(np.abs(self._x-x))
 
     def normalize(self):
 
         s = np.sum(self._counts)
-        
+
         self._counts /= s
         self._var /= s*s
 
     def quantile(self,fraction=0.68,**kwargs):
 
         import stats
-        
+
         return stats.HistQuantile(self).eval(fraction,**kwargs)
 
     def chi2(self,hmodel):
 
-        msk = self._var > 0        
+        msk = self._var > 0
         diff = self._counts[msk] - hmodel._counts[msk]
         chi2 = np.sum(np.power(diff,2)/self._var[msk])
         ndf = len(msk[msk==True])
         return (chi2,ndf)
-        
+
     def fill(self,x,w=1,var=None):
         """Add counts to the histogram at the coordinates given in the
         array x.  The weight assigned to each element of x can be
@@ -443,7 +442,7 @@ class Histogram(object):
 
             c1 = np.histogram(x,bins=self._axis.edges(),weights=w)[0]
             c2 = np.histogram(x,bins=self._axis.edges(),weights=var)[0]
-            
+
             self._counts += c1
             self._var += c2
 
@@ -478,10 +477,10 @@ class Histogram(object):
             Maximum number of bins that can be combined.
         
         """
-        
+
         bins = []
 #        cum_counts = np.cumsum(self._counts)
-        
+
         ibin = 0
         while ibin < self._axis.nbins():
 
@@ -493,22 +492,22 @@ class Histogram(object):
                     break
                 if max_bins is not None and jbin-ibin+1 > max_bins:
                     break
-                
+
                 jbin += 1
 
             jbin = min(jbin,self._axis.nbins()-1)
             bins.append(jbin-ibin+1)
             ibin = jbin+1
-            
+
         return self.rebin(bins)
 
     def rebin_range(self,n=2,xmin=0,xmax=0):
-        
+
         bins = []
 
         i = 0
         while i < self._axis.nbins():
-            
+
             if xmin != xmax and self._axis.center()[i] >= xmin and \
                     self._axis.center()[i] <= xmax:
 
@@ -517,10 +516,10 @@ class Histogram(object):
                     m = self._axis.nbins()-i
 
                 i+= m
-                bins.append(m)            
+                bins.append(m)
             else:
                 i+= 1
-                bins.append(1)            
+                bins.append(1)
 
         return self.rebin(bins)
 
@@ -536,23 +535,23 @@ class Histogram(object):
         else:
             if np.sum(bins) != self._axis.nbins():
                 raise ValueError("Sum of bins is not equal to histogram bins.")
-            
+
             bin_index = np.concatenate((np.array([0],dtype='int'),
                                         np.cumsum(bins,dtype='int')))
-            
+
         xedges = self._axis.edges()[bin_index]
 
         nbins = len(xedges)-1
         counts = np.zeros(nbins)
         var = np.zeros(nbins)
-        
+
         csum = np.concatenate(([0],np.cumsum(self._counts)))
         vsum = np.concatenate(([0],np.cumsum(self._var)))
 
         counts = csum[bin_index[1:]]-csum[bin_index[:-1]]
         var = vsum[bin_index[1:]]-vsum[bin_index[:-1]]
 
-        return Histogram(xedges,label=self._label,counts=counts,var=var) 
+        return Histogram(xedges,label=self.label(),counts=counts,var=var)
 
     def divide(self,h):
         o = copy.deepcopy(self)
@@ -563,18 +562,18 @@ class Histogram(object):
         y2_var = h._var
 
         msk = ((y1!=0) & (y2!=0))
-        
+
         o._counts[~msk] = 0.
         o._var[~msk] = 0.
-        
+
         o._counts[msk] = y1[msk] / y2[msk]
         o._var[msk] = (y1[msk] / y2[msk])**2
         o._var[msk] *= (y1_var[msk]/y1[msk]**2 + y2_var[msk]/y2[msk]**2)
 
         return o
-        
+
     def dump(self,outfile=None):
-        
+
         if not outfile is None:
             f = open(outfile,'w')
         else:
@@ -612,22 +611,22 @@ class Histogram(object):
     def find_root(self,y,x0=None,x1=None):
         """Solve for the x coordinate at which f(x)-y=0 where f(x) is
         a smooth interpolation of the histogram contents."""
-        
+
         fn = UnivariateSpline(self._axis.center(),self._counts,k=2,s=0)
 
         if x0 is None: x0 = self._axis.lo_edge()
         if x1 is None: x1 = self._axis.hi_edge()
-        
+
         return brentq(lambda t: fn(t) - y,x0,x1)
 
     def find_max(self,msk=None):
 
         if msk is None:
             msk = np.empty(self._axis.nbins(),dtype='bool'); msk.fill(True)
-        
+
         return np.argmax(self._counts[msk])
-        
-    
+
+
     def __mul__(self,x):
 
         o = copy.deepcopy(self)
@@ -651,7 +650,7 @@ class Histogram(object):
             o._var /= x*x
 
         return o
-    
+
 
     def __add__(self,x):
 
@@ -665,8 +664,8 @@ class Histogram(object):
             o._var += x
 
         return o
-            
-    
+
+
     def __sub__(self,x):
 
         o = copy.deepcopy(self)
@@ -690,39 +689,39 @@ class Histogram(object):
 
 
 
-        
+
 class Histogram2D(object):
 
     default_draw_style = { 'interpolation' : 'nearest' }
-    default_style = { 'keep_aspect' : True, 'logz' : False }
+    default_style = { 'keep_aspect' : False, 'logz' : False }
 
     def __init__(self,xedges = [0.0,1.0], yedges = [0.0,1.0], nxbins = 1,
                  nybins=1, label = '__nolabel__', counts=None, var=None,
                  style=None):
-        
+
         self._xmin = xedges[0]
         self._xmax = xedges[-1]
         self._ymin = yedges[0]
         self._ymax = yedges[-1]
 
-        self._nbins = nxbins*nybins        
+        self._nbins = nxbins*nybins
 
         if len(xedges) == 1:
             print 'Input array for bin edges must have at least two elements.'
             sys.exit(1)
-        elif len(xedges) == 2:        
+        elif len(xedges) == 2:
             self._xedges = np.linspace(self._xmin,self._xmax,nxbins+1)
         else:
             self._xedges = np.array(xedges,copy=True)
-            
+
         if len(yedges) == 1:
             print 'Input array for bin edges must have at least two elements.'
             sys.exit(1)
-        elif len(yedges) == 2:    
+        elif len(yedges) == 2:
             self._yedges = np.linspace(self._ymin,self._ymax,nybins+1)
         else:
             self._yedges = copy.copy(np.asarray(yedges))
-            
+
 
         self._x = 0.5*(self._xedges[1:] + self._xedges[:-1])
         self._xerr = 0.5*(self._xedges[1:] - self._xedges[:-1])
@@ -739,13 +738,13 @@ class Histogram2D(object):
         if not var is None: self._var = var
         else: self._var = np.zeros(shape=(self._nxbins,self._nybins))
 
-        self._style = dict(Histogram2D.default_style.items() + 
+        self._style = dict(Histogram2D.default_style.items() +
                            Histogram2D.default_draw_style.items())
 
         if not style is None: update_dict(self._style,style)
         self._style['label'] = label
 
-        
+
     @staticmethod
     def createFromTree(t,varname,cut,hdef=None,fraction=0.0,
                        label = '__nolabel__'):
@@ -753,7 +752,7 @@ class Histogram2D(object):
         from ROOT import gDirectory
 
         draw = '%s>>hist'%(varname)
-            
+
         if not hdef is None:
             draw += '(%i,%f,%f,%i,%f,%f)'%(hdef[0][0],hdef[0][1],hdef[0][2],
                                            hdef[1][0],hdef[1][1],hdef[1][2])
@@ -766,7 +765,7 @@ class Histogram2D(object):
         h = gDirectory.Get('hist')
         h.SetDirectory(0)
         return Histogram2D.createFromTH2(h)
-        
+
     @staticmethod
     def createFromTH2(hist,label = '__nolabel__'):
         nx = hist.GetNbinsX()
@@ -774,7 +773,7 @@ class Histogram2D(object):
 
         xmin = hist.GetXaxis().GetBinLowEdge(1)
         xmax = hist.GetXaxis().GetBinLowEdge(nx+1)
-        
+
         ymin = hist.GetYaxis().GetBinLowEdge(1)
         ymax = hist.GetYaxis().GetBinLowEdge(ny+1)
 
@@ -799,18 +798,18 @@ class Histogram2D(object):
         elif idim == 0: return self._nxbins
         elif idim == 1: return self._nybins
         else: return 0
-        
+
     def counts(self,ix=None,iy=None):
 
         if ix is None: return self._counts
         elif iy is None:
             (ix,iy) = np.unravel_index(ix,self._counts.shape)
-        
+
         return self._counts[ix,iy]
 
     def center(self,ix,iy):
         return [self._x[ix],self._y[iy]]
-    
+
     def xedges(self):
         """Return array of bin edges."""
         return self._xedges
@@ -830,13 +829,13 @@ class Histogram2D(object):
 
         if ix_range is None: ix_range = [0,self._nxbins+1]
         elif len(ix_range) == 1: ix_range = [ix_range[0],self._nxbins+1]
-        
+
         if iy_range is None: iy_range = [0,self._nybins+1]
         elif len(iy_range) == 1: iy_range = [iy_range[0],self._nybins+1]
-            
+
         a = np.argmax(self._counts[ix_range[0]:ix_range[1],
                                    iy_range[0]:iy_range[1]])
-        
+
         cv = self._counts[ix_range[0]:ix_range[1],iy_range[0]:iy_range[1]]
         ixy = np.unravel_index(a,cv.shape)
         return (ixy[0]+ix_range[0],ixy[1]+iy_range[0])
@@ -847,22 +846,22 @@ class Histogram2D(object):
         return self.marginalize(iaxis,bin_range=[ibin,ibin+1])
 
     def sliceByValue(self,value,iaxis=0):
-        
+
         if iaxis==0: bin = np.argmin(np.abs(self._x-value))
         else: bin = np.argmin(np.abs(self._y-value))
         return self.sliceByIndex(bin,iaxis)
-    
+
     def cut(self,iaxis=0,ibin=0):
 
         h = None
-        
+
         if iaxis == 0:
             h = Histogram.createFromArray(self._yedges,self._counts[ibin,:],
                                           self._var[ibin,:])
         else:
             h = Histogram.createFromArray(self._xedges,self._counts[:,ibin],
                                           self._var[:,ibin])
-            
+
         return h
 
     def interpolate(self,x,y):
@@ -873,21 +872,21 @@ class Histogram2D(object):
         if iaxis == 1:
 
             if bin_range is None: bin_range = [0,self._nybins]
-            
+
             h = Histogram(self._xedges)
             for iy in range(bin_range[0],bin_range[1]):
                 h._counts[:] += self._counts[:,iy]*self._ywidth[iy]
                 h._var[:] += self._var[:,iy]*self._ywidth[iy]**2
 
             return h
-        
-    
+
+
     def marginalize(self,iaxis=1,bin_range=None):
         """Return 1D histogram marginalized over x or y dimension."""
         if iaxis == 1:
 
             if bin_range is None: bin_range = [0,self._nybins]
-            
+
             h = Histogram(self._xedges)
             for iy in range(bin_range[0],bin_range[1]):
                 h._counts[:] += self._counts[:,iy]
@@ -897,7 +896,7 @@ class Histogram2D(object):
         else:
 
             if bin_range is None: bin_range = [0,self._nxbins]
-            
+
             h = Histogram(self._yedges)
             for ix in range(bin_range[0],bin_range[1]):
                 h._counts[:] += self._counts[ix,:]
@@ -908,11 +907,11 @@ class Histogram2D(object):
     def sum(self):
         """Return the sum of counts in this histogram."""
         return np.sum(self._counts)
-        
+
     def cumulative(self):
         """Return a histogram with the cumulative distribution of this
         histogram."""
-        
+
         counts = np.cumsum(self._counts,0)
         counts = np.cumsum(counts,1)
         var = np.cumsum(self._var,0)
@@ -933,20 +932,20 @@ class Histogram2D(object):
             h = self.sliceByIndex(i,iaxis)
 
             x = h.axis().center()
-            
+
             mean = np.sum(h.counts()*x)/np.sum(h.counts())
             mean_var = mean**2*(np.sum(h.var()*x**2)/np.sum(h.counts()*x)**2 +
                                 np.sum(h.var())/np.sum(h.counts())**2)
-            
+
             hq._counts[i] = mean
             hq._var[i] = mean_var
 
         return hq
-    
+
     def quantile(self,iaxis=0,fraction=0.68,**kwargs):
 
         import stats
-        
+
         hq = Histogram(self._xedges)
 
         for i in range(self.nbins(0)):
@@ -963,7 +962,7 @@ class Histogram2D(object):
     def set(self,ix,iy,w,var=None):
         self._counts[ix,iy] = w
         if not var is None: self._var[ix,iy] = var
-        
+
     def fill(self,x,y,w=1,var=None):
 
         x = np.array(x,ndmin=1)
@@ -971,11 +970,11 @@ class Histogram2D(object):
         w = np.array(w,ndmin=0)
 
         if var is None: var = w**2
-        
+
         if w.ndim == 1:
             c1 = np.histogram2d(x,y,bins=[self._xedges,self._yedges],
                                 weights=w)[0]
-            
+
             c2 = np.histogram2d(x,y,bins=[self._xedges,self._yedges],
                                 weights=var)[0]
 
@@ -998,7 +997,7 @@ class Histogram2D(object):
 
             o._counts[msk] = 0.0
             o._var[msk] = 0.0
-            
+
             o._counts[msk == False] = \
                 self._counts[msk == False] / x._counts[msk == False]
 #            o._var[i] = (y1[i] / y2[i])**2
@@ -1022,16 +1021,16 @@ class Histogram2D(object):
             o._var *= x**2
 
         return o
-    
+
 
     def contour(self,keep_aspect=False,**kwargs):
 
 #        levels = [2.,4.,6.,8.,10.]
-        
-        cs = plt.contour(self._x,self._y,self._counts.T, 
+
+        cs = plt.contour(self._x,self._y,self._counts.T,
                          origin='lower',**kwargs)
 #        plt.clabel(cs, fontsize=9, inline=1)
-        
+
     def smooth(self,sigma):
 
         from scipy import ndimage
@@ -1056,20 +1055,18 @@ class Histogram2D(object):
         if not style['keep_aspect']: aspect_ratio=dx/dy
 
         if ax is None: ax = plt.gca()
-            
+
         from matplotlib.colors import NoNorm, LogNorm, Normalize
 
         if style['logz']: norm = LogNorm()
         else: norm = Normalize()
 
-        print style
-        
         clear_dict_by_keys(style,Histogram2D.default_draw_style.keys(),False)
 
         return ax.imshow(self._counts.transpose(),
                          origin='lower',
                          aspect=aspect_ratio,norm=norm,
-                         extent=[self._xmin, self._xmax, 
+                         extent=[self._xmin, self._xmax,
                                  self._ymin, self._ymax],
                          **style)
 
@@ -1079,30 +1076,30 @@ class HistogramND(object):
 
     def __init__(self,xedges = [0.0,1.0], yedges = [0.0,1.0], nxbins = 1,
                  nybins=1, label = '__nolabel__', counts=None, var=None):
-        
+
         self._xmin = xedges[0]
         self._xmax = xedges[-1]
         self._ymin = yedges[0]
         self._ymax = yedges[-1]
 
-        self._nbins = nxbins*nybins        
+        self._nbins = nxbins*nybins
 
         if len(xedges) == 1:
             print 'Input array for bin edges must have at least two elements.'
             sys.exit(1)
-        elif len(xedges) == 2:        
+        elif len(xedges) == 2:
             self._xedges = np.linspace(self._xmin,self._xmax,nxbins+1)
         else:
             self._xedges = copy.copy(np.asarray(xedges))
-            
+
         if len(yedges) == 1:
             print 'Input array for bin edges must have at least two elements.'
             sys.exit(1)
-        elif len(yedges) == 2:    
+        elif len(yedges) == 2:
             self._yedges = np.linspace(self._ymin,self._ymax,nybins+1)
         else:
             self._yedges = copy.copy(np.asarray(yedges))
-            
+
 
         self._x = 0.5*(self._xedges[1:] + self._xedges[:-1])
         self._xerr = 0.5*(self._xedges[1:] - self._xedges[:-1])
@@ -1121,12 +1118,12 @@ class HistogramND(object):
 
         self._label=label
 
-    
+
 if __name__ == '__main__':
 
     fig = plt.figure()
-    
-    h1d = Histogram([0,10],10) 
+
+    h1d = Histogram([0,10],10)
 
 
     h1d.fill(3.5,5)
@@ -1136,13 +1133,13 @@ if __name__ == '__main__':
     h1d.fill(9.5,1)
 
 
-    print h1d._xedges
-    
+    print h1d.axis().edges()
+
     for x in h1d.iterbins():
         print x.center(), x.counts()
 
 
     h1d.rebin([4,4,2])
 
-    print h1d._xedges
+    print h1d.axis().edges()
         
