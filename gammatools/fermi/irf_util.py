@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import UnivariateSpline
 import bisect
-from histogram import *
+from gammatools.core.histogram import *
 
 def expand_irf(irf):
     

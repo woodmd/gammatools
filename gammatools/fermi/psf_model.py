@@ -8,8 +8,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import UnivariateSpline
 from scipy.integrate import quad
-from histogram import Histogram
-from irf_util import *
+from gammatools.core.histogram import Histogram
+from gammatools.fermi.irf_util import *
 
 def find_nearest(array,value):
     idx=(np.abs(array-value)).argmin()

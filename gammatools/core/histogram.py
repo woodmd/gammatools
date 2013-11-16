@@ -143,7 +143,7 @@ class Histogram(object):
                       'max_frac_error' : None }
 
 
-    def __init__(self,xedges = [0.0,1.0],nbins = 10,label = '__nolabel__',
+    def __init__(self,xedges,nbins=10,label = '__nolabel__',
                  counts=None,var=None,style=None):
 
         self._axis = Axis(xedges,nbins)
@@ -193,10 +193,10 @@ class Histogram(object):
         nevent = t.GetEntries()
         first_entry = int(nevent*fraction)
 
-        ncut = t.Draw(draw,cut,'goff',nevent,first_entry)
+        t.Draw(draw,cut,'goff',nevent,first_entry)
         h = gDirectory.Get('hist')
         h.SetDirectory(0)
-        return Histogram.createFromTH1(h)
+        return Histogram.createFromTH1(h,label)
 
 
     @staticmethod
@@ -296,12 +296,18 @@ class Histogram(object):
             c = self._counts
 
         if not style['max_frac_error'] is None:
-            msk = np.sqrt(self._var)/self._counts <= max_frac_error
+            frac_err = np.sqrt(self._var)/self._counts
+            msk = frac_err <= style['max_frac_error']
 
         if style['hist_style'] == 'errorbar':
             return self.errorbar(ax=ax,counts=c,msk=msk,**style)
         elif style['hist_style'] == 'line':
-            return ax.plot(self._axis.center(),c,**style)
+
+            style['marker'] = 'None'
+            style['xerr'] = False
+            style['yerr'] = False
+            style['fmt'] = '-'
+            return self.errorbar(ax=ax,counts=c,msk=msk,**style)
         elif style['hist_style'] == 'filled':
 
             draw_style = copy.deepcopy(style)
@@ -430,10 +436,12 @@ class Histogram(object):
         return (chi2,ndf)
 
     def fill(self,x,w=1,var=None):
-        """Add counts to the histogram at the coordinates given in the
+        """
+        Add counts to the histogram at the coordinates given in the
         array x.  The weight assigned to each element of x can be
         optionally specified by providing a scalar or vector for the w
-        argument."""
+        argument.
+        """
         w = np.asarray(w)
 
         if var is None: var = w**2
@@ -552,6 +560,18 @@ class Histogram(object):
         var = vsum[bin_index[1:]]-vsum[bin_index[:-1]]
 
         return Histogram(xedges,label=self.label(),counts=counts,var=var)
+
+    def residual(self,h):
+        """
+        Generate a residual histogram.
+
+        @param h: Input histogram
+        @return: Residual histogram
+        """
+        o = copy.deepcopy(self)
+        o -= h
+        return o.divide(h)
+
 
     def divide(self,h):
         o = copy.deepcopy(self)
@@ -695,7 +715,7 @@ class Histogram2D(object):
     default_draw_style = { 'interpolation' : 'nearest' }
     default_style = { 'keep_aspect' : False, 'logz' : False }
 
-    def __init__(self,xedges = [0.0,1.0], yedges = [0.0,1.0], nxbins = 1,
+    def __init__(self, xedges, yedges, nxbins = 1,
                  nybins=1, label = '__nolabel__', counts=None, var=None,
                  style=None):
 
@@ -777,7 +797,7 @@ class Histogram2D(object):
         ymin = hist.GetYaxis().GetBinLowEdge(1)
         ymax = hist.GetYaxis().GetBinLowEdge(ny+1)
 
-        h = Histogram2D((xmin,xmax),(ymin,ymax),nx,ny,label)
+        h = Histogram2D([xmin,xmax],[ymin,ymax],nx,ny,label)
 
         h._counts = np.zeros(shape=(nx,ny))
         h._var = np.zeros(shape=(nx,ny))
@@ -1074,7 +1094,7 @@ class Histogram2D(object):
 
 class HistogramND(object):
 
-    def __init__(self,xedges = [0.0,1.0], yedges = [0.0,1.0], nxbins = 1,
+    def __init__(self, xedges, yedges, nxbins = 1,
                  nybins=1, label = '__nolabel__', counts=None, var=None):
 
         self._xmin = xedges[0]

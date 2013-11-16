@@ -5,26 +5,23 @@
 
 @author Matthew Wood       <mdwood@slac.stanford.edu>
 """
-__source__   = "$Source: /nfs/slac/g/glast/ground/cvs/users/mdwood/python/data.py,v $"
+
 __author__   = "Matthew Wood"
 __date__     = "01/01/2013"
-__date__     = "$Date: 2013/10/20 23:59:49 $"
-__revision__ = "$Revision: 1.13 $, $Author: mdwood $"
 
 import numpy as np
 import re
 import copy
 import pywcs
 import pyfits
-from algebra import Vector3D
+from gammatools.core.algebra import Vector3D
 import matplotlib.pyplot as plt
 from catalog import Catalog, CatalogSource
-from matplotlib.colors import LogNorm
 import pywcsgrid2
 import pywcsgrid2.allsky_axes
-from histogram import *
+from gammatools.core.histogram import *
 import yaml
-from util import expand_aliases, eq2gal, interpolate2d
+from gammatools.core.util import expand_aliases, eq2gal, interpolate2d
 
 from pywcsgrid2.allsky_axes import make_allsky_axes_from_header
 
