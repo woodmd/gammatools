@@ -17,6 +17,7 @@ class Series(object):
 
     default_style = { 'marker' : None,
                       'color' : None,
+                      'markersize' : None,
                       'markerfacecolor' : None,
                       'markeredgecolor' : None,
                       'linestyle' : None,
@@ -62,6 +63,23 @@ class Series(object):
         clear_dict_by_vals(style,None)
         ax.errorbar(self._x,self._y,self._yerr,**style)
 
+    def mask(self,msk):
+
+        o = copy.deepcopy(self)
+        o._x = self._x[msk]
+        o._y = self._y[msk]
+        if not o._yerr is None:
+            o._yerr = self._yerr[msk]
+
+        return o
+        
+    def __div__(self,x):
+
+        o = copy.deepcopy(self)
+        o._y /= x
+        if not o.y_err is None: o._yerr /= x*x
+        return o
+        
 
 if __name__ == '__main__':
 

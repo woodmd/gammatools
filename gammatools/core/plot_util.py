@@ -42,6 +42,7 @@ class FigureSubplot(object):
                   'markers' : None,
                   'colors' : None,
                   'linestyles' : None,
+                  'markersizes' : None,
                   'legend_loc' : 'upper right',
                   'legend_fontsize' : 8,
                   'legend'   : True }
@@ -50,11 +51,10 @@ class FigureSubplot(object):
             
         self._style = style
         self._data = []
-        self._hist = []
-        self._hist2d = []
         self._color_index = 0
         self._linestyle_index = 0
         self._marker_index = 0
+        self._markersize_index = 0
 
     def set_style(self,k,v):
         self._style[k] = v
@@ -66,6 +66,7 @@ class FigureSubplot(object):
             
         style = { 'color'     : None,
                   'marker'    : None,
+                  'markersize'    : None,
                   'linestyle' : None  }
         
         style.update(kwargs)
@@ -85,6 +86,11 @@ class FigureSubplot(object):
                                                     self._linestyle_index)
             self._linestyle_index += 1
 
+        if style['markersize'] is None:
+            style['markersize'] =  get_cycle_element(self._style['markersizes'],
+                                                    self._markersize_index)
+            self._markersize_index += 1
+
         return copy.deepcopy(style)
         
     def add_data(self,x,y,yerr=None,**kwargs):
@@ -99,49 +105,35 @@ class FigureSubplot(object):
         h = copy.deepcopy(h)
         style = self.get_style(**kwargs)
         h.update_style(style)
-
-        print style
-
-        if isinstance(h,Histogram2D):  
-            self._hist2d.append(h)
-        else:
-            self._hist.append(h)
-
+        self._data.append(h)
 
     def normalize(self,**kwargs):
 
         norm_index = 0
         if 'norm_index' in kwargs: norm_index = kwargs['norm_index']
-
-        if len(self._hist) > 0:
-            x = copy.deepcopy(self._hist[norm_index].center())
-            y = copy.deepcopy(self._hist[norm_index].counts())
-        else:
+        
+        if isinstance(self._data[norm_index],Histogram):
+            x = copy.deepcopy(self._data[norm_index].center())
+            y = copy.deepcopy(self._data[norm_index].counts())
+        elif isinstance(self._data[norm_index],Series):
             x = copy.deepcopy(self._data[norm_index].x())
             y = copy.deepcopy(self._data[norm_index].y())
 
         fn = UnivariateSpline(x,np.log10(y),k=1,s=0)
         
 #        msk = y>0
-        for i in range(len(self._data)):
+        for i, d in enumerate(self._data):
 
-            msk = (self._data[i].x() >= x[0]*0.95) & \
-                (self._data[i].x() <= x[-1]*1.05)
-            ynorm = 10**fn(self._data[i].x()[msk])
-
-            self._data[i]._x = self._data[i].x()[msk]
-            self._data[i]._y = self._data[i].y()[msk]/ynorm
-            
-            if not self._data[i]._yerr is None:
-                self._data[i]._yerr = self._data[i].yerr()[msk]
-                self._data[i]._yerr /= ynorm
-            
-        for i in range(len(self._hist)):
-
-            ynorm = 10**fn(self._hist[i].center())
-            
-            self._hist[i]._counts /= ynorm
-            self._hist[i]._var /= ynorm**2
+            if isinstance(d,Series):
+                msk = (d.x() >= x[0]*0.95) & (d.x() <= x[-1]*1.05)
+                ynorm = 10**fn(d.x()[msk])
+                d = d.mask(msk)
+                d /= ynorm
+                                    
+            elif isinstance(d,Histogram):                    
+                ynorm = 10**fn(d.center())            
+                d._counts /= ynorm
+                d._var /= ynorm**2
             
     def plot(self,ax,**kwargs):
         
@@ -164,14 +156,14 @@ class FigureSubplot(object):
             
         for i, s in enumerate(self._data):
             labels.append(s.label())
-            s.plot(ax=ax)
+            s.plot(ax=ax,logz=logz)
 
-        for i, h in enumerate(self._hist):
-            labels.append(h.label())            
-            h.plot(ax=ax)
+#        for i, h in enumerate(self._hist):
+#            labels.append(h.label())            
+#            h.plot(ax=ax)
 
-        for i in range(len(self._hist2d)):
-            self._hist2d[i].plot(ax=ax,logz=logz)
+#        for i in range(len(self._hist2d)):
+#            self._hist2d[i].plot(ax=ax,logz=logz)
             
         ax.grid(True)
         if len(labels) > 0 and style['legend']:
@@ -205,9 +197,11 @@ class Figure(object):
                   'ylim_ratio' : None,
                   'title'  : None,
                   'logy'   : False,
+                  'logz'   : False,
                   'markers' : None,
                   'colors' : None,
                   'linestyles' : None,
+                  'markersizes' : None,
                   'style' : 'normal',
                   'legend_loc' : 'upper right',
                   'legend_fontsize' : 12,
@@ -371,7 +365,8 @@ class FigTool(object):
         'fig_prefix'   :
             ( None,  'string',
               'Set the common prefix for output image files.') }
-    
+
+    markersizes = [6.0]
     markers = ['s','o','d','^','v','<','>']
     colors = ['b','g','r','m','c','grey','brown']
     linestyles = ['-','--','-.','-','--','-.','-']
@@ -381,6 +376,7 @@ class FigTool(object):
         style = { 'markers' : FigTool.markers,
                   'colors' : FigTool.colors,
                   'linestyles' : FigTool.linestyles,
+                  'markersizes' : FigTool.markersizes,
                   'legend_loc' : 'lower right',
                   'format' : 'png',
                   'fig_prefix' : None,

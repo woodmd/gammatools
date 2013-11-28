@@ -1003,6 +1003,9 @@ class Histogram2D(HistogramND):
 
         return h
 
+    def label(self):
+        return self._style['label']
+    
     def update_style(self,style):
         update_dict(self._style,style)
 
