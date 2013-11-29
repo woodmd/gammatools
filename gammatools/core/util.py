@@ -172,46 +172,50 @@ def interpolate(x0,z,x):
 
     Parameters
     ----------
-    x0:  Array defining bin edges.
+    x0: Array defining coordinate mesh.
 
-    z: Array defining the function value at the bin positions defined
-    by x0.
+    z: Array defining the a set of scalar values at the coordinates x0.
 
-    x: Point or set of points at which the interpolated function
-    should be evaluated.
+    x: Point or set of points at which the interpolation should be evaluated.
 
     """
-    w = x0[1]-x0[0]
 
-    dx = np.zeros(shape=(x0.shape[0]-1,x.shape[0]))
-    dx[:] = x
-    dx = np.abs(dx.T-x0[:-1]-0.5*w)
+    x = np.array(x,ndmin=1)
 
-    ix = np.argmin(dx,axis=1)
-    xs = (x - x0[ix])/w
+    if x0.shape != z.shape:
+        raise('Coordinate and value arrays do not have equal dimension.')
+
+    wx = x0[1:]-x0[:-1]
+
+    ix = np.digitize(x,x0)-1
+    ix[ix<0]=0
+    ix[ix > x0.shape[0] -2 ] = x0.shape[0] - 2
+    xs = (x - x0[:-1][ix])/wx[ix]
 
     return (z[ix]*(1-xs) + z[ix+1]*xs)
 
 def interpolate2d(x0,y0,z,x,y):
-    """Perform linear interpolation in 2 dimensions.
+    """Perform linear interpolation in 2 dimensions from a 2D mesh.
 
     Parameters
     ----------
-    x0:  Array defining bin edges in x dimension.
+    x0:  Array defining mesh coordinates in x dimension.
 
-    y0:  Array defining bin edges in y dimension.
+    y0:  Array defining mesh coordinates in y dimension.
 
-    z: Array with the function value evlauted at the bin positions
-    defined by x0.
+    z: Array with the function value evlauted at the set of coordinates
+    defined by x0, y0.  This must have the dimension N x M where N and M are
+    the number of elements in x0 and y0 respectively.
 
     x: X coordinates of point or set of points at which the
-    interpolated function should be evaluated.
+    interpolated function should be evaluated.  Must have the same dimension
+    as y.
 
     y: Y coordinates of point or set of points at which the
-    interpolated function should be evaluated.
+    interpolated function should be evaluated.  Must have the same dimension
+    as x.
 
     """
-
 
     y = np.array(y,ndmin=1)
     x = np.array(x,ndmin=1)
@@ -219,29 +223,74 @@ def interpolate2d(x0,y0,z,x,y):
     wx = x0[1:]-x0[:-1]
     wy = y0[1:]-y0[:-1]
 
-#    dx = np.zeros(shape=(x0.shape[0]-1,x.shape[0]))
-#    dx[:] = x
-#    dx = np.abs(dx.T-x0[:-1]-0.5*wx)
-        
-#    dy = np.zeros(shape=(y0.shape[0]-1,y.shape[0]))
-#    dy[:] = y
-#    dy = np.abs(dy.T-y0[:-1]-0.5*wy)
-    
-#    ix = np.argmin(dx,axis=1)
-#    iy = np.argmin(dy,axis=1)
+    ix = np.digitize(x,x0)-1
+    iy = np.digitize(y,y0)-1
 
-    ix = np.digitize(x,x0[:-1])-1
-    iy = np.digitize(y,y0[:-1])-1
+    ix[ix<0]=0
+    iy[iy<0]=0
+    ix[ix > x0.shape[0] -2 ] = x0.shape[0] - 2
+    iy[iy > y0.shape[0] -2 ] = y0.shape[0] - 2
 
-    ix[ix > x0.shape[0] -3 ] = x0.shape[0] - 3
-    iy[iy > y0.shape[0] -3 ] = y0.shape[0] - 3
-
-    xs = (x - x0[ix])/wx[ix]
-    ys = (y - y0[iy])/wy[iy]
+    xs = (x - x0[:-1][ix])/wx[ix]
+    ys = (y - y0[:-1][iy])/wy[iy]
 
     return (z[ix,iy]*(1-xs)*(1-ys) + z[ix+1,iy]*xs*(1-ys) +
             z[ix,iy+1]*(1-xs)*ys + z[ix+1,iy+1]*xs*ys)
 
+def interpolatend(x0,z,x):
+    """Perform linear interpolation over an N-dimensional mesh.
+
+    Parameters
+    ----------
+    x0:  List of N arrays defining mesh coordinates in each of N dimensions.
+
+    z: N-dimesional array of scalar values evaluated on the coordinate
+    mesh defined by x0.  The number of elements along each dimension must
+    equal to the corresponding number of mesh points in x0.
+
+    x: NxM numpy array specifying the M points in N-dimensional space at
+    which the interpolation should be evaluated.
+
+    """
+
+    x = np.array(x,ndmin=2)
+    ndim = len(x0)
+
+    index = np.zeros(shape=(2**ndim,ndim,len(x[0])),dtype=int)
+    psum = np.ones(shape=(2**ndim,len(x[0])))
+
+    for i, t in enumerate(x0):
+
+        p = np.array(t,ndmin=1)
+        w = p[1:]-p[:-1]
+        ix = np.digitize(x[i],p)-1
+        ix[ix<0]=0
+        ix[ix > x0[i].shape[0] -2 ] = len(x0[i]) - 2
+        xs = (x[i] - x0[i][:-1][ix])/w[ix]
+
+
+        for j in range(len(psum)):
+            if j & (1<<i):
+                index[j][i] = ix+1
+                psum[j] *= xs
+            else:
+                index[j][i] = ix
+                psum[j] *= (1.0-xs)
+
+#    print index
+#    print index[0].shape
+#    print z[np.ix_(index[0])]
+
+    for j in range(len(psum)):
+
+        idx = []
+        for i in range(ndim): idx.append(index[j][i])
+
+#        print idx
+
+        psum[j] *= z[idx]
+
+    return np.sum(psum,axis=0)
 
 def convolve2d_gauss(fn,r,sig,rmax,nstep=200):
     """Evaluate the convolution f'(r) = f(r) * g(r) where f(r) is

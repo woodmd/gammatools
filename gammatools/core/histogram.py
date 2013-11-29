@@ -43,7 +43,6 @@ class HistogramND(object):
 
     def __init__(self, axes, label = '__nolabel__', counts=None, var=None):
 
-
         self._axes = []
 
         for ax in axes:
@@ -153,22 +152,18 @@ class HistogramND(object):
 
             index[idim] = [dim_index[i]]
 
-
-#        print self._counts.shape
-
         ix = np.ix_(*index)
-
-#        print 'ix: ', ix
-#        print 'new_shape: ', new_shape
-
         c = self._counts[ix].reshape(new_shape)
         v = self._var[ix].reshape(new_shape)
 
-
-#        print 'shape ', c.shape
-#        print 'new_edges ', new_edges
-
         return HistogramND.create(new_edges,c,v)
+
+    def interpolate(self,x):
+
+        center = []
+        for i in range(self._ndim): center.append(self._axes[i].center())
+
+        return interpolatend(center,self._counts,x)
 
     def __add__(self,x):
 
@@ -594,31 +589,20 @@ class Histogram(object):
     def getBinByValue(self,x):
         return np.argmin(np.abs(self._x-x))
 
-    def interpolate(self,x):
+    def interpolate(self,x,noerror=True):
 
         x = np.array(x,ndmin=1)
-        wx = self._axis.bin_width()
-        x0 = self._axis.edges()
-        z = self._counts
 
-        ix = np.digitize(x,x0[:-1]+0.5*wx)-1
-        xs = (x - x0[ix] - 0.5*wx[ix])/wx[ix]
 
-        ix[ix > x0.shape[0] -3 ] = x0.shape[0] - 3
 
-        c = (self._counts[ix]*(1-xs) + self._counts[ix+1]*xs)
-        v = (self._var[ix]*(1-xs) + self._var[ix+1]*xs)
+        c = interpolate(self._axis.center(),self._counts,x)
+        v = interpolate(self._axis.center(),self._var,x)
 
-        if len(x)==1:
-            return np.array([c[0],np.sqrt(v)[0]])
+        if noerror:
+            return c
         else:
-            return np.vstack((c,np.sqrt(v)))
-
-        from util import interpolate
-
-        c = interpolate(self._axis.edges(),self._counts,x)
-
-        return c
+            if len(x)==1: return np.array([c[0],np.sqrt(v)[0]])
+            else: return np.vstack((c,np.sqrt(v)))
 
     def normalize(self):
 
@@ -1091,8 +1075,8 @@ class Histogram2D(HistogramND):
 
     def interpolate(self,x,y):
         from util import interpolate2d
-        return interpolate2d(self._xaxis.edges(),
-                             self._yaxis.edges(),self._counts,x,y)
+        return interpolate2d(self._xaxis.center(),
+                             self._yaxis.center(),self._counts,x,y)
 
     def integrate(self,iaxis=1,bin_range=None):
         if iaxis == 1:
