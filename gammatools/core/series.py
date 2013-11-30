@@ -77,7 +77,7 @@ class Series(object):
 
         o = copy.deepcopy(self)
         o._y /= x
-        if not o.y_err is None: o._yerr /= x*x
+        if not o._yerr is None: o._yerr /= x
         return o
         
 
