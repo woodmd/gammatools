@@ -127,13 +127,13 @@ class FigureSubplot(object):
             if isinstance(d,Series):
                 msk = (d.x() >= x[0]*0.95) & (d.x() <= x[-1]*1.05)
                 ynorm = 10**fn(d.x()[msk])
-                d = d.mask(msk)
-                d /= ynorm
+                self._data[i] = self._data[i].mask(msk)
+                self._data[i] /= ynorm
                                     
             elif isinstance(d,Histogram):                    
-                ynorm = 10**fn(d.center())            
-                d._counts /= ynorm
-                d._var /= ynorm**2
+                ynorm = 10**fn(d[i].center())            
+                self._data[i]._counts /= ynorm
+                self._data[i]._var /= ynorm**2
             
     def plot(self,ax,**kwargs):
         
