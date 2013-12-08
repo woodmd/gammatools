@@ -30,21 +30,105 @@ from irf_util import IRFManager
 
 from gammatools.core.mpl_util import SqrtScale
 from matplotlib import scale as mscale
-
 mscale.register_scale(SqrtScale)
 
+class PSFData(Data):
 
-def format_error(v, err, nsig=1, latex=False):
-    if err > 0:
-        logz = math.floor(math.log10(err)) - (nsig - 1)
-        z = 10 ** logz
-        err = round(err / z) * z
-        v = round(v / z) * z
+    def __init__(self,egy_bin_edge,cth_bin_edge,quantiles,dtype):
 
-    if latex:
-        return '$%s \pm %s$' % (v, err)
-    else:
-        return '%s +/- %s' % (v, err)
+        egy_bin_edge = np.array(egy_bin_edge,ndmin=1)
+        cth_bin_edge = np.array(cth_bin_edge,ndmin=1)
+
+        self.dtype = dtype
+        self.quantiles = quantiles
+        self.quantile_labels = ['r%2.f'%(q*100) for q in self.quantiles]
+
+        self.egy_axis = Axis(egy_bin_edge)
+        self.cth_axis = Axis(cth_bin_edge)
+        self.egy_nbin = self.egy_axis.nbins()
+        self.cth_nbin = self.cth_axis.nbins()
+
+        self.chi2 = Histogram2D(egy_bin_edge,cth_bin_edge)
+        self.rchi2 = Histogram2D(egy_bin_edge,cth_bin_edge)
+        self.ndf = Histogram2D(egy_bin_edge,cth_bin_edge)
+        self.excess = Histogram2D(egy_bin_edge,cth_bin_edge)
+        self.qdata = {}
+
+        hist_shape = (self.egy_nbin,self.cth_nbin)
+
+        self.sig_density_hist = np.empty(shape=hist_shape, dtype=object)
+        self.tot_density_hist = np.empty(shape=hist_shape, dtype=object)
+        self.bkg_density_hist = np.empty(shape=hist_shape, dtype=object)
+        self.sig_hist = np.empty(shape=hist_shape, dtype=object)
+        self.off_hist = np.empty(shape=hist_shape, dtype=object)
+        self.tot_hist = np.empty(shape=hist_shape, dtype=object)
+        self.bkg_hist = np.empty(shape=hist_shape, dtype=object)
+        self.sky_image = np.empty(shape=hist_shape, dtype=object)
+
+        for i in range(len(self.quantile_labels)):
+            l = self.quantile_labels[i]
+            self.qdata[l] = Histogram2D(egy_bin_edge,cth_bin_edge)
+
+
+    def init_hist(self,fn,theta_max):
+
+        for i in range(self.egy_nbin):
+            for j in range(self.cth_nbin):
+
+                ecenter = self.egy_axis.center()[i]
+                theta_max = min(theta_max,fn(ecenter))
+                theta_edges = np.linspace(0,theta_max,100)
+
+                h = Histogram(theta_edges)
+                self.sig_density_hist[i,j] = copy.deepcopy(h)
+                self.tot_density_hist[i,j] = copy.deepcopy(h)
+                self.bkg_density_hist[i,j] = copy.deepcopy(h)
+                self.sig_hist[i,j] = copy.deepcopy(h)
+                self.tot_hist[i,j] = copy.deepcopy(h)
+                self.bkg_hist[i,j] = copy.deepcopy(h)
+                self.off_hist[i,j] = copy.deepcopy(h)
+
+
+    def print_quantiles(self,prefix):
+
+        filename = prefix + '.txt'
+        f = open(filename,'w')
+
+        for i, ql in enumerate(self.quantile_labels):
+
+            q = self.qdata[ql]
+
+            for icth in range(self.cth_nbin):
+                for iegy in range(self.egy_nbin):
+
+                    line = '%5.3f '%(self.quantiles[i])
+                    line += '%5.2f %5.2f '%(self.cth_range[icth][0],
+                                           self.cth_range[icth][1])
+                    line += '%5.2f %5.2f '%(self.egy_range[iegy][0],
+                                            self.egy_range[iegy][1])
+                    line += '%8.4f %8.4f '%(q.mean[iegy,icth],
+                                            q.err[iegy,icth])
+
+                    f.write(line + '\n')
+
+    def print_quantiles_tex(self,prefix):
+
+        for ql, q in self.qdata.iteritems():
+
+            filename = prefix + '_' + ql + '.tex'
+            f = open(filename,'w')
+
+            for icth in range(self.cth_nbin):
+                for iegy in range(self.egy_nbin):
+
+                    line = '%5.2f %5.2f '%(self.cth_range[icth][0],
+                                           self.cth_range[icth][1])
+                    line += '%5.2f %5.2f '%(self.egy_range[iegy][0],
+                                            self.egy_range[iegy][1])
+                    line += format_error(q.mean[iegy,icth],
+                                         q.err[iegy,icth],1,True)
+                    f.write(line + '\n')
+
 
 
 class PSFValidate(object):
@@ -283,36 +367,12 @@ class PSFValidate(object):
                 if self.data_type == 'pulsar':
                     self.fit_pulsar(iegy, icth)
 
-        self.psf_data.tot_hist[0, 0].plot()
-        self.psf_data.bkg_hist[0, 0].plot()
-        plt.show()
-
-        return
-
-
-
-        # Compute results 
-
-        for iegy in range(len(psf_data.egy_range)):
-
-            for icth in range(len(psf_data.cth_range)):
-
-                if self.data_type == 'pulsar':
-                    self.fit_pulsar(self.data,
-                                    self.psf_models,
-                                    iegy, icth,
-                                    psf_data, irf_data)
-                else:
-                    self.fit_agn(self.data,
-                                 self.psf_models,
-                                 iegy, icth,
-                                 psf_data, irf_data)
-
         fname = os.path.join(self.output_dir,
                              self.output_prefix + 'psfdata')
 
-        psf_data.save(fname + '.P')
+        self.data.save(fname + '.P')
 
+        return
 
         #        psf_data.print_quantiles()
 
@@ -322,6 +382,9 @@ class PSFValidate(object):
         for ml in self.models:
             fname = self.output_prefix + 'psfdata_' + ml
             irf_data[ml].save(fname + '.P')
+
+    def plot(self):
+
 
     def get_counts(self, data, theta_edges, mask):
 
@@ -398,14 +461,14 @@ class PSFValidate(object):
     def plot_theta_cumulative(self, hsignal, hbkg, hmodel, label,
                               theta_max=None, text=None):
 
-        hexcess = copy.deepcopy(hsignal)
-        hexcess -= hbkg
+        hexcess = hsignal - hbkg
+#        hexcess -= hbkg
 
         hexcess_ncum = copy.deepcopy(hexcess)
 
-        excess_sum = hexcess_ncum.sum()
+        excess_sum = hexcess_ncum.sum()[0]
 
-        hexcess_ncum.normalize()
+        hexcess_ncum = hexcess_ncum.normalize()
         hexcess_ncum = hexcess_ncum.cumulative()
 
         fig, axes = plt.subplots(2, sharex=True)
@@ -441,7 +504,7 @@ class PSFValidate(object):
         for i, h in enumerate(hmodel):
             t = copy.deepcopy(h)
             t -= hbkg
-            t.normalize()
+            t = t.normalize()
             t = t.cumulative()
             #            t *= 1./excess_sum
 
@@ -482,7 +545,11 @@ class PSFValidate(object):
         plt.savefig(pngfile)
 
 
-    def fit_agn(self, data, models, iegy, icth, qdata, qmodel):
+    def fit_agn(self, iegy, icth):
+
+        models = self.psf_models
+        irf_data = self.irf_data
+        psf_data = self.psf_data
 
         egy_range = qdata.egy_range[iegy]
         cth_range = qdata.cth_range[icth]
@@ -514,13 +581,6 @@ class PSFValidate(object):
 
         hcounts = data.hist('dtheta', mask=mask, edges=theta_edges)
 
-        #        if hcounts.sum() > 50:
-        #            hcounts.rebin_mincount(10)
-        #        elif hcounts.sum() > 20:
-        #            hcounts.rebin_mincount(5)
-        #        elif hcounts.sum() > 10:
-        #            hcounts.rebin_mincount(3)
-
         hbkg = copy.deepcopy(hcounts)
         hbkg.clear()
         for b in hbkg.iterbins():
@@ -532,7 +592,7 @@ class PSFValidate(object):
 
         hexcess_ncum = copy.deepcopy(hexcess)
 
-        hexcess_ncum.normalize()
+        hexcess_ncum = hexcess_ncum.normalize()
         hexcess_ncum = hexcess_ncum.cumulative()
         excess_sum = np.sum(hcounts._counts[hcounts._x < theta_max]) \
                      - bkg_density * domega
@@ -549,8 +609,7 @@ class PSFValidate(object):
             m = models[ml][icth]
 
             print 'Fitting model'
-            hmodel = m.histogram(emin, emax, hcounts._xedges)
-            hmodel.normalize()
+            hmodel = m.histogram(emin, emax, hcounts._xedges).normalize()
             hmodel *= excess_sum
 
             hmodel_counts_tmp = copy.deepcopy(hmodel)
@@ -558,7 +617,7 @@ class PSFValidate(object):
 
             ndf = hexcess.nbins()
 
-            qmodel[ml].excess.set(iegy, icth, hexcess.sum())
+            qmodel[ml].excess.set(iegy, icth, hexcess.sum()[0])
             qmodel[ml].ndf.set(iegy, icth, hexcess.nbins())
             #            qmodel[ml].chi2.set(iegy,icth,hexcess.chi2(hmodel))
             #            qmodel[ml].rchi2.set(iegy,icth,
@@ -721,6 +780,8 @@ class PSFValidate(object):
                                       cuts=self.opts.cuts,
                                       phases=self.on_phases)
 
+
+
         (hon, hoff, hoffs) = getOnOffHist(data, 'dtheta', phases=self.phases,
                                           edges=theta_edges, mask=mask)
 
@@ -745,6 +806,15 @@ class PSFValidate(object):
         qdata.off_hist[iegy, icth] += hoff
         qdata.bkg_hist[iegy, icth] += hoffs
 
+        src = self.data._srcs[0]
+
+        #        im = SkyImage(128.8391418,-45.1792259216,theta_max,theta_max/200.)
+        im = SkyImage.createROI(src['RAJ2000'], src['DEJ2000'],
+                                theta_max, theta_max / 200.)
+        #mask = self.get_mask(data,egy_range,cth_range,'on')
+
+        im.fill(self.data['ra'][on_mask], self.data['dec'][on_mask])
+        qdata.sky_image[iegy,icth] = im
         qdata.excess.set(iegy, icth, excess_sum)
 
     def fit_pulsar(self, iegy, icth):
@@ -753,11 +823,11 @@ class PSFValidate(object):
         irf_data = self.irf_data
         psf_data = self.psf_data
 
-        egy_range = psf_data.egy_range[iegy]
-        cth_range = psf_data.cth_range[icth]
-        ecenter = 0.5 * (egy_range[0] + egy_range[1])
-        emin = 10 ** egy_range[0]
-        emax = 10 ** egy_range[1]
+        egy_range = psf_data.egy_range[iegy:iegy+1]
+        cth_range = psf_data.cth_range[icth:icth+1]
+        ecenter = psf_data.egy_axis.center()
+        emin = 10 ** psf_data.egy_axis.edges()[i]
+        emax = 10 ** psf_data.egy_axis.edges()[i+1]
 
         theta_max = min(self.opts.theta_max, self.thetamax_fn(ecenter))
 
@@ -768,9 +838,9 @@ class PSFValidate(object):
         excess_sum = psf_data.excess._counts[iegy, icth]
 
         bkg_density = bkg_hist.sum() / (theta_max ** 2 * np.pi)
-        text = 'Bkg Density = %.3f deg$^{-2}$\n' % (bkg_density)
+        text = 'Bkg Density = %.3f deg$^{-2}$\n' % (bkg_density[0])
         text += 'Signal = %.3f\n' % (psf_data.excess._counts[iegy, icth])
-        text += 'Background = %.3f' % (bkg_hist.sum())
+        text += 'Background = %.3f' % (bkg_hist.sum()[0])
 
         hmodel_density = []
         hmodel_counts = []
@@ -779,9 +849,8 @@ class PSFValidate(object):
             m = models[ml][icth]
 
             print 'Fitting model ', ml
-            hmodel_sig = m.histogram(emin, emax, on_hist.axis().edges())
-
-            hmodel_sig.normalize()
+            hmodel_sig = m.histogram(emin, emax,
+                                     on_hist.axis().edges()).normalize()
             #            lnl_fn = BinnedPulsarLnLFn(on_hist,off_hist,hmodel,self.alpha)
 
             model_norm = excess_sum
@@ -799,7 +868,7 @@ class PSFValidate(object):
             #            hmodel_counts_tmp += bkg_hist
             hmodel_counts.append(hmodel_sig + bkg_hist)
 
-            irf_data[ml].excess.set(iegy, icth, sig_hist.sum())
+            irf_data[ml].excess.set(iegy, icth, sig_hist.sum()[0])
             irf_data[ml].ndf.set(iegy, icth, sig_hist.nbins())
 
             hmd = hmodel_sig.scale_density(lambda x: x * x * np.pi)
@@ -838,29 +907,16 @@ class PSFValidate(object):
                                    fig_label,
                                    theta_max=None, text=text)
 
-        on_mask = PhotonData.get_mask(self.data,
-                                      {'energy': egy_range,
-                                       'cth': cth_range},
-                                      conversion_type=self.conversion_type,
-                                      event_class=self.opts.event_class,
-                                      cuts=self.opts.cuts,
-                                      phases=self.on_phases)
+
 
         r68 = hq.quantile(0.68)
         r95 = hq.quantile(0.95)
 
         rs = min(r68 / 4., theta_max / 10.)
 
-        src = self.data._srcs[0]
 
-        #        im = SkyImage(128.8391418,-45.1792259216,theta_max,theta_max/200.)
-        im = SkyImage.createROI(src['RAJ2000'], src['DEJ2000'],
-                                theta_max, theta_max / 200.)
-        #mask = self.get_mask(data,egy_range,cth_range,'on')
-
-        im.fill(self.data['ra'][on_mask], self.data['dec'][on_mask])
         fig = plt.figure()
-        im = im.smooth(rs)
+        im = psf_data.sky_image[iegy,icth].smooth(rs)
         im.plot(logz=True)
 
         im.plot_catalog()
@@ -868,6 +924,8 @@ class PSFValidate(object):
         im.plot_circle(r68, color='k')
         im.plot_circle(r95, color='k', linestyle='--')
         im.plot_circle(theta_max, color='k', linestyle='-', linewidth=2)
+
+
 
         fig_label = self.output_prefix + 'skyimage_'
         fig_label += '%04.0f_%04.0f_%03.f%03.f' % (egy_range[0] * 100,

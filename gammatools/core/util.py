@@ -4,13 +4,23 @@ import numpy as np
 import scipy.special as spfn
 import re
 
+def format_error(v, err, nsig=1, latex=False):
+    if err > 0:
+        logz = math.floor(math.log10(err)) - (nsig - 1)
+        z = 10 ** logz
+        err = round(err / z) * z
+        v = round(v / z) * z
 
+    if latex:
+        return '$%s \pm %s$' % (v, err)
+    else:
+        return '%s +/- %s' % (v, err)
 
 def update_dict(d0,d1):
     """Recursively update the contents of a python dictionary from
     another python dictionary."""
 
-    if d1 is None: return
+    if d0 is None or d1 is None: return
 
     for k, v in d0.iteritems():
         

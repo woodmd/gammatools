@@ -417,6 +417,9 @@ class SkyImage(object):
 #                                          header=self._wcs.to_header(True),
 #                                          lon_center=0.)
 
+        print self._xedge
+        print self._yedge
+
 
         im = ax.imshow(self._counts.T,#np.power(self._counts.T,1./3.),
                        interpolation='nearest',origin='lower',norm=norm,
@@ -431,6 +434,7 @@ class SkyImage(object):
 
         plt.colorbar(im)
         ax.grid()
+
 #        ax.add_compass(loc=1)
 #       
 #        ax.set_display_coord_system("gal")       
@@ -612,115 +616,3 @@ class QuantileData(object):
 
     
         
-class PSFData(Data):
-
-    def __init__(self,egy_bin_edge,cth_bin_edge,quantiles,dtype):
-
-        egy_bin_edge = np.asarray(egy_bin_edge)
-        cth_bin_edge = np.asarray(cth_bin_edge)
-
-        self.dtype = dtype
-        self.quantiles = quantiles
-        self.quantile_labels = ['r%2.f'%(q*100) for q in self.quantiles]
-
-        self.egy_bin_edge = egy_bin_edge
-        self.cth_bin_edge = cth_bin_edge
-        self.egy_range = [[self.egy_bin_edge[i],self.egy_bin_edge[i+1]]
-                          for i in range(len(self.egy_bin_edge)-1)]
-        self.egy_center = 0.5*(self.egy_bin_edge[:-1] + self.egy_bin_edge[1:])
-        self.egy_width = (self.egy_bin_edge[1:] - self.egy_bin_edge[:-1])
-        
-        self.cth_range = [[self.cth_bin_edge[i],self.cth_bin_edge[i+1]]
-                          for i in range(len(self.cth_bin_edge)-1)]        
-        self.cth_center = 0.5*(self.cth_bin_edge[:-1] + self.cth_bin_edge[1:])
-
-        self.cth_width = (self.cth_bin_edge[1:] - self.cth_bin_edge[:-1])
-        self.egy_nbin = len(self.egy_range)
-        self.cth_nbin = len(self.cth_range)
-
-        self.chi2 = Histogram2D(egy_bin_edge,cth_bin_edge)
-        self.rchi2 = Histogram2D(egy_bin_edge,cth_bin_edge)
-        self.ndf = Histogram2D(egy_bin_edge,cth_bin_edge)
-        self.excess = Histogram2D(egy_bin_edge,cth_bin_edge)
-        self.qdata = {}
-        
-        self.sig_density_hist = np.empty(shape=(self.egy_nbin,self.cth_nbin), 
-                                         dtype=object)
-        self.tot_density_hist = np.empty(shape=(self.egy_nbin,self.cth_nbin), 
-                                         dtype=object)
-        self.bkg_density_hist = np.empty(shape=(self.egy_nbin,self.cth_nbin), 
-                                         dtype=object)
-        self.sig_hist = np.empty(shape=(self.egy_nbin,self.cth_nbin), 
-                                 dtype=object)
-        self.off_hist = np.empty(shape=(self.egy_nbin,self.cth_nbin), 
-                                 dtype=object)        
-        self.tot_hist = np.empty(shape=(self.egy_nbin,self.cth_nbin), 
-                                 dtype=object)
-        self.bkg_hist = np.empty(shape=(self.egy_nbin,self.cth_nbin), 
-                                 dtype=object)
-
-        for i in range(len(self.quantile_labels)):
-            l = self.quantile_labels[i]
-            self.qdata[l] = Histogram2D(egy_bin_edge,cth_bin_edge)
-
-
-    def init_hist(self,fn,theta_max):
-        
-        for i in range(self.egy_nbin):
-            for j in range(self.cth_nbin):
-
-                ecenter = 0.5*(self.egy_bin_edge[i] + self.egy_bin_edge[i+1])
-                theta_max = min(theta_max,fn(ecenter))
-                theta_edges = np.linspace(0,theta_max,100)
-                
-                h = Histogram(theta_edges)
-                self.sig_density_hist[i,j] = copy.deepcopy(h)
-                self.tot_density_hist[i,j] = copy.deepcopy(h)
-                self.bkg_density_hist[i,j] = copy.deepcopy(h)
-                self.sig_hist[i,j] = copy.deepcopy(h)
-                self.tot_hist[i,j] = copy.deepcopy(h)
-                self.bkg_hist[i,j] = copy.deepcopy(h)
-                self.off_hist[i,j] = copy.deepcopy(h)
-                
-            
-    def print_quantiles(self,prefix):
-
-        filename = prefix + '.txt'
-        f = open(filename,'w')     
-        
-        for i, ql in enumerate(self.quantile_labels):
-
-            q = self.qdata[ql]
-            
-            for icth in range(self.cth_nbin):
-                for iegy in range(self.egy_nbin):
-
-                    line = '%5.3f '%(self.quantiles[i])
-                    line += '%5.2f %5.2f '%(self.cth_range[icth][0],
-                                           self.cth_range[icth][1])
-                    line += '%5.2f %5.2f '%(self.egy_range[iegy][0],
-                                            self.egy_range[iegy][1])
-                    line += '%8.4f %8.4f '%(q.mean[iegy,icth],
-                                            q.err[iegy,icth])
-                    
-                    f.write(line + '\n')
-
-    def print_quantiles_tex(self,prefix):
-
-        for ql, q in self.qdata.iteritems():
-
-            filename = prefix + '_' + ql + '.tex'
-            f = open(filename,'w')  
-            
-            for icth in range(self.cth_nbin):
-                for iegy in range(self.egy_nbin):
-
-                    line = '%5.2f %5.2f '%(self.cth_range[icth][0],
-                                           self.cth_range[icth][1])
-                    line += '%5.2f %5.2f '%(self.egy_range[iegy][0],
-                                            self.egy_range[iegy][1])
-                    line += format_error(q.mean[iegy,icth],
-                                         q.err[iegy,icth],1,True)
-                    f.write(line + '\n')
-                    
-            

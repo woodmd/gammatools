@@ -60,7 +60,7 @@ class PSFModel(object):
 
     def histogram(self,emin,emax,edges):
         y = self.thetasq(emin,emax,edges)
-        return Histogram.createFromArray(edges,y)
+        return Histogram(edges,counts=y)
     
     def thetasq(self,emin,emax, x_theta):
 
@@ -154,7 +154,7 @@ class PSFModelLT(PSFModel):
     load_irf = False
     
     def __init__(self,ltfile,irf,nbin=600,
-                 ebins_per_decade=64,
+                 ebins_per_decade=16,
                  cth_range=(0.4,1.0), build_model=True,
                  psf_type='src',lonlat=(0,0),
                  edisp_table=None):
