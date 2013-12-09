@@ -35,6 +35,7 @@ class FigureSubplot(object):
                   'xlim'   : None,
                   'ylim'   : None,
                   'ylim_ratio' : None,
+                  'show_args' : None,
                   'title'  : None,
                   'logy'   : False,
                   'logx'   : False,
@@ -153,18 +154,16 @@ class FigureSubplot(object):
             ax.set_title(style['title'])
 
         labels = []
-            
-        for i, s in enumerate(self._data):
+
+        iargs = range(len(self._data))
+        if 'show_args' in kwargs and not kwargs['show_args'] is None:
+            iargs = kwargs.pop('show_args')
+        
+        for i in iargs:
+            s = self._data[i]
             labels.append(s.label())
             s.plot(ax=ax,logz=logz)
 
-#        for i, h in enumerate(self._hist):
-#            labels.append(h.label())            
-#            h.plot(ax=ax)
-
-#        for i in range(len(self._hist2d)):
-#            self._hist2d[i].plot(ax=ax,logz=logz)
-            
         ax.grid(True)
         if len(labels) > 0 and style['legend']:
             ax.legend(prop={'size' : style['legend_fontsize']},
@@ -202,6 +201,7 @@ class Figure(object):
                   'colors' : None,
                   'linestyles' : None,
                   'markersizes' : None,
+                  'show_ratio_args' : None,
                   'style' : 'normal',
                   'legend_loc' : 'upper right',
                   'legend_fontsize' : 12,
@@ -246,7 +246,7 @@ class Figure(object):
         
 #        if 'ylim' in kwargs: kwargs.pop('ylim')
         
-        self.plot(**kwargs)
+        self._plot(**kwargs)
         
     def _plot_ratio_twopane(self,**kwargs):
         
@@ -276,7 +276,8 @@ class Figure(object):
             subp_kwargs['ylabel'] = 'Ratio'
             subp_kwargs['legend'] = False
             subp_kwargs['logy'] = False
-            subp_kwargs['ylim'] = kwargs['ylim_ratio']        
+            subp_kwargs['ylim'] = kwargs['ylim_ratio']
+            subp_kwargs['show_args'] = kwargs['show_ratio_args']        
             kwargs['xlabel'] = None
             
             self._subplots[i].plot(ax0,**kwargs)
