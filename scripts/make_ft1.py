@@ -30,7 +30,13 @@ if opts.batch:
     
     for x in args:
         cmd = 'make_ft1.py %s '%(x)
-        
+
+        fitsFile = os.path.splitext(x)[0] + '_ft1.fits'
+
+        if os.path.isfile(fitsFile):
+            print 'Skipping ', fitsFile
+            continue
+            
         for k, v in opts.__dict__.iteritems():
             if not v is None and k != 'batch': cmd += ' --%s=%s '%(k,v)
 
