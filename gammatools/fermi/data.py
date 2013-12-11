@@ -417,8 +417,8 @@ class SkyImage(object):
 #                                          header=self._wcs.to_header(True),
 #                                          lon_center=0.)
 
-        print self._xedge
-        print self._yedge
+#        print self._xedge
+#        print self._yedge
 
 
         im = ax.imshow(self._counts.T,#np.power(self._counts.T,1./3.),
