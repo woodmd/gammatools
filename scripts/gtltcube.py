@@ -3,12 +3,11 @@
 import os, sys
 import re
 import tempfile
-import logging
-from LogFile import LogFile
+#import logging
+#from LogFile import LogFile
 import shutil
-from GtApp import GtApp
-from pySimbad import pySimbad
-from task import *
+#from GtApp import GtApp
+from gammatools.fermi.task import *
 
 from optparse import Option
 from optparse import OptionParser
@@ -98,53 +97,4 @@ for f in args:
 
     gt_task.run()
     
-
-sys.exit(0)
-
-files = []
-for i in range(1,len(args)):
-    files.append(os.path.abspath(args[i]))
-
-cwd = os.getcwd()
-user = os.environ['USER']
-tmpdir = tempfile.mkdtemp(prefix=user + '.', dir='/scratch')
-
-os.chdir(tmpdir)
-
-
-fd, file_list = tempfile.mkstemp(dir=tmpdir)
-for file in files:
-    os.write(fd,file + '\n')
-
-sys.stdout = LogFile('stdout','gtltcube.log',quiet=False)
-sys.stderr = LogFile('stderr','gtltcube.log',quiet=False)
-
-ltcube = GtApp('gtltcube', 'Likelihood')
-
-file_prefix = opts.output
-
-outfile = file_prefix + '_gtltcube.fits'
-logfile = file_prefix + '_gtltcube.log'
-
-ltcube['dcostheta'] = opts.dcostheta
-ltcube['binsz'] = opts.binsize
-ltcube['outfile'] = outfile
-ltcube['evfile'] = '@' + file_list
-ltcube['scfile'] = scfile
-ltcube['zmax'] = opts.zmax
-
-try:
-    ltcube.run()
-except:
-    print logging.getLogger('stderr').exception(sys.exc_info()[0])
-
-os.system('mv gtltcube.log ' + cwd + '/' + logfile)
-os.system('mv ' + outfile + ' ' + cwd)
-
-shutil.rmtree(tmpdir)
-
-
-
-
-
 

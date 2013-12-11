@@ -3,7 +3,6 @@ import os
 import shutil
 import copy
 from tempfile import mkdtemp
-from skymaps import SkyDir
 from uw.like.pointspec import SpectralAnalysis,DataSpecification
 from uw.like.pointspec_helpers import get_default_diffuse, PointSource, FermiCatalog, get_diffuse_source
 
@@ -14,9 +13,9 @@ from BinnedAnalysis import BinnedObs,BinnedAnalysis
 from UnbinnedAnalysis import UnbinnedObs, UnbinnedAnalysis
 from pyLikelihood import ParameterVector
 
-from catalog import Catalog, CatalogSource
+from gammatools.fermi.catalog import Catalog, CatalogSource
 
-from util import Configurable
+from gammatools.core.util import Configurable
 
 
 class TaskDispatcher(Configurable):

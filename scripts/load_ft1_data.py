@@ -7,15 +7,14 @@ import copy
 from optparse import Option
 from optparse import OptionParser
 
-
 import pyfits
 import skymaps
 import pointlike
 import numpy as np
-from algebra import Vector3D
-from catalog import Catalog
-from util import separation_angle, dispatch_jobs
-from data import PhotonData
+from gammatools.core.algebra import Vector3D
+from gammatools.fermi.catalog import Catalog
+from gammatools.core.util import separation_angle, dispatch_jobs
+from gammatools.fermi.data import PhotonData
 
 class FT1Loader(object):
 
@@ -63,8 +62,6 @@ class FT1Loader(object):
                     ((0x1)<<int(self.event_class_id))>0)
 
         table = table[msk]
-
-
         
         if self.erange is not None:
 
@@ -83,17 +80,6 @@ class FT1Loader(object):
 
             table = table[msk]
                 
-#        if 'PULSE_PHASE' in hdulist[1].columns.names and \
-#                self.phase_selection == 'on':
-#            msk = ((table.field('PULSE_PHASE')>0.1) & 
-#                   (table.field('PULSE_PHASE')<0.15)) | \
-#                   ((table.field('PULSE_PHASE')>0.52) & 
-#                    (table.field('PULSE_PHASE')<0.57)) 
-#            table = table[msk]
-#        elif 'PULSE_PHASE' in hdulist[1].columns.names and \
-#                self.phase_selection == 'off':
-#            msk = (table.field('PULSE_PHASE')>0.7)
-#            table = table[msk]
         if self.phase_selection is not None:
             msk = table.field('PULSE_PHASE')<0
             phases = self.phase_selection.split(',')
@@ -106,8 +92,6 @@ class FT1Loader(object):
             
             
         nevent = len(table)
-
-        
         
         print 'Loading ', fname, ' nevent: ', nevent
 
@@ -213,7 +197,6 @@ class FT1Loader(object):
             
         if src_names.ndim == 0: src_names = src_names.reshape(1)
 
-
         cat = Catalog()
         
         for name in src_names:
@@ -239,23 +222,7 @@ class FT1Loader(object):
             self.src_redshifts.append(0.)
             
     def save(self,fname):
-
         self._photon_data.save(fname)
-
-        return
-        
-        np.savez(fname,
-                 data=np.array([self.dtheta,self.energy,self.cth,
-                                self.ra,self.dec,self.phase,
-                                self.dx,self.dy]),
-                 ct=np.array(self.ct),
-                 event_class=np.array(self.event_class),
-                 time=np.array(self.time),
-                 redshift=np.array(self.redshift),
-                 src_names=np.array(self.src_names),
-                 isrc=np.array(self.isrc),
-                 src_radec=np.array([self.src_ra_deg,self.src_dec_deg]))
-                
 
 usage = "usage: %prog [options] [FT1 file ...]"
 description = """Generate a numpy file containing a list of all photons within
@@ -313,6 +280,11 @@ if opts.batch:
 
 if opts.output is None:
     opts.output = os.path.basename(os.path.splitext(args[0])[0] + '.P')
+
+
+if os.path.isfile(opts.output):
+    print 'Output file exists: ', opts.output
+    sys.exit(0)
     
 ft1_files = args
 ft2_file = opts.sc_file
