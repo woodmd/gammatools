@@ -16,7 +16,7 @@ def format_error(v, err, nsig=1, latex=False):
     else:
         return '%s +/- %s' % (v, err)
 
-def update_dict(d0,d1):
+def update_dict(d0,d1,add_new_keys=False):
     """Recursively update the contents of a python dictionary from
     another python dictionary."""
 
@@ -29,6 +29,10 @@ def update_dict(d0,d1):
         if isinstance(v,dict) and isinstance(d1[k],dict):
             update_dict(d0[k],d1[k])
         else: d0[k] = d1[k]
+
+    for k, v in d1.iteritems():
+        if not k in d0 and add_new_keys: d0[k] = d1[k]
+
         
 def clear_dict_by_vals(d,vals):
 

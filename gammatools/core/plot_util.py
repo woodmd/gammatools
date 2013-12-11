@@ -28,34 +28,39 @@ def get_cycle_element(cycle,index):
 class FigureSubplot(object):
     """Class implementing a single pane in a matplotlib figure. """
 
+    style = { 'xlabel' : None,
+              'ylabel' : None,
+              'xlim'   : None,
+              'ylim'   : None,
+              'ylim_ratio' : None,
+              'show_args' : None,
+              'mask_args' : None,
+              'title'  : None,
+              'yscale' : 'lin',
+              'xscale' : 'lin',
+              'logz'   : False,
+              'markers' : None,
+              'colors' : None,
+              'linestyles' : None,
+              'markersizes' : None,
+              'legend_loc' : 'upper right',
+              'legend_fontsize' : 8,
+              'legend'   : True }
+
     def __init__(self,**kwargs):
+        
+        self._style = copy.deepcopy(FigureSubplot.style)
+        update_dict(self._style,kwargs)
 
-        style = { 'xlabel' : None,
-                  'ylabel' : None,
-                  'xlim'   : None,
-                  'ylim'   : None,
-                  'ylim_ratio' : None,
-                  'show_args' : None,
-                  'title'  : None,
-                  'logy'   : False,
-                  'logx'   : False,
-                  'logz'   : False,
-                  'markers' : None,
-                  'colors' : None,
-                  'linestyles' : None,
-                  'markersizes' : None,
-                  'legend_loc' : 'upper right',
-                  'legend_fontsize' : 8,
-                  'legend'   : True }
-
-        update_dict(style,kwargs)
-            
-        self._style = style
+        self._ax = None
         self._data = []
         self._color_index = 0
         self._linestyle_index = 0
         self._marker_index = 0
         self._markersize_index = 0
+
+        self._hline = []
+        self._hline_style = []
 
     def set_style(self,k,v):
         self._style[k] = v
@@ -108,7 +113,38 @@ class FigureSubplot(object):
         h.update_style(style)
         self._data.append(h)
 
-    def normalize(self,**kwargs):
+    def add_hline(self,x,**kwargs):
+
+        style = { 'color' : None, 'linestyle' : None, 'label' : None }
+
+        update_dict(style,kwargs,False)
+
+        self._hline.append(x)
+        self._hline_style.append(style)
+
+    def create_ratio_subplot(self,residual=False,**kwargs):
+
+        style = copy.deepcopy(self._style)
+        update_dict(style,kwargs)
+
+        subp = copy.deepcopy(self)
+        subp.set_style('yscale','lin')
+        subp.set_style('ylim',style['ylim_ratio'])
+
+        if residual: subp.set_style('ylabel','Fractional Residual')
+        else: subp.set_style('ylabel','Ratio')
+
+        subp.normalize(residual,**kwargs)
+
+        return subp
+
+    def cumulative(self,**kwargs):
+
+        for i, d in enumerate(self._data):            
+            self._data[i] = self._data[i].normalize()
+            self._data[i] = self._data[i].cumulative()
+
+    def normalize(self,residual=False,**kwargs):
 
         norm_index = 0
         if 'norm_index' in kwargs: norm_index = kwargs['norm_index']
@@ -130,22 +166,30 @@ class FigureSubplot(object):
                 ynorm = 10**fn(d.x()[msk])
                 self._data[i] = self._data[i].mask(msk)
                 self._data[i] /= ynorm
+
+                if residual:
+                    self._data[i] -= 1.0
                                     
             elif isinstance(d,Histogram):                    
-                ynorm = 10**fn(d[i].center())            
+                ynorm = 10**fn(d.center())            
                 self._data[i]._counts /= ynorm
                 self._data[i]._var /= ynorm**2
-            
+                
+                if residual:
+                    self._data[i]._counts -= 1.0
+
     def plot(self,ax,**kwargs):
         
         style = copy.deepcopy(self._style)
         update_dict(style,kwargs)
-            
-        logy = style['logy']
-        if 'logy' in kwargs: logy = kwargs.pop('logy')
 
-        logx = style['logx']
-        if 'logx' in kwargs: logx = kwargs.pop('logx')
+        self._ax = ax
+
+        yscale = style['yscale']
+        if 'yscale' in kwargs: yscale = kwargs.pop('yscale')
+
+        xscale = style['xscale']
+        if 'xscale' in kwargs: xscale = kwargs.pop('xscale')
 
         logz = style['logz']
         if 'logz' in kwargs: logz = kwargs.pop('logz')
@@ -156,13 +200,19 @@ class FigureSubplot(object):
         labels = []
 
         iargs = range(len(self._data))
-        if 'show_args' in kwargs and not kwargs['show_args'] is None:
-            iargs = kwargs.pop('show_args')
-        
+        if not style['show_args'] is None:
+            iargs = style['show_args']
+         
+        if not style['mask_args'] is None:
+            iargs = [x for x in iargs if x not in style['mask_args']]
+
         for i in iargs:
             s = self._data[i]
             labels.append(s.label())
             s.plot(ax=ax,logz=logz)
+
+        for i, h in enumerate(self._hline):
+            ax.axhline(self._hline[i],**self._hline_style[i])
 
         ax.grid(True)
         if len(labels) > 0 and style['legend']:
@@ -180,39 +230,40 @@ class FigureSubplot(object):
 #            if ratio: ax.set_ylim(0.0,2.0)            
 #        if not ylim is None: ax.set_ylim(ylim)
 
-        if logy: ax.set_yscale('log')
-        if logx: ax.set_xscale('log')
+        if yscale == 'log': ax.set_yscale('log')
+        elif yscale == 'sqrt': ax.set_yscale('sqrt',exp=2.0)
+
+        if xscale == 'log': ax.set_xscale('log')
+        elif xscale == 'sqrt': ax.set_xscale('sqrt',exp=2.0)
         
         
+class RatioSubplot(FigureSubplot):
+
+    def __init__(self):
+
+        pass
+
 class Figure(object):
     
-    def __init__(self,figlabel,nsub=1,**kwargs):
-        
-        style = { 'xlabel' : None,
-                  'ylabel' : None,
-                  'zlabel' : None,
-                  'xlim'   : None,
-                  'ylim'   : None,
-                  'ylim_ratio' : None,
-                  'title'  : None,
-                  'logy'   : False,
-                  'logz'   : False,
-                  'markers' : None,
-                  'colors' : None,
-                  'linestyles' : None,
-                  'markersizes' : None,
-                  'show_ratio_args' : None,
-                  'style' : 'normal',
-                  'legend_loc' : 'upper right',
-                  'legend_fontsize' : 12,
-                  'format' : 'png',
-                  'fig_dir' : './',
-                  'figscale' : 1.0,
-                  'subplots_per_fig' : 1 }
- 
-        update_dict(style,kwargs)
+    style = { 'show_ratio_args' : None,
+              'mask_ratio_args' : None,
+              'style' : 'normal',
+              'figure_style' : 'onepane',
+              'legend_loc' : 'upper right',
+              'legend_fontsize' : 12,
+              'format' : 'png',
+              'fig_dir' : './',
+              'figscale' : 1.0,
+              'subplots_per_fig' : 1 }
 
-        self._style = style
+    def __init__(self,figlabel,nx=1,ny=1,**kwargs):
+        
+        self._style = copy.deepcopy(Figure.style) 
+        update_dict(self._style,FigureSubplot.style,True)
+        update_dict(self._style,kwargs)
+
+        nsub = nx*ny
+
         self._figlabel = figlabel
         self._subplots = []        
         self.add_subplot(nsub)        
@@ -237,55 +288,48 @@ class Figure(object):
 
         for s in self._subplots: s.normalize(**kwargs)
 
-    def _plot_ratio_onepane(self,**kwargs):
+    def _plot_twopane_shared_axis(self,sp0,sp1,height_ratio=1.6,**kwargs):
+        """Generate a figure with two panes the share a common x-axis.
+        Tick labels will be suppressed in the x-axis of the upper pane."""
+        fig = plt.figure()
 
-        self.normalize(**kwargs)
+        gs1 = gridspec.GridSpec(2, 1, height_ratios = [height_ratio,1])
+        ax0 = fig.add_subplot(gs1[0,0])
+        ax1 = fig.add_subplot(gs1[1,0],sharex=ax0)
 
-        kwargs['logy'] = False
-        kwargs['ylim'] = self._style['ylim_ratio']
-        
-#        if 'ylim' in kwargs: kwargs.pop('ylim')
-        
-        self._plot(**kwargs)
-        
-    def _plot_ratio_twopane(self,**kwargs):
-        
-        nfig = int(len(self._subplots))
-        for i in range(nfig):
+        fig.subplots_adjust(hspace=0.1)
+        plt.setp([ax0.get_xticklabels()],visible=False)
 
-            if nfig > 1:
-                fig_name = '%s_%02i.%s'%(self._figlabel,
-                                         i,self._style['format'])
-            else:
-                fig_name = '%s.%s'%(self._figlabel,
-                                    self._style['format'])
+        sp0.plot(ax0,**kwargs)
+        sp1.plot(ax1,**kwargs)
+
+        fig.canvas.draw()
+        plt.subplots_adjust(left=0.12, bottom=0.12,right=0.95, top=0.95)
+
+        return fig
+
+    def _plot_twopane(self,**kwargs):
+        
+#        nfig = int(len(self._subplots))
+#        if nfig > 1:
+#            fig_name = '%s_%02i.%s'%(self._figlabel,
+#                                     i,self._style['format'])
+#        else:
+        fig_name = '%s.%s'%(self._figlabel,self._style['format'])
             
-            fig = plt.figure()
 
-            gs1 = gridspec.GridSpec(2, 1, height_ratios = [1.6,1])
-            ax0 = fig.add_subplot(gs1[0,0])
-            ax1 = fig.add_subplot(gs1[1,0],sharex=ax0)
+#        subp_kwargs['legend'] = False
+#        subp_kwargs['yscale'] = 'lin'
+#        subp_kwargs['ylim'] = kwargs['ylim_ratio']
+#        subp_kwargs['show_args'] = kwargs['show_ratio_args']        
+#        kwargs['xlabel'] = None
+        
+        fig = self._plot_twopane_shared_axis(self._subplots[0],
+                                             self._subplots[1],
+                                             **kwargs)
 
-            subp = copy.deepcopy(self._subplots[i])
-            subp.normalize(**kwargs)
-            
-            fig.subplots_adjust(hspace=0.1)
-            plt.setp([ax0.get_xticklabels()],visible=False)
+        fig.savefig(fig_name)
 
-            subp_kwargs = copy.deepcopy(kwargs)
-            subp_kwargs['ylabel'] = 'Ratio'
-            subp_kwargs['legend'] = False
-            subp_kwargs['logy'] = False
-            subp_kwargs['ylim'] = kwargs['ylim_ratio']
-            subp_kwargs['show_args'] = kwargs['show_ratio_args']        
-            kwargs['xlabel'] = None
-            
-            self._subplots[i].plot(ax0,**kwargs)
-            subp.plot(ax1,**subp_kwargs)
-
-            fig.canvas.draw()
-            plt.subplots_adjust(left=0.12, bottom=0.12,
-                                right=0.95, top=0.95)
 #                                wspace=None, hspace=None)
             
 #            ax1.set_yticklabels([ lbl.get_text()
@@ -293,7 +337,7 @@ class Figure(object):
 #                                ['']) 
             
 #                if not fontsize is None: set_font_size(ax,fontsize)
-            fig.savefig(fig_name)#,bbox_inches='tight')
+            #,bbox_inches='tight')
             
 
     def plot(self,**kwargs):
@@ -301,10 +345,28 @@ class Figure(object):
         style = copy.deepcopy(self._style)
         style.update(kwargs)
         
-        if style['style'] is None or style['style'] == 'normal':
-            self._plot(**style)
-        elif style['style'] == 'ratio': self._plot_ratio_onepane(**style)
-        elif style['style'] == 'ratio2': self._plot_ratio_twopane(**style)
+        if style['style'] == 'ratio2' or style['style'] == 'residual2': 
+            style['figure_style'] = 'twopane'
+            
+
+        residual = False
+        if style['style'] == 'residual2' or style['style'] == 'residual':
+            residual = True
+
+        if style['style'] == 'ratio2' or style['style'] == 'residual2':
+            ratio_subp = self._subplots[0].create_ratio_subplot(residual,
+                                                                **kwargs)
+            ratio_subp.set_style('legend',False)
+            ratio_subp.set_style('yscale','lin')
+            ratio_subp.set_style('show_args',style['show_ratio_args'])
+            ratio_subp.set_style('mask_args',style['mask_ratio_args'])
+            self._subplots[0].set_style('xlabel',None)
+            self._subplots.append(ratio_subp)
+
+        if style['figure_style'] == 'twopane':
+            self._plot_twopane(**kwargs)
+        else:
+            self._plot(**kwargs)        
         
     def _plot(self,**kwargs):
 
@@ -358,13 +420,13 @@ class FigTool(object):
 
     opts = {
         'format' :
-            ( 'png', 'string',
+            ( 'png', str,
               'Set the output image format.' ),
         'fig_dir' :
-            ( './', 'string',
+            ( './', str,
               'Set the output directory.' ),
         'fig_prefix'   :
-            ( None,  'string',
+            ( None,  str,
               'Set the common prefix for output image files.') }
 
     markersizes = [6.0]
@@ -398,12 +460,12 @@ class FigTool(object):
         for k, v in FigTool.opts.iteritems():
 
             if isinstance(v[0],bool):
-                parser.add_option('--' + k,default=v[0],
-                                  action='store_true',
-                                  help=v[2] + ' [default: %s]'%v[0])
+                parser.add_argument('--' + k,default=v[0],
+                                    action='store_true',
+                                    help=v[2] + ' [default: %s]'%v[0])
             else:
-                parser.add_option('--' + k,default=v[0],type=v[1],
-                                  help=v[2] + ' [default: %s]'%v[0])
+                parser.add_argument('--' + k,default=v[0],type=v[1],
+                                    help=v[2] + ' [default: %s]'%v[0])
         
         
     def create(self,nax,figlabel,**kwargs):
@@ -415,7 +477,6 @@ class FigTool(object):
             if not k in kwargs: kwargs[k] = v
             
         return Figure(figlabel,nax,**kwargs)
-
 
 if __name__ == '__main__':
 
