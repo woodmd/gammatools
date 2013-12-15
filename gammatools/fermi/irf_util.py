@@ -108,14 +108,17 @@ class IRFManager(object):
         self._edisp = [EDispPyIRF(irfs.edisp())]
         
 
-    def psf(self,*args,**kwargs):
+    def psf(self,dtheta,egy,cth,**kwargs):
+
+        aeff = self.aeff(egy,cth,**kwargs)
 
         v = None
         for i in range(len(self._psf)):
-            if i == 0: v = self._psf[i](*args,**kwargs)
-            else: v += self._psf[i](*args,**kwargs)
+            psf= self._psf[i](dtheta,egy,cth,**kwargs)*self.aeff(egy,cth,**kwargs)
+            if i == 0: v  = psf
+            else: v += psf
 
-        return v
+        return v/aeff
 
 #        return self._psf(*args,**kwargs)
 

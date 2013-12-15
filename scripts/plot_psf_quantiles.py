@@ -247,7 +247,7 @@ FigTool.configure(parser)
 
 args = parser.parse_args()
 
-config = { 'data_labels' : ['Vela','AGN'] }
+config = { 'data_labels' : ['Vela','AGN'], 'model_labels' : [] }
 
 if not args.config is None:
     config.update(yaml.load(open(args.config,'r')))
@@ -305,10 +305,15 @@ for i, arg in enumerate(args.files):
 
         j = len(mdl_fig68[0]._data)
         
+        if j >= len(config['model_labels']):
+            label = arg
+        else:
+            label = config['model_labels'][j]
+
         mdl_fig68[0].add_hist(d.qdata[1].slice(1,0),hist_style='line',
-                              label=config['model_labels'][j])
+                              label=label)
         mdl_fig95[0].add_hist(d.qdata[3].slice(1,0),hist_style='line',
-                              label=config['model_labels'][j])
+                              label=label)
 
 
 data_fig68.merge(mdl_fig68)
