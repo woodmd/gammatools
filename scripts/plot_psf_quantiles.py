@@ -24,96 +24,6 @@ import yaml
 
 def get_next(i,l): return l[i%len(l)]
 
-def plot_theta_cumulative(hdata_tot,hdata_bkg,hmodel_sig,hmodel_bkg,label,
-                          theta_max=None,text=None):
-
-    fig, axes = plt.subplots(2, sharex=True)
-    #  subplot_kw={'xscale' : 'sqrt', 'exp' : 2.0})
-
-    axes[0].set_xscale('sqrt',exp=2.0)
-    axes[1].set_xscale('sqrt',exp=2.0)
-
-    axes[0].set_ylabel('Counts')
-    axes[1].set_ylabel('Cumulative Fraction')
-    axes[1].set_xlabel('$\\theta$ [deg]')
-
-    irf_colors = ['green','red','magenta','gray','orange']
-    data_colors = ['blue','black','green']
-
-    for i in range(len(hdata_tot)):
-
-        hexcess = copy.deepcopy(hdata_tot[i])
-        hexcess -= hbkg[i]
-
-        hexcess_ncum = copy.deepcopy(hexcess)
-
-        excess_sum =  hexcess_ncum.sum()
-        
-        hexcess_ncum.normalize()
-        hexcess_ncum = hexcess_ncum.cumulative()
-
-        hdata_tot[i].errorbar(ax=axes[0],color=data_colors[i])
-        hdata_bkg[i].errorbar(False,False,ax=axes[0],fmt='--',label='bkg',
-                              color='k')
-
-        hexcess_ncum.errorbar(ax=axes[1],color=data_colors[i])
-        
-    
-
-    for i, h in enumerate(hmodel_sig):
-
-        htot = hmodel_sig[i] + hmodel_bkg[i]
-        htot.errorbar(False,False,ax=axes[0],fmt='-',
-                      #                   label=self.model_labels[i],
-                      color=irf_colors[i],
-                      linewidth=1.5)
-    
- 
-#                         bbox=dict(facecolor='white', alpha=0.85))
-
-    for i, h in enumerate(hmodel_sig):
-
-        t = copy.deepcopy(h)
-        t.normalize()
-        t = t.cumulative()
-#            t *= 1./excess_sum
-            
-        t.errorbar(False,False,fmt='-', ax=axes[1],
-#                   label=self.model_labels[i],
-                   color=irf_colors[i],
-                   linewidth=1.5)
-
-    axes[1].grid(True)
-    axes[1].axhline(0.34,color='r',linestyle='--',label='34%')
-    axes[1].axhline(0.68,color='b',linestyle='--',label='68%')
-    axes[1].axhline(0.90,color='g',linestyle='--',label='90%')
-    axes[1].axhline(0.95,color='m',linestyle='--',label='95%')
-    axes[1].axhline(1.0,color='k')
-    axes[1].legend(prop={'size' : 10},loc='lower right',ncol=2)
-        
-    axes[1].set_ylim(0.0,1.2)
-    axes[0].set_ylim(0.0)
-    axes[0].grid(True)            
-    axes[0].legend(prop={'size' : 10})
-
-    if theta_max is not None:
-        axes[0].axvline(theta_max,color='k',linestyle='--')
-        axes[1].axvline(theta_max,color='k',linestyle='--')
-        
-    if text is not None:
-        axes[0].text(0.3,0.75,text,
-                     transform=axes[0].transAxes,fontsize=10)        
-
-    fig.subplots_adjust(hspace=0)
-        
-    for i in range(len(axes)-1):
-        plt.setp([axes[i].get_xticklabels()], visible=False)
-
-    output_dir = './'
-
-    pngfile = os.path.join(output_dir,label + '.png')
-    print 'Printing ', pngfile
-    plt.savefig(pngfile)
 
 def plot_cth_quantiles(self):
 
@@ -325,16 +235,10 @@ usage = "%(prog)s [options] [PSF file ...]"
 description = """Plot quantiles of PSF."""
 parser = argparse.ArgumentParser(usage=usage, description=description)
 
-parser.add_argument('--model', default = None, 
-                    help = '')
-
 parser.add_argument('--config', default = None, 
                     help = '')
 
-parser.add_argument('--output', default = None, 
-                    help = '')
-
-parser.add_argument('--title', default = None, 
+parser.add_argument('--show', default = False, action='store_true', 
                     help = '')
 
 parser.add_argument('files', nargs='+')
@@ -343,36 +247,78 @@ FigTool.configure(parser)
 
 args = parser.parse_args()
 
+config = { 'data_labels' : ['Vela','AGN'] }
+
+if not args.config is None:
+    config.update(yaml.load(open(args.config,'r')))
+
+
 #plt.rc('font', family='serif')
 #plt.rc('font', serif='Times New Roman')
 
-ft = FigTool()
+ft = FigTool(args,legend_loc='upper right')
 
-fig68 = ft.create(1,'psf_quantile_r68',style='residual2',yscale='log')
-fig95 = ft.create(1,'psf_quantile_r95',style='residual2',yscale='log')
+data_colors = ['k','b']
 
-norm_index = 1
+model_colors = ['g','m','k','b']
+
+data_fig68 = ft.create(1,'psf_quantile_r68',style='residual2',yscale='log',
+                       xlabel='Energy [log$_{10}$(E/MeV)]',
+                       ylabel='Containment Radius [deg]',
+                       colors=data_colors)
+data_fig95 = ft.create(1,'psf_quantile_r95',style='residual2',yscale='log',
+                       xlabel='Energy [log$_{10}$(E/MeV)]',
+                       ylabel='Containment Radius [deg]',
+                       colors=data_colors)
+
+mdl_fig68 = ft.create(1,'psf_quantile_r68',style='residual2',yscale='log',
+                       xlabel='Energy [log$_{10}$(E/MeV)]',
+                       ylabel='Containment Radius [deg]',
+                       colors=model_colors)
+
+mdl_fig95 = ft.create(1,'psf_quantile_r95',style='residual2',yscale='log',
+                       xlabel='Energy [log$_{10}$(E/MeV)]',
+                       ylabel='Containment Radius [deg]',
+                       colors=model_colors)
+
+norm_index = 0
 
 for i, arg in enumerate(args.files):
-
+    
     d = PSFData.load(arg)
 
     if d.dtype == 'data':
-        fig68[0].add_hist(d.qdata[1].slice(1,0),linestyle='None')
-        fig95[0].add_hist(d.qdata[3].slice(1,0),linestyle='None')
+
+        xlim = config['range'][i]
+        x = d.excess.xaxis().center()        
+        msk = (x > xlim[0]) & (x < xlim[1])
+
+        j = len(data_fig68[0]._data)
+        
+        data_fig68[0].add_hist(d.qdata[1].slice(1,0),linestyle='None',msk=msk,
+                          label=config['data_labels'][j])
+        data_fig95[0].add_hist(d.qdata[3].slice(1,0),linestyle='None',msk=msk,
+                               label=config['data_labels'][j])
+        
     else:
-        fig68[0].add_hist(d.qdata[1].slice(1,0),hist_style='line')
-        fig95[0].add_hist(d.qdata[3].slice(1,0),hist_style='line')
+        norm_index = i
 
-#    plt.figure()
-#    d.qdata[1].slice(1,0).plot()
-#    plt.show()
+        j = len(mdl_fig68[0]._data)
+        
+        mdl_fig68[0].add_hist(d.qdata[1].slice(1,0),hist_style='line',
+                              label=config['model_labels'][j])
+        mdl_fig95[0].add_hist(d.qdata[3].slice(1,0),hist_style='line',
+                              label=config['model_labels'][j])
 
 
-fig68.plot(style='residual2',norm_index=norm_index)
-fig95.plot(style='residual2',norm_index=norm_index)
+data_fig68.merge(mdl_fig68)
+data_fig95.merge(mdl_fig95)
+        
+        
+data_fig68.plot(style='residual2',norm_index=norm_index)
+data_fig95.plot(style='residual2',norm_index=norm_index)
 
-plt.show()
+if args.show: plt.show()
 
 sys.exit(0)
 

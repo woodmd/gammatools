@@ -91,7 +91,12 @@ class Main(object):
         for irf in irfs:
 
             if opts.output is None:
-                output_file = irf + '_psfdata.P'
+
+                output_file = re.sub('\:\:',r'_',irf)
+                
+                output_file += '_%03.f%03.f'%(100*cth_bin_edge[0],
+                                              100*cth_bin_edge[1]) 
+                output_file += '_psfdata.P'
             else:
                 output_file = opts.output
 

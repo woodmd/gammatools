@@ -30,7 +30,7 @@ def makeHistModel(xedge,ncount,min_count=5):
     h = h.rebin_mincount(min_count)
 
     ncum = np.concatenate(([0],np.cumsum(h._counts)))
-    fn = UnivariateSpline(h.edges(),ncum,s=0,k=2)
+    fn = UnivariateSpline(h.edges(),ncum,s=0,k=1)
     mu_count = fn(xedge[1:])-fn(xedge[:-1])
     mu_count[mu_count<0] = 0
 
@@ -292,6 +292,12 @@ class Axis(object):
         ibin = np.digitize(np.array(x,ndmin=1),self._edges)-1
         return ibin
 
+    def valToBinBounded(self,x):
+        ibin = self.valToBin(x)
+        ibin[ibin < 0] = 0
+        ibin[ibin > self.nbins()-1] = self.nbins()-1
+        return ibin
+
 
 class Histogram(object):
     """One-dimensional histogram class.  Each bin is assigned both a
@@ -310,6 +316,7 @@ class Histogram(object):
 
     default_style = { 'hist_style' : 'errorbar',
                       'xerr' : True, 'yerr' : True,
+                      'msk'   : None,
                       'max_frac_error' : None }
 
 
@@ -406,8 +413,8 @@ class Histogram(object):
     def bin_width(self):
         return self._axis.bin_width()
 
-    def errorbar(self, label_rotation=0,
-                 label_alignment='center', ax=None, msk=None,
+    def _errorbar(self, label_rotation=0,
+                 label_alignment='center', ax=None, 
                  counts=None, x=None,**kwargs):
         """
         Draw this histogram in the 'errorbar' style.
@@ -415,16 +422,17 @@ class Histogram(object):
         All additional keyword arguments will be passed to
         :func:`matplotlib.pyplot.errorbar`.
         """
-        style = copy.deepcopy(self._style)
-        style.update(kwargs)
+        style = kwargs
 
         if ax is None: ax = plt.gca()
         if counts is None: counts = self._counts
         if x is None: x = self._axis.center()
 
-        if msk is None:
+        if style['msk'] is None:
             msk = np.empty(len(counts),dtype='bool'); msk.fill(True)
-
+        else:
+            msk = style['msk']
+            
         xerr = None
         yerr = None
 
@@ -449,16 +457,16 @@ class Histogram(object):
                 weights=counts,**kwargs)
 
 
-    def plot(self,ax=None,msk=None,overflow=False,**kwargs):
+    def plot(self,ax=None,overflow=False,**kwargs):
 
         style = copy.deepcopy(self._style)
         style.update(kwargs)
 
         if ax is None: ax = plt.gca()
-        if msk is None:
-            msk = np.empty(self._axis.nbins(),dtype='bool')
-            msk.fill(True)
-
+        if style['msk'] is None:
+            style['msk'] = np.empty(self._axis.nbins(),dtype='bool')
+            style['msk'].fill(True)
+            
         if overflow:
             c = copy.deepcopy(self._counts)
             c[0] += self._underflow
@@ -468,17 +476,17 @@ class Histogram(object):
 
         if not style['max_frac_error'] is None:
             frac_err = np.sqrt(self._var)/self._counts
-            msk = frac_err <= style['max_frac_error']
+            style['msk'] = frac_err <= style['max_frac_error']
 
         if style['hist_style'] == 'errorbar':
-            return self.errorbar(ax=ax,counts=c,msk=msk,**style)
+            return self._errorbar(ax=ax,counts=c,**style)
         elif style['hist_style'] == 'line':
 
             style['marker'] = 'None'
             style['xerr'] = False
             style['yerr'] = False
             style['fmt'] = '-'
-            return self.errorbar(ax=ax,counts=c,msk=msk,**style)
+            return self._errorbar(ax=ax,counts=c,**style)
         elif style['hist_style'] == 'filled':
 
             draw_style = copy.deepcopy(style)
@@ -1054,8 +1062,8 @@ class Histogram2D(HistogramND):
 
     def sliceByValue(self,value,iaxis=0):
 
-        if iaxis==0: bin = self._xaxis.valToBin(value)
-        else: bin = self._yaxis.valToBin(value)
+        if iaxis==0: bin = self._xaxis.valToBinBounded(value)
+        else: bin = self._yaxis.valToBinBounded(value)
         return self.sliceByIndex(bin,iaxis)
 
     def cut(self,iaxis=0,ibin=0):

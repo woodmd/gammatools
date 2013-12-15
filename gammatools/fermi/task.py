@@ -3,18 +3,16 @@ import os
 import shutil
 import copy
 from tempfile import mkdtemp
-from uw.like.pointspec import SpectralAnalysis,DataSpecification
-from uw.like.pointspec_helpers import get_default_diffuse, PointSource, FermiCatalog, get_diffuse_source
+#from uw.like.pointspec import SpectralAnalysis,DataSpecification
+#from uw.like.pointspec_helpers import get_default_diffuse, PointSource, FermiCatalog, get_diffuse_source
 
 from GtApp import GtApp
-from uw.like.roi_catalogs import SourceCatalog, Catalog2FGL, Catalog3Y
-
-from BinnedAnalysis import BinnedObs,BinnedAnalysis
-from UnbinnedAnalysis import UnbinnedObs, UnbinnedAnalysis
-from pyLikelihood import ParameterVector
+#from uw.like.roi_catalogs import SourceCatalog, Catalog2FGL, Catalog3Y
+#from BinnedAnalysis import BinnedObs,BinnedAnalysis
+#from UnbinnedAnalysis import UnbinnedObs, UnbinnedAnalysis
+#from pyLikelihood import ParameterVector
 
 from gammatools.fermi.catalog import Catalog, CatalogSource
-
 from gammatools.core.util import Configurable
 
 
@@ -326,3 +324,35 @@ class SelectorTask(Task):
                            evclass=config['evclass'],   # Only for Pass7
                            evclsmin=config['evclsmin'],
                            convtype=config['convtype']) # Only for Pass6
+
+
+
+class MkTimeTask(Task):
+
+    default_config = { 'roicut' : 'no',
+                       'filter' : 'IN_SAA!=T&&DATA_QUAL==1&&LAT_CONFIG==1&&ABS(ROCK_ANGLE)<52',
+                       'evfile' : None,
+                       'scfile' : None }               
+    
+    def __init__(self,infile,outfile,config=None,**kwargs):
+        super(MkTimeTask,self).__init__(config,**kwargs)        
+        self.configure(MkTimeTask.default_config,config,'gtmktime',**kwargs)
+
+        self._infile = os.path.abspath(infile)
+        self._outfile = os.path.abspath(outfile)
+        self.register_output_file(self._outfile)
+        
+        self._gtapp=GtApp('gtmktime','dataSubselector')
+
+
+    def run_task(self):
+        
+        config = self.config()
+
+        outfile = os.path.basename(self._output_files[0])
+        
+        self._gtapp.run(evfile=self._infile,
+                        outfile=outfile,
+                        filter=config['filter'],
+                        roicut=config['roicut'],
+                        scfile=config['scfile'])

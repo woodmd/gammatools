@@ -4,8 +4,7 @@
 import os
 import sys
 import copy
-from optparse import Option
-from optparse import OptionParser
+import argparse
 
 import pyfits
 import skymaps
@@ -229,77 +228,76 @@ description = """Generate a numpy file containing a list of all photons within
 max_dist_deg of a source defined in src_list.  The script accepts as input
 a list of FT1 files."""
 
-parser = OptionParser(usage=usage,description=description)
+parser = argparse.ArgumentParser(usage=usage,description=description)
 
-parser.add_option('--zenith_cut', default = 105, type='float',
+parser.add_argument('files', nargs='+')
+
+parser.add_argument('--zenith_cut', default = 105, type=float,
                   help = 'Set the zenith angle cut.')
 
-parser.add_option('--conversion_type', default = None, type='string',
+parser.add_argument('--conversion_type', default = None, 
                   help = 'Set the conversion type.')
 
-parser.add_option('--event_class_id', default = None, type='string',
+parser.add_argument('--event_class_id', default = None, 
                   help = 'Set the event class bit.')
 
-parser.add_option('--output', default = None, type='string',
+parser.add_argument('--output', default = None, 
                   help = 'Set the output filename.')
 
-parser.add_option('--src_list',
-                  default = None,
-                  type='string',
-                  help = 'Set the list of sources.')
+parser.add_argument('--src_list',default = None,                  
+                    help = 'Set the list of sources.')
 
-parser.add_option('--srcs',
-                  default = None,
-                  type='string',
-                  help = 'Set a comma-delimited list of sources.')
+parser.add_argument('--srcs',
+                    default = None,
+                    help = 'Set a comma-delimited list of sources.')
 
-parser.add_option('--sc_file', default = None, type='string',
+parser.add_argument('--sc_file', default = None, 
                   help = 'Set the spacecraft (FT2) file.')
 
-parser.add_option('--max_events', default = None, type='int',
+parser.add_argument('--max_events', default = None, type='int',
                   help = 'Set the maximum number of events that will be '
                   'read from each file.')
 
-parser.add_option('--erange', default = None, type='string',
+parser.add_argument('--erange', default = None, 
                   help = 'Set the energy range in log10(E/MeV).')
 
-parser.add_option('--max_dist_deg', default = 25.0, type='float',
+parser.add_argument('--max_dist_deg', default = 25.0, type=float,
                   help = 'Set the maximum distance.')
 
-parser.add_option('--phase', default = None, type='string',
+parser.add_argument('--phase', default = None, 
                   help = 'Select the pulsar phase selection (on/off).')
 
-parser.add_option("--batch",action="store_true",
+parser.add_argument("--batch",action="store_true",
                   help="Split this job into several batch jobs.")
 
-(opts, args) = parser.parse_args()
+args = parser.parse_args()
 
-if opts.batch:
-    dispatch_jobs(os.path.abspath(__file__),args,opts)
+if args.batch:
+    dispatch_jobs(os.path.abspath(__file__),args.files,args)
     sys.exit(0)
 
-if opts.output is None:
-    opts.output = os.path.basename(os.path.splitext(args[0])[0] + '.P')
+if args.output is None:
+    args.output = os.path.basename(os.path.splitext(args[0])[0] + '.P')
 
 
-if os.path.isfile(opts.output):
-    print 'Output file exists: ', opts.output
+if os.path.isfile(args.output):
+    print 'Output file exists: ', args.output
     sys.exit(0)
     
-ft1_files = args
-ft2_file = opts.sc_file
+ft1_files = args.files
+ft2_file = args.sc_file
 
-pl = FT1Loader(opts.zenith_cut,
-               opts.conversion_type,
-               opts.event_class_id,
-               opts.max_events,opts.max_dist_deg,
-               opts.phase,opts.erange)
+pl = FT1Loader(args.zenith_cut,
+               args.conversion_type,
+               args.event_class_id,
+               args.max_events,args.max_dist_deg,
+               args.phase,args.erange)
 
-pl.loadsrclist(opts.src_list,opts.srcs)
+pl.loadsrclist(args.src_list,args.srcs)
 
-pl.setFT2File(opts.sc_file)
+pl.setFT2File(args.sc_file)
 
 for f in ft1_files:
     pl.load_photons(f)
 
-pl.save(opts.output)
+pl.save(args.output)

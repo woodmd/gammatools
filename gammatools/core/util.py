@@ -52,24 +52,37 @@ def clear_dict_by_keys(d,keys,clear_if_present=True):
             del d[k]
 
 
-def dispatch_jobs(exe,args,opts,queue='xlong',resources='rhel60'):
+def dispatch_jobs(exe,args,opts,queue=None,
+                  resources='rhel60',split_args=True):
+
+    skip_keywords = ['queue','resources','batch']
     
-    for x in args:
-        cmd = '%s %s '%(exe,x)
-
-        if 'queue' in opts.__dict__ and not opts.queue is None:
-            queue = opts.queue
-
-        skip_keywords = ['queue','resources','batch']
+    if queue is None and 'queue' in opts.__dict__ and \
+            not opts.queue is None:
+        queue = opts.queue
         
-        for k, v in opts.__dict__.iteritems():
+    cmd_opts = ''
+    for k, v in opts.__dict__.iteritems():
+        if k in skip_keywords: continue                
+        if isinstance(v,list): continue
+        if not v is None: cmd_opts += ' --%s=\"%s\" '%(k,v)
+        
+    if split_args:
 
-            if k in skip_keywords: continue                
-            if not v is None and k != 'batch': cmd += ' --%s=%s '%(k,v)
+        for x in args:
+            cmd = '%s %s '%(exe,x)
+            batch_cmd = 'bsub -q %s -R %s '%(queue,resources)
+            batch_cmd += ' %s %s '%(cmd,cmd_opts)        
+            print batch_cmd
+            os.system(batch_cmd)
 
-        print 'bsub -q %s -R %s %s'%(queue,resources,cmd)
-        os.system('bsub -q %s -R %s %s'%(queue,resources,cmd))
-    
+    else:
+        cmd = '%s %s '%(exe,' '.join(args))
+        batch_cmd = 'bsub -q %s -R %s '%(queue,resources)
+        batch_cmd += ' %s %s '%(cmd,cmd_opts)        
+        print batch_cmd
+        os.system(batch_cmd)
+            
 
 def save_object(obj,outfile):
 

@@ -122,6 +122,10 @@ class FigureSubplot(object):
         self._hline.append(x)
         self._hline_style.append(style)
 
+    def merge(self,sp):
+
+        for d in sp._data: self._data.append(d)
+        
     def create_ratio_subplot(self,residual=False,**kwargs):
 
         style = copy.deepcopy(self._style)
@@ -288,6 +292,11 @@ class Figure(object):
 
         for s in self._subplots: s.normalize(**kwargs)
 
+    def merge(self,fig):
+
+        for i, s in enumerate(self._subplots): 
+            s.merge(fig._subplots[i])
+            
     def _plot_twopane_shared_axis(self,sp0,sp1,height_ratio=1.6,**kwargs):
         """Generate a figure with two panes the share a common x-axis.
         Tick labels will be suppressed in the x-axis of the upper pane."""
