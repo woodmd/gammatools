@@ -176,8 +176,15 @@ class PSFValidate(object):
             cth_label = '%03.f%03.f' % (self.cth_bin_edge[0] * 100,
                                         self.cth_bin_edge[1] * 100)
 
-            self.output_prefix = '%s_%s_%s_' % (prefix, opts.conversion_type,
-                                                cth_label)
+            if not opts.event_class_id is None:
+                cth_label += '_%02i'%(opts.event_class_id)
+
+            self.output_prefix = '%s_' % (prefix)
+
+            if not opts.conversion_type is None:
+                self.output_prefix += '%s_' % (opts.conversion_type)
+            
+            self.output_prefix += '%s_' % (cth_label)
 
         if opts.output_dir is None:
             self.output_dir = os.getcwd()
@@ -229,7 +236,8 @@ class PSFValidate(object):
         theta_max_c1 = -0.8
         theta_max_c2 = 1.0
 
-        if self.opts.conversion_type == 'back':
+        if self.opts.conversion_type == 'back' or \
+                self.opts.conversion_type is None:
             theta_max_c0 = 35
             theta_max_c2 = 1.5
 
@@ -302,7 +310,7 @@ class PSFValidate(object):
                             action='store_true',
                             help='Plot distribution of photons on the sky.')
 
-        parser.add_argument('--conversion_type', default='front',
+        parser.add_argument('--conversion_type', default=None,
                             help='Draw plots.')
 
         parser.add_argument('--event_class', default=None,

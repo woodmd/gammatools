@@ -289,9 +289,12 @@ for i, arg in enumerate(args.files):
 
     if d.dtype == 'data':
 
-        xlim = config['range'][i]
-        x = d.excess.xaxis().center()        
-        msk = (x > xlim[0]) & (x < xlim[1])
+        msk = None
+
+        if 'range' in config:
+            xlim = config['range'][i]
+            x = d.excess.xaxis().center()        
+            msk = (x > xlim[0]) & (x < xlim[1])
 
         j = len(data_fig68[0]._data)
         

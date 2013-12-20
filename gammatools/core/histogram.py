@@ -64,6 +64,12 @@ class HistogramND(object):
     def axes(self):
         return self._axes
 
+    def counts(self):
+        return self._counts
+        
+    def var(self):
+        return self._var
+    
     def fill(self,z,w=1.0):
         """
         Fill the histogram from an NxM array of points where M is the
@@ -130,7 +136,7 @@ class HistogramND(object):
     def sum(self):
 
         return np.array([np.sum(self._counts),np.sqrt(np.sum(self._var))])
-
+    
     def slice(self,sdims,dim_index):
         sdims = np.array(sdims,ndmin=1,copy=True)
         dim_index = np.array(dim_index,ndmin=1,copy=True)
@@ -165,6 +171,11 @@ class HistogramND(object):
 
         return interpolatend(center,self._counts,x)
 
+    def clear(self):
+
+        self._counts[:] = 0.0
+        self._var[:] = 0.0
+    
     def __add__(self,x):
 
         o = copy.deepcopy(self)
@@ -200,7 +211,7 @@ class HistogramND(object):
         h = HistogramND(edges)
         h.fill(z)
 
-        return h
+        return HistogramND.create(h.axes(),h.counts(),h.var())
 
 class HistogramIterator(object):
     """Iterator module that steps over the bins of a one-dimensional
@@ -401,6 +412,18 @@ class Histogram(object):
 
         return h
 
+    def to_root(self,name,title):
+
+        import ROOT
+        h = ROOT.TH1F(name,title,self.axis().nbins(),
+                      self.axis().lo_edge(),self.axis().hi_edge())
+
+        for i in range(self.axis().nbins()):
+            h.SetBinContent(i+1,self._counts[i])
+            h.SetBinError(i+1,np.sqrt(self._var[i]))
+
+        return h
+    
     def update_style(self,style):
         update_dict(self._style,style)
 
@@ -570,6 +593,14 @@ class Histogram(object):
         if ibin == None: return self._var
         else: return self._var[ibin]
 
+#    def stddev(self):
+#        x = self.axis().center()
+#        return np.sum(self.counts()*x)/np.sum(self.counts())
+        
+    def mean(self):
+        x = self.axis().center()
+        return np.sum(self.counts()*x)/np.sum(self.counts())
+        
     def sum(self,overflow=False):
         """Return the sum of counts in this histogram."""
 
@@ -628,6 +659,23 @@ class Histogram(object):
 
         return stats.HistQuantile(self).eval(fraction,**kwargs)
 
+    def unbiased_quantile(self,fraction=0.68,unbias_method=None):
+        hmed = self.quantile(fraction=0.5)
+        hmean = self.mean()
+
+        if  unbias_method == 'median': loc = self.quantile(fraction=0.5)[0]
+        elif unbias_method == 'mean': loc = self.mean()
+        else:
+            raise('Exception')
+        
+        habs = Histogram(np.linspace(0,max(loc-self.axis().edges()),
+                                     self.axis().nbins()))
+        habs.fill(np.abs(self.axis().center()-loc),
+                  self._counts,var=self._var)
+
+        
+        return habs.quantile(fraction=0.68,method='mc',niter=100)
+    
     def chi2(self,hmodel):
 
         msk = self._var > 0
@@ -636,6 +684,10 @@ class Histogram(object):
         ndf = len(msk[msk==True])
         return (chi2,ndf)
 
+    def set(self,i,w,var=None):
+        self._counts[i] = w
+        if not var is None: self._var[i] = var
+    
     def fill(self,x,w=1,var=None):
         """
         Add counts to the histogram at the coordinates given in the
@@ -995,6 +1047,21 @@ class Histogram2D(HistogramND):
 
         return h
 
+    def to_root(self,name,title):
+
+        import ROOT
+        h = ROOT.TH2F(name,title,self.xaxis().nbins(),
+                      self.xaxis().lo_edge(),self.xaxis().hi_edge(),
+                      self.yaxis().nbins(),
+                      self.yaxis().lo_edge(),self.yaxis().hi_edge())
+
+        for i in range(self.xaxis().nbins()):
+            for j in range(self.yaxis().nbins()):
+                h.SetBinContent(i+1,j+1,self._counts[i,j])
+                h.SetBinError(i+1,j+1,np.sqrt(self._var[i,j]))
+
+        return h
+    
     def label(self):
         return self._style['label']
     
@@ -1156,6 +1223,29 @@ class Histogram2D(HistogramND):
 
         return hq
 
+    
+    def unbiased_quantile(self,fraction=0.68,unbias_method=None):
+        hmed = self.quantile(fraction=0.5)
+        hmean = self.mean()
+
+        lo_index = np.argmin(np.abs(h.yedges()))
+        
+        habs = Histogram2D(h.xedges(),h.yedges()[lo_index:])
+        
+        for i in range(h.nbins(0)):
+
+            yc = h.yaxis().center()
+            
+            if unbias_method is None: y = np.abs(yc)
+            elif unbias_method == 'median': y = np.abs(yc-hmed.counts(i))
+            elif unbias_method == 'mean': y = np.abs(yc-hmean.counts(i))
+
+            
+            habs.fill(np.ones(h.nbins(1))*h.xaxis().center()[i],y,h._counts[i],
+                      var=h._counts[i])
+            
+
+        return habs.quantile(fraction=0.68,method='mc',niter=100)
 
     def set(self,ix,iy,w,var=None):
         self._counts[ix,iy] = w

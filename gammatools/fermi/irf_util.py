@@ -114,7 +114,7 @@ class IRFManager(object):
 
         v = None
         for i in range(len(self._psf)):
-            psf= self._psf[i](dtheta,egy,cth,**kwargs)*self.aeff(egy,cth,**kwargs)
+            psf= self._psf[i](dtheta,egy,cth,**kwargs)*self._aeff[i](egy,cth,**kwargs)
             if i == 0: v  = psf
             else: v += psf
 
