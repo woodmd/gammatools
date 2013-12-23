@@ -49,14 +49,20 @@ class HistogramND(object):
             if isinstance(ax,Axis): self._axes.append(copy.deepcopy(ax))
             else: self._axes.append(Axis(ax))
 
-        if counts is None:
-            shape = []
-            for ax in self._axes: shape.append(ax.nbins())
-            self._counts = np.zeros(shape=shape)
-        else: self._counts = copy.deepcopy(counts)
+        shape = []
+        for ax in self._axes: shape.append(ax.nbins())
+
+        if counts is None: self._counts = np.zeros(shape=shape)
+        else: 
+            self._counts = np.array(counts,copy=True)
+            if len(self._counts.shape) == 0: 
+                self._counts = np.ones(shape=shape)*self._counts
 
         if var is None: self._var = np.zeros(shape=self._counts.shape)
-        else: self._var = copy.deepcopy(var)
+        else: 
+            self._var = np.array(var,copy=True)
+            if len(self._var.shape) == 0: 
+                self._var = np.ones(shape=shape)*self._var
 
         self._ndim = self._counts.ndim
         self._dims = np.array(range(self._ndim),dtype=int)
@@ -70,23 +76,36 @@ class HistogramND(object):
     def var(self):
         return self._var
     
-    def fill(self,z,w=1.0):
+    def fill(self,z,w=1.0,v=None):
         """
-        Fill the histogram from an NxM array of points where M is the
+        Fill the histogram from an MxN array of points where M is the
         dimension of this histogram and N is the number of points.
 
-        @param z: Array of NxM points.
-        @param w: Array of N bin weights.
+        @param z: Array of MxN points.
+        @param w: Array of N bin weights (optional).
+        @param v: Array of N bin variances (optional).
         @return:
         """
 
         z = np.array(z,ndmin=2)
+        w = np.array(w,ndmin=1)
+        if v is None: v = w
+        else: v = np.array(v,ndmin=1)
+
+        if z.shape[1] == self._ndim:
+
+            print z.shape, self._ndim
+            raise Exception('Coordinate dimension of input array must be '
+                            'equal to histogram dimension.')
+
+        if w.shape[0] < z.shape[1]: w = np.ones(z.shape[1])*w
+        if v.shape[0] < z.shape[1]: v = np.ones(z.shape[1])*v
 
         edges = []
         for i in self._dims: edges.append(self._axes[i].edges())
 
-        counts = np.histogramdd(z.T,bins=edges)[0]
-        var = np.histogramdd(z.T,bins=edges)[0]
+        counts = np.histogramdd(z.T,bins=edges,weights=w)[0]
+        var = np.histogramdd(z.T,bins=edges,weights=v)[0]
 
         self._counts += counts
         self._var += var
@@ -287,6 +306,9 @@ class Axis(object):
     def hi_edge(self):
         return self._edges[-1]
 
+    def bins(self):
+        return np.array(range(self._nbins))
+
     def edges(self):
         return self._edges
 
@@ -299,6 +321,9 @@ class Axis(object):
     def bin_width(self):
         return self._width
 
+    def binToVal(self,ibin):
+        return self._center[ibin]
+
     def valToBin(self,x):
         ibin = np.digitize(np.array(x,ndmin=1),self._edges)-1
         return ibin
@@ -310,7 +335,7 @@ class Axis(object):
         return ibin
 
 
-class Histogram(object):
+class Histogram(HistogramND):
     """One-dimensional histogram class.  Each bin is assigned both a
     content value and an error.  Non-equidistant bin edges can be
     defined with an input bin edge array.  Supports multiplication,
@@ -338,21 +363,17 @@ class Histogram(object):
                 
         @param axis:  Axis object or array of bin edges.
         @param label: Label for this histogram.
-        @param counts: Vector of bin values.  The histogram will be 
+        @param counts: Vector of bin values.  The histogram will be
         initialized with this vector when this argument is defined.
+        If this is a scalar its value will be used to initialize all
+        bins in the histogram.
         @param var: Vector of bin variances.
         @param style: Style dictionary.
         @return:
         """
-        
-        if isinstance(axis,Axis): self._axis = copy.deepcopy(axis)
-        else: self._axis = Axis(axis)
 
-        if not counts is None: self._counts = counts
-        else: self._counts = np.zeros((self._axis.nbins()))
-
-        if not var is None: self._var = var
-        else: self._var = np.zeros((self._axis.nbins()))
+        super(Histogram, self).__init__([axis],label,counts,var)
+        self._axis = self._axes[0]
 
         self._underflow = 0
         self._overflow = 0
@@ -631,9 +652,6 @@ class Histogram(object):
     def interpolate(self,x,noerror=True):
 
         x = np.array(x,ndmin=1)
-
-
-
         c = interpolate(self._axis.center(),self._counts,x)
         v = interpolate(self._axis.center(),self._var,x)
 
@@ -695,7 +713,7 @@ class Histogram(object):
         optionally specified by providing a scalar or vector for the w
         argument.
         """
-        w = np.array(w)
+        w = np.array(w,copy=True)
 
         if var is None: var = w
 
@@ -739,26 +757,17 @@ class Histogram(object):
         
         """
 
-        bins = []
-#        cum_counts = np.cumsum(self._counts)
+        bins = [0]
+        c = np.concatenate(([0],np.cumsum(self._counts)))
 
-        ibin = 0
-        while ibin < self._axis.nbins():
+        for ibin in range(self._axis.nbins()+1):
 
-            jbin = ibin
-            s = 0
-            while jbin < self._axis.nbins():
-                s += self._counts[jbin]
-                if s >= min_count:
-                    break
-                if max_bins is not None and jbin-ibin+1 > max_bins:
-                    break
-
-                jbin += 1
-
-            jbin = min(jbin,self._axis.nbins()-1)
-            bins.append(jbin-ibin+1)
-            ibin = jbin+1
+            nbin = ibin-bins[-1]            
+            if not max_bins is None and nbin > max_bins:
+                bins.append(ibin)
+            elif c[ibin] - c[bins[-1]] >= min_count or \
+                    ibin == self._axis.nbins():
+                bins.append(ibin)
 
         return self.rebin(bins)
 
@@ -787,32 +796,32 @@ class Histogram(object):
 
     def rebin(self,bins=2):
 
-        bins = np.asarray(bins)
+        bins = np.array(bins)
 
         if bins.ndim == 0:
-            bin_index = [i for i in range(0,self._axis.nbins(),bins)]
+            bin_index = range(0,self._axis.nbins(),bins)
             bin_index.append(self._axis.nbins())
             bin_index = np.array(bin_index)
         else:
-            if np.sum(bins) != self._axis.nbins():
-                raise ValueError("Sum of bins is not equal to histogram bins.")
+#            if np.sum(bins) != self._axis.nbins():
+#                raise ValueError("Sum of bins is not equal to histogram bins.")
+            bin_index = bins
 
-            bin_index = np.concatenate((np.array([0],dtype='int'),
-                                        np.cumsum(bins,dtype='int')))
+#np.concatenate((np.array([0],dtype='int'),
+#                                        np.cumsum(bins,dtype='int')))
 
         xedges = self._axis.edges()[bin_index]
 
-        nbins = len(xedges)-1
-        counts = np.zeros(nbins)
-        var = np.zeros(nbins)
+        h = Histogram(xedges,label=self.label())
+        h.fill(self.axis().center(),self._counts,self._var)
 
-        csum = np.concatenate(([0],np.cumsum(self._counts)))
-        vsum = np.concatenate(([0],np.cumsum(self._var)))
+#        csum = np.concatenate(([0],np.cumsum(self._counts)))
+#        vsum = np.concatenate(([0],np.cumsum(self._var)))
 
-        counts = csum[bin_index[1:]]-csum[bin_index[:-1]]
-        var = vsum[bin_index[1:]]-vsum[bin_index[:-1]]
+#        counts = csum[bin_index[1:]]-csum[bin_index[:-1]]
+#        var = vsum[bin_index[1:]]-vsum[bin_index[:-1]]
 
-        return Histogram(xedges,label=self.label(),counts=counts,var=var)
+        return h
 
     def residual(self,h):
         """
@@ -823,27 +832,7 @@ class Histogram(object):
         """
         o = copy.deepcopy(self)
         o -= h
-        return o.divide(h)
-
-
-    def divide(self,h):
-        o = copy.deepcopy(self)
-
-        y1 = self._counts
-        y2 = h._counts
-        y1_var = self._var
-        y2_var = h._var
-
-        msk = ((y1!=0) & (y2!=0))
-
-        o._counts[~msk] = 0.
-        o._var[~msk] = 0.
-
-        o._counts[msk] = y1[msk] / y2[msk]
-        o._var[msk] = (y1[msk] / y2[msk])**2
-        o._var[msk] *= (y1_var[msk]/y1[msk]**2 + y2_var[msk]/y2[msk]**2)
-
-        return o
+        return o/h
 
     def dump(self,outfile=None):
 
@@ -853,10 +842,10 @@ class Histogram(object):
             f = sys.stdout
 
         for i in range(len(self._x)):
-            f.write('%5i %10.5g %10.5g %10.5g %10.5g\n'%(i,self._axis.edges()[i],
-                                                         self._axis.edges()[i+1],
-                                                         self._counts[i],
-                                                         self._var[i]))
+            s = '%5i %10.5g %10.5g '%(i,self._axis.edges()[i],
+                                      self._axis.edges()[i+1])
+            s += '%10.5g %10.5g\n'%(self._counts[i],self._var[i])
+            f.write(s)
 
 
     def fit(self,expr,p0):
@@ -905,8 +894,20 @@ class Histogram(object):
         o = copy.deepcopy(self)
 
         if isinstance(x, Histogram):
-            o._counts *= x._counts
-            o._var *= x._counts**2
+
+            y1 = self._counts
+            y2 = x._counts
+            y1v = self._var
+            y2v = x._var
+
+            f0 = np.zeros(self.axis().nbins())
+            f1 = np.zeros(self.axis().nbins())
+
+            f0[y1 != 0] = y1v/y1**2
+            f1[y2 != 0] = y2v/y2**2
+
+            o._counts = y1*y2
+            o._var = x._counts**2*(f0+f1)
         else:
             o._counts *= x
             o._var *= x*x
@@ -916,14 +917,29 @@ class Histogram(object):
     def __div__(self,x):
 
         if isinstance(x, Histogram):
-            o = self.divide(x)
-        else:
             o = copy.deepcopy(self)
-            o._counts /= x
-            o._var /= x*x
 
-        return o
+            y1 = self._counts
+            y2 = x._counts
+            y1_var = self._var
+            y2_var = x._var
 
+            msk = ((y1!=0) & (y2!=0))
+
+            o._counts[~msk] = 0.
+            o._var[~msk] = 0.
+            
+            o._counts[msk] = y1[msk] / y2[msk]
+            o._var[msk] = (y1[msk] / y2[msk])**2
+            o._var[msk] *= (y1_var[msk]/y1[msk]**2 + y2_var[msk]/y2[msk]**2)
+
+            return o
+        else:
+            x = np.array(x,ndmin=1)
+            msk = x != 0
+            x[msk] = 1./x[msk]
+            x[~msk] = 0.0
+            return self.__mul__(x)
 
     def __add__(self,x):
 
@@ -934,7 +950,6 @@ class Histogram(object):
             o._var += x._var
         else:
             o._counts += x
-            o._var += x
 
         return o
 
@@ -948,7 +963,6 @@ class Histogram(object):
             o._var += x._var
         else:
             o._counts -= x
-            o._var += x
 
         return o
 
@@ -1252,12 +1266,16 @@ class Histogram2D(HistogramND):
         if not var is None: self._var[ix,iy] = var
 
     def fill(self,x,y,w=1,var=None):
+    
+        HistogramND.fill(self,np.vstack((x,y)),w,var)
+
+    def fill2(self,x,y,w=1,var=None):
 
         x = np.array(x,ndmin=1)
         y = np.array(y,ndmin=1)
         w = np.array(w,ndmin=0)
 
-        if var is None: var = w**2
+        if var is None: var = w
 
         bins = [self._xaxis.edges(),self._yaxis.edges()]
 
