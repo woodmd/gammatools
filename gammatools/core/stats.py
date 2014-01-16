@@ -281,6 +281,7 @@ class HistQuantile(object):
 
     def __init__(self,hist):
 
+        self._h = copy.deepcopy(hist)
         self._x = np.array(hist.edges(),copy=True)
         self._ncounts = copy.copy(hist._counts)
         self._ncounts = np.concatenate(([0],self._ncounts))
@@ -292,6 +293,8 @@ class HistQuantile(object):
             return self.binomial(self._ncounts,fraction,**kwargs)
         elif method == 'mc':
             return self.bootstrap(fraction,**kwargs)
+        elif method is None:
+            return [HistQuantile.quantile(self._h,fraction),0]
         else:
             print 'Unknown method ', method
             sys.exit(1)
