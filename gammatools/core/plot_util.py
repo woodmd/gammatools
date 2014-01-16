@@ -39,13 +39,16 @@ class FigureSubplot(object):
               'yscale' : 'lin',
               'xscale' : 'lin',
               'logz'   : False,
-              'markers' : None,
-              'colors' : None,
-              'linestyles' : None,
-              'markersizes' : None,
+              'marker' : None,
+              'color' : None,
+              'linestyle' : None,
+              'markersize' : None,
+              'hist_style' : None,
+              'hist_xerr' : True,
               'legend_loc' : 'upper right',
-              'legend_fontsize' : 8,
-              'legend'   : True }
+              'legend_fontsize' : 10,
+              'legend'   : True,
+              'norm_index' : None }
 
     def __init__(self,**kwargs):
         
@@ -54,11 +57,16 @@ class FigureSubplot(object):
 
         self._ax = None
         self._data = []
-        self._color_index = 0
-        self._linestyle_index = 0
-        self._marker_index = 0
-        self._markersize_index = 0
 
+        self._style_counter = {
+            'color' : 0,
+            'marker' : 0,
+            'markersize' : 0,
+            'linestyle' : 0,
+            'hist_style' : 0,
+            'hist_xerr' : 0
+            }
+        
         self._hline = []
         self._hline_style = []
 
@@ -73,30 +81,23 @@ class FigureSubplot(object):
         style = { 'color'     : None,
                   'marker'    : None,
                   'markersize'    : None,
-                  'linestyle' : None  }
+                  'linestyle' : None,
+                  'hist_style' : None,
+                  'hist_xerr' : None,
+                  'msk'       : None }
         
         style.update(kwargs)
+        
+        for k in self._style_counter.keys():        
+            if not style[k] is None: continue
 
-        if style['color'] is None:
-            style['color'] = get_cycle_element(self._style['colors'],
-                                               self._color_index)
-            self._color_index += 1
-
-        if style['marker'] is None:
-            style['marker'] = get_cycle_element(self._style['markers'],
-                                                self._marker_index)
-            self._marker_index += 1
-
-        if style['linestyle'] is None:
-            style['linestyle'] =  get_cycle_element(self._style['linestyles'],
-                                                    self._linestyle_index)
-            self._linestyle_index += 1
-
-        if style['markersize'] is None:
-            style['markersize'] =  get_cycle_element(self._style['markersizes'],
-                                                    self._markersize_index)
-            self._markersize_index += 1
-
+            if isinstance(self._style[k],list):
+                style[k] = get_cycle_element(self._style[k],
+                                             self._style_counter[k])
+                self._style_counter[k] += 1
+            else:
+                style[k] = self._style[k]
+                
         return copy.deepcopy(style)
         
     def add_data(self,x,y,yerr=None,**kwargs):
@@ -130,7 +131,7 @@ class FigureSubplot(object):
 
         style = copy.deepcopy(self._style)
         update_dict(style,kwargs)
-
+        
         subp = copy.deepcopy(self)
         subp.set_style('yscale','lin')
         subp.set_style('ylim',style['ylim_ratio'])
@@ -150,9 +151,13 @@ class FigureSubplot(object):
 
     def normalize(self,residual=False,**kwargs):
 
-        norm_index = 0
-        if 'norm_index' in kwargs: norm_index = kwargs['norm_index']
+        style = copy.deepcopy(self._style)
+        update_dict(style,kwargs)
         
+        norm_index = 0
+        if not style['norm_index'] is None:
+            norm_index = style['norm_index']
+            
         if isinstance(self._data[norm_index],Histogram):
             x = copy.deepcopy(self._data[norm_index].center())
             y = copy.deepcopy(self._data[norm_index].counts())
@@ -253,8 +258,6 @@ class Figure(object):
               'mask_ratio_args' : None,
               'style' : 'normal',
               'figure_style' : 'onepane',
-              'legend_loc' : 'upper right',
-              'legend_fontsize' : 12,
               'format' : 'png',
               'fig_dir' : './',
               'figscale' : 1.0,
@@ -438,26 +441,23 @@ class FigTool(object):
             ( None,  str,
               'Set the common prefix for output image files.') }
 
-    markersizes = [6.0]
-    markers = ['s','o','d','^','v','<','>']
-    colors = ['b','g','r','m','c','grey','brown']
-    linestyles = ['-','--','-.','-','--','-.','-']
     
     def __init__(self,opts=None,**kwargs):
 
-        style = { 'markers' : FigTool.markers,
-                  'colors' : FigTool.colors,
-                  'linestyles' : FigTool.linestyles,
-                  'markersizes' : FigTool.markersizes,
+        style = { 'marker' : ['s','o','d','^','v','<','>'],
+                  'color' : ['b','g','r','m','c','grey','brown'],
+                  'linestyle' : ['-','--','-.','-','--','-.','-'],
+                  'markersize' : [6.0],
+                  'hist_style' : 'errorbar',
+                  'norm_index'  : None,
                   'legend_loc' : 'lower right',
                   'format' : 'png',
                   'fig_prefix' : None,
                   'fig_dir' : './' }
 
-        for k, v in style.iteritems():
-            if k in kwargs: style[k] = kwargs[k]
-            elif not opts is None and k in opts.__dict__:
-                style[k] = opts.__dict__[k]
+        if not opts is None:
+            update_dict(style,opts.__dict__)        
+        update_dict(style,kwargs)
         
         self._fig_dir = style['fig_dir']
         self._fig_prefix = style['fig_prefix']

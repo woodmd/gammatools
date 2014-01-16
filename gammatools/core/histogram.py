@@ -78,8 +78,9 @@ class HistogramND(object):
     
     def fill(self,z,w=1.0,v=None):
         """
-        Fill the histogram from an MxN array of points where M is the
-        dimension of this histogram and N is the number of points.
+        Fill the histogram from a set of points arranged in an
+        MxN matrix where M is the dimension of this histogram and N is
+        the number of points.
 
         @param z: Array of MxN points.
         @param w: Array of N bin weights (optional).
@@ -351,7 +352,8 @@ class Histogram(HistogramND):
                            'label' : None }
 
     default_style = { 'hist_style' : 'errorbar',
-                      'xerr' : True, 'yerr' : True,
+                      'hist_xerr' : True,
+                      'hist_yerr' : True,
                       'msk'   : None,
                       'max_frac_error' : None }
 
@@ -382,6 +384,7 @@ class Histogram(HistogramND):
                                          Histogram.default_draw_style.items()))
         if not style is None: update_dict(self._style,style)
         self._style['label'] = label
+        
 
     def iterbins(self):
         """Return an iterator object that steps over the bins in this
@@ -480,8 +483,8 @@ class Histogram(HistogramND):
         xerr = None
         yerr = None
 
-        if style['xerr']: xerr = self._axis.width()[msk]/2.
-        if style['yerr']: yerr = np.sqrt(self._var[msk])
+        if style['hist_xerr']: xerr = self._axis.width()[msk]/2.
+        if style['hist_yerr']: yerr = np.sqrt(self._var[msk])
         if not style.has_key('fmt'): style['fmt'] = '.'
 
         clear_dict_by_keys(style,Histogram.default_draw_style.keys(),False)
@@ -527,8 +530,8 @@ class Histogram(HistogramND):
         elif style['hist_style'] == 'line':
 
             style['marker'] = 'None'
-            style['xerr'] = False
-            style['yerr'] = False
+            style['hist_xerr'] = False
+            style['hist_yerr'] = False
             style['fmt'] = '-'
             return self._errorbar(ax=ax,counts=c,**style)
         elif style['hist_style'] == 'filled':
@@ -549,8 +552,8 @@ class Histogram(HistogramND):
             edges = np.concatenate((self._axis.edges(),
                                     [self._axis.edges()[-1]]))
 #            msk = np.concatenate((msk,[True]))
-            style['xerr'] = False
-            style['yerr'] = False
+            style['hist_xerr'] = False
+            style['hist_yerr'] = False
             style['fmt'] = '-'
             style['drawstyle'] = 'steps-pre'
             style['marker'] = 'None'
