@@ -27,6 +27,7 @@ class Units(object):
     gev2_cm5 = np.power(gev,2)
     gev_cm3 = np.power(gev,1)
     gev_cm2 = np.power(gev,1)
+    erg_cm2 = erg
     g_cm3 = 1.0
     cm3_s = 1.0
 
@@ -43,8 +44,8 @@ def format_error(v, err, nsig=1, latex=False):
         return '%s +/- %s' % (v, err)
 
 def update_dict(d0,d1,add_new_keys=False):
-    """Recursively update the contents of a python dictionary from
-    another python dictionary."""
+    """Recursively update the contents of python dictionary d1 with
+    the contents of python dictionary d0."""
 
     if d0 is None or d1 is None: return
 
@@ -53,12 +54,12 @@ def update_dict(d0,d1,add_new_keys=False):
         if not k in d1: continue
 
         if isinstance(v,dict) and isinstance(d1[k],dict):
-            update_dict(d0[k],d1[k])
+            update_dict(d0[k],d1[k],add_new_keys)
         else: d0[k] = d1[k]
 
-    for k, v in d1.iteritems():
-        if not k in d0 and add_new_keys: d0[k] = d1[k]
-
+    if add_new_keys:
+        for k, v in d1.iteritems(): 
+            if not k in d0: d0[k] = d1[k]
         
 def clear_dict_by_vals(d,vals):
 
@@ -117,12 +118,22 @@ def save_object(obj,outfile):
     pickle.dump(obj,fp,protocol = pickle.HIGHEST_PROTOCOL)
     fp.close()
 
+def load_object(infile):
+
+    import cPickle as pickle
+
+    fp = open(infile,'rb')
+    o = pickle.load(fp)
+    fp.close()
+    return o
+
 
 class Configurable(object):
 
-    def __init__(self):
+    def __init__(self,config):
 
         self._config = {}
+        update_dict(self._config,config,True)
 
     def config(self,key=None):
         if key is None: return self._config
@@ -131,28 +142,16 @@ class Configurable(object):
     def set_config(self,key,value):
         self._config[key] = value
         
-    def configure(self,default_config,config,subsection=None,**kwargs):
-        
-        if not default_config is None:
-            self._config.update(default_config)
+    def configure(self,config,subsection=None,**kwargs):
 
         if not config is None:
 
-            for k, v in self._config.iteritems():
-                if k in config: self._config[k] = config[k]
-
+            update_dict(self._config,config)
             if not subsection is None and subsection in config and not \
-                    config[subsection] is None:
+                    config[subsection] is None:                
+                update_dict(self._config,config[subsection])
 
-                for k, v in self._config.iteritems():
-                    if k in config[subsection]:
-                        self._config[k] = config[subsection][k]
-                    
-#            for k, v in config.iteritems():
-#                if k in self._config: self._config[k] = v
-
-        for k, v in kwargs.iteritems():
-            if k in self._config: self._config[k] = v
+        update_dict(self._config,kwargs)
 
         for k, v in self._config.iteritems():
 

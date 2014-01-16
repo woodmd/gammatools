@@ -20,6 +20,97 @@ class TestHistogram(unittest.TestCase):
         assert_almost_equal(h.counts(),axis.center())
         assert_almost_equal(h.var(),2.0*axis.center())
 
+    def test_histogram2d_slice(self):
+
+        xaxis = Axis(np.linspace(0,1,6))
+        yaxis = Axis(np.linspace(0,2,9))
+
+        c = np.outer(np.cos(xaxis.center()),np.sin(yaxis.center()))
+        v = c**2
+
+        h = Histogram2D(xaxis,yaxis,counts=c,var=v)
+
+        hsx = h.slice(0,2)
+
+        cx = np.cos(xaxis.center()[2])*np.sin(yaxis.center())
+
+        assert_almost_equal(hsx.counts(),cx)
+        assert_almost_equal(hsx.var(),cx**2)
+        
+        hsy = h.slice(1,2)
+
+        cy = np.cos(xaxis.center())*np.sin(yaxis.center()[2])
+
+        assert_almost_equal(hsy.counts(),cy)
+        assert_almost_equal(hsy.var(),cy**2)
+        
+        hsx = h.sliceByValue(0,0.5)
+
+        cx = np.cos(xaxis.center()[2])*np.sin(yaxis.center())
+
+        assert_almost_equal(hsx.counts(),cx)
+        assert_almost_equal(hsx.var(),cx**2)
+        
+        hsy = h.sliceByValue(1,0.6)
+
+        cy = np.cos(xaxis.center())*np.sin(yaxis.center()[2])
+
+        assert_almost_equal(hsy.counts(),cy)
+        assert_almost_equal(hsy.var(),cy**2)
+
+
+
+    def test_histogram2d_marginalize(self):
+
+        xaxis = Axis(np.linspace(0,1,6))
+        yaxis = Axis(np.linspace(0,2,8))
+
+        c = np.outer(np.cos(xaxis.center()),np.sin(yaxis.center()))
+        v = c**2
+
+        h = Histogram2D(xaxis,yaxis,counts=c,var=v)
+
+        hmx = h.marginalize(0)
+
+        assert_almost_equal(hmx.counts(),np.sum(c,axis=0))
+        assert_almost_equal(hmx.var(),np.sum(v,axis=0))
+
+        hmy = h.marginalize(1)
+
+        assert_almost_equal(hmy.counts(),np.sum(c,axis=1))
+        assert_almost_equal(hmy.var(),np.sum(v,axis=1))
+        
+        h = Histogram2D(xaxis,yaxis,counts=c,var=v)
+
+        hmx = super(Histogram2D,h).marginalize(0,bin_range=[1,3])
+
+        assert_almost_equal(hmx.counts(),np.sum(c[1:3],axis=0))
+        assert_almost_equal(hmx.var(),np.sum(v[1:3],axis=0))
+
+        hmy = super(Histogram2D,h).marginalize(1,bin_range=[1,3])
+
+        assert_almost_equal(hmy.counts(),np.sum(c[:,1:3],axis=1))
+        assert_almost_equal(hmy.var(),np.sum(v[:,1:3],axis=1))
+
+    def test_histogram2d_project(self):
+
+        xaxis = Axis(np.linspace(0,1,6))
+        yaxis = Axis(np.linspace(0,2,8))
+
+        c = np.outer(np.cos(xaxis.center()),np.sin(yaxis.center()))
+        v = c**2
+
+        h = Histogram2D(xaxis,yaxis,counts=c,var=v)
+
+        hmx = h.project(0)
+
+        assert_almost_equal(hmx.counts(),np.sum(c,axis=1))
+        assert_almost_equal(hmx.var(),np.sum(v,axis=1))
+
+        hmy = h.project(1)
+
+        assert_almost_equal(hmy.counts(),np.sum(c,axis=0))
+        assert_almost_equal(hmy.var(),np.sum(v,axis=0))
 
     def test_histogram_fill(self):
 
@@ -114,7 +205,8 @@ class TestHistogram(unittest.TestCase):
 
         unitw = np.ones((h.xaxis().nbins(),h.yaxis().nbins()))
 
-        xv, yv = np.meshgrid(h.xaxis().center(), h.yaxis().center(),indexing='ij')
+        xv, yv = np.meshgrid(h.xaxis().center(), 
+                             h.yaxis().center(),indexing='ij')
         xv = np.ravel(xv)
         yv = np.ravel(yv)
 
@@ -152,6 +244,33 @@ class TestHistogram(unittest.TestCase):
         assert_almost_equal(h.counts(),wv.reshape(5,5))
         assert_almost_equal(h.var(),vv.reshape(5,5))
         h.clear()
+
+    def test_histogram2d_operators(self):
+
+        xaxis = Axis(np.linspace(0,1,11))
+        yaxis = Axis(np.linspace(0,2,21))
+        
+        # Addition
+        h0 = Histogram2D(xaxis,yaxis)
+        h1 = Histogram2D(xaxis,yaxis)
+
+        xv, yv = np.meshgrid(h0.xaxis().center(), 
+                             h0.yaxis().center(),indexing='ij')
+        xv = np.ravel(xv)
+        yv = np.ravel(yv)
+
+        w0 = 1.0+np.cos(xv)**2
+        w1 = 1.0+np.sin(yv)**2
+
+        h0.fill(xv,yv,w0,np.ones(xaxis.nbins()*yaxis.nbins()))
+        h1.fill(xv,yv,w1,np.ones(xaxis.nbins()*yaxis.nbins()))
+
+        h2 = h0 + h1 + 1.0
+
+        assert_almost_equal(np.ravel(h2.counts()),w0+w1+1.0)
+        assert_almost_equal(h2.var(),2.0)
+
+        h2.clear()
 
     def test_histogram_operators(self):
 
