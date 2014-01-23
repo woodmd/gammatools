@@ -130,11 +130,15 @@ def load_object(infile):
 
 class Configurable(object):
 
-    def __init__(self,config):
+    def __init__(self):
 
         self._config = {}
-        update_dict(self._config,config,True)
 
+    def update_default_config(self,config):
+        """Update configuration for the object adding keys for
+        elements that are not present. """
+        update_dict(self._config,config,True)
+        
     def config(self,key=None):
         if key is None: return self._config
         else: return self._config[key]
@@ -142,8 +146,10 @@ class Configurable(object):
     def set_config(self,key,value):
         self._config[key] = value
         
-    def configure(self,config,subsection=None,**kwargs):
+    def configure(self,config,subsection=None,default_config=None,**kwargs):
 
+        update_dict(self._config,default_config,True)
+        
         if not config is None:
 
             update_dict(self._config,config)

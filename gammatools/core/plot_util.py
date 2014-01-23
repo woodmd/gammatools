@@ -172,8 +172,8 @@ class FigureSubplot(object):
 
             if isinstance(d,Series):
                 msk = (d.x() >= x[0]*0.95) & (d.x() <= x[-1]*1.05)
-                ynorm = 10**fn(d.x()[msk])
-                self._data[i] = self._data[i].mask(msk)
+                ynorm = 10**fn(d.x())
+                self._data[i]._msk &= msk
                 self._data[i] /= ynorm
 
                 if residual:
@@ -374,7 +374,7 @@ class Figure(object):
             ratio_subp.set_style('mask_args',style['mask_ratio_args'])
             self._subplots[0].set_style('xlabel',None)
             self._subplots.append(ratio_subp)
-
+            
         if style['figure_style'] == 'twopane':
             self._plot_twopane(**kwargs)
         else:

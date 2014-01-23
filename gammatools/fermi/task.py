@@ -21,8 +21,8 @@ class TaskDispatcher(Configurable):
     default_config = { 'queue'   : 'xlong' }
     
     def __init__(self,config=None,**kwargs):
-        super(TaskDispatcher,self).__init__()    
-        self.configure(TaskDispatcher.default_config,config,**kwargs)
+        super(TaskDispatcher,self).__init__(TaskDispatcher.default_config)    
+        self.configure(config,**kwargs)
 
     
         
@@ -33,9 +33,10 @@ class Task(Configurable):
                        'overwrite'    : False,
                        'stage_inputs' : False }
     
-    def __init__(self,config=None,**kwargs):
-        super(Task,self).__init__()    
-        self.configure(Task.default_config,config,**kwargs)
+    def __init__(self,config=None,**kwargs):       
+        super(Task,self).__init__()
+        self.update_default_config(Task.default_config)
+        self.configure(config,**kwargs)
 
         self._input_files = []
         self._output_files = []
@@ -92,7 +93,8 @@ class LTSumTask(Task):
 
     def __init__(self,outfile,config=None,**kwargs):
         super(LTSumTask,self).__init__(config,**kwargs)
-        self.configure(LTSumTask.default_config,config,**kwargs)
+        self.update_default_config(LTSumTask.default_config)
+        self.configure(config,**kwargs)
 
         self._outfile = os.path.abspath(outfile)
         self.register_output_file(self._outfile)
@@ -115,7 +117,8 @@ class LTCubeTask(Task):
 
     def __init__(self,outfile,config=None,**kwargs):
         super(LTCubeTask,self).__init__(config,**kwargs)
-        self.configure(LTCubeTask.default_config,config,**kwargs)
+        self.configure(config,
+                       default_config=LTCubeTask.default_config,**kwargs)
 
         self._outfile = os.path.abspath(outfile)
         self.register_output_file(self._outfile)
@@ -143,7 +146,8 @@ class SrcModelTask(Task):
     
     def __init__(self,outfile,config=None,**kwargs):
         super(SrcModelTask,self).__init__(config,**kwargs)
-        self.configure(SrcModelTask.default_config,config,**kwargs)
+        self.update_default_config(SrcModelTask.default_config)
+        self.configure(config,**kwargs)
 
         self._outfile = os.path.abspath(outfile)
         self.register_output_file(self._outfile)
@@ -171,7 +175,8 @@ class SrcMapTask(Task):
     
     def __init__(self,outfile,config=None,**kwargs):
         super(SrcMapTask,self).__init__(config,**kwargs)
-        self.configure(SrcMapTask.default_config,config,'gtsrcmaps',**kwargs)
+        self.update_default_config(SrcMapTask.default_config)
+        self.configure(config,'gtsrcmaps',**kwargs)
         
         self._outfile = os.path.abspath(outfile)
         self.register_output_file(self._outfile)
@@ -335,8 +340,9 @@ class MkTimeTask(Task):
                        'scfile' : None }               
     
     def __init__(self,infile,outfile,config=None,**kwargs):
-        super(MkTimeTask,self).__init__(config,**kwargs)        
-        self.configure(MkTimeTask.default_config,config,'gtmktime',**kwargs)
+        super(MkTimeTask,self).__init__(config,**kwargs)
+        self.update_default_config(MkTimeTask.default_config)
+        self.configure(config,'gtmktime',**kwargs)
 
         self._infile = os.path.abspath(infile)
         self._outfile = os.path.abspath(outfile)

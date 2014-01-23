@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import brentq
 from util import *
+from matplotlib.colors import NoNorm, LogNorm, Normalize
 
 def makeHistModel(xedge,ncount,min_count=5):
 
@@ -74,6 +75,10 @@ class HistogramND(object):
     def ndim(self):
         return len(self._axes)
 
+    def style(self):
+
+        return self._style
+    
     def axes(self):
         return self._axes
 
@@ -192,13 +197,18 @@ class HistogramND(object):
         pdims = np.setdiff1d(self._dims,mdims)
         return self.project(pdims,bin_range)
 
-    def cumulative(self,dims=None):
+    def cumulative(self,dims=None,reverse=False):
 
         if dims is None: dims = self._dims
         else: dims = np.array(dims,ndmin=1,copy=True)
 
-        c = np.apply_over_axes(np.cumsum,self._counts,dims)
-        v = np.apply_over_axes(np.cumsum,self._var,dims)
+        slices = []
+        for i in self._dims:
+            if i in dims and reverse: slices.append(slice(None,None,-1))
+            else: slices.append(slice(None))
+            
+        c = np.apply_over_axes(np.cumsum,self._counts[slices],dims)[slices]
+        v = np.apply_over_axes(np.cumsum,self._var[slices],dims)[slices]
 
         return HistogramND.create(self._axes,c,v,self._style)
 
@@ -525,7 +535,7 @@ class Histogram(HistogramND):
     def createEfficiencyHistogram(htot,hcut,label = '__nolabel__'):
         """Create a histogram of cut efficiency."""
 
-        h = Histogram(htot.axis().edges(),htot.nbins(),label)
+        h = Histogram(htot.axis(),label=label)
         eff = hcut._counts/htot._counts
 
         h._counts = eff
@@ -1087,7 +1097,9 @@ class Histogram(HistogramND):
 
 class Histogram2D(HistogramND):
 
-    default_draw_style = { 'interpolation' : 'nearest' }
+    default_imshow_style = { 'interpolation' : 'nearest' }
+    default_pcolor_style = { 'shading' : 'flat' }
+    default_contour_style = { }
     default_style = { 'keep_aspect' : False, 'logz' : False }
 
     def __init__(self, xaxis, yaxis, label = '__nolabel__', 
@@ -1100,8 +1112,10 @@ class Histogram2D(HistogramND):
 
         self._nbins = self._xaxis.nbins()*self._yaxis.nbins()
 
-        self._style = dict(Histogram2D.default_style.items() +
-                           Histogram2D.default_draw_style.items())
+        self._style = copy.deepcopy(Histogram2D.default_style)
+        update_dict(self._style,Histogram2D.default_imshow_style,True)
+        update_dict(self._style,Histogram2D.default_pcolor_style,True)
+        update_dict(self._style,Histogram2D.default_contour_style,True)
 
         if not style is None: update_dict(self._style,style)
         self._style['label'] = label
@@ -1198,8 +1212,8 @@ class Histogram2D(HistogramND):
 
         return self._counts[ix,iy]
 
-    def center(self,ix,iy):
-        return [self._xaxis.center()[ix],self._yaxis.center()[iy]]
+#    def center(self,ix,iy):
+#        return [self._xaxis.center()[ix],self._yaxis.center()[iy]]
 
     def xedges(self):
         """Return array of bin edges."""
@@ -1387,7 +1401,18 @@ class Histogram2D(HistogramND):
             self._counts += w*c
             self._var += var*c
 
+    def smooth(self,sigma):
 
+        from scipy import ndimage
+
+        sigma_bins = sigma/(self._xaxis.edges()[1]-self._xaxis.edges()[0])
+
+        counts = ndimage.gaussian_filter(self._counts, sigma=sigma_bins)
+        var = ndimage.gaussian_filter(self._var, sigma=sigma_bins)
+
+        return Histogram2D(self._xaxis,self._yaxis,counts=counts,var=var)
+
+            
     def __div__(self,x):
 
         o = copy.deepcopy(self)
@@ -1424,6 +1449,37 @@ class Histogram2D(HistogramND):
         return o
 
 
+    def plot(self,ax=None,**kwargs):
+        return self.pcolor(ax,**kwargs)
+    
+    def pcolor(self,ax=None,**kwargs):
+
+        style = copy.deepcopy(self._style)
+        style.update(kwargs)
+
+        if ax is None: ax = plt.gca()
+        
+        if style['logz']: norm = LogNorm()
+        else: norm = Normalize()
+
+        xedge, yedge = np.meshgrid(self.axis(0).edges(),self.axis(1).edges(),
+                                   ordering='ij')
+
+        clear_dict_by_keys(style,Histogram2D.default_pcolor_style.keys(),False)
+
+        print xedge.flat[0], xedge.flat[-1], yedge.flat[0], yedge.flat[-1]
+        
+        p = plt.pcolormesh(xedge,yedge,self._counts.T,norm=norm,
+                           **style)
+
+        if not self._axes[0].label() is None:
+            ax.set_xlabel(self._axes[0].label())
+        if not self._axes[1].label() is None:
+            ax.set_ylabel(self._axes[1].label())
+
+        return p
+        
+    
     def contour(self,ax=None,**kwargs):
 
 #        levels = [2.,4.,6.,8.,10.]
@@ -1434,28 +1490,18 @@ class Histogram2D(HistogramND):
         if style['logz']: norm = LogNorm()
         else: norm = Normalize()
 
-        clear_dict_by_keys(style,Histogram2D.default_draw_style.keys(),False)
+        clear_dict_by_keys(style,Histogram2D.default_contour_style.keys(),False)
 
+        style['origin'] = 'lower'
+        
         cs = plt.contour(self._xaxis.center(),self._yaxis.center(),
                          self._counts.T,
-                         origin='lower',**style)
+                         **style)
 #        plt.clabel(cs, fontsize=9, inline=1)
 
         return cs
 
-    def smooth(self,sigma):
-
-        from scipy import ndimage
-
-        sigma_bins = sigma/(self._xaxis.edges()[1]-self._xaxis.edges()[0])
-
-        counts = ndimage.gaussian_filter(self._counts, sigma=sigma_bins)
-        var = ndimage.gaussian_filter(self._var, sigma=sigma_bins)
-
-        return Histogram2D(self._xaxis,self._yaxis,counts=counts,var=var)
-
-
-    def plot(self,ax=None,**kwargs):
+    def imshow(self,ax=None,**kwargs):
 
         style = copy.deepcopy(self._style)
         style.update(kwargs)
@@ -1468,15 +1514,16 @@ class Histogram2D(HistogramND):
 
         if ax is None: ax = plt.gca()
 
-        from matplotlib.colors import NoNorm, LogNorm, Normalize
+        
 
         if style['logz']: norm = LogNorm()
         else: norm = Normalize()
 
-        clear_dict_by_keys(style,Histogram2D.default_draw_style.keys(),False)
+        clear_dict_by_keys(style,Histogram2D.default_imshow_style.keys(),False)
 
+        style['origin'] = 'lower'
+        
         im = ax.imshow(self._counts.transpose(),
-                       origin='lower',
                        aspect=aspect_ratio,norm=norm,
                        extent=[self._xaxis.lo_edge(), self._xaxis.hi_edge(),
                                self._yaxis.lo_edge(), self._yaxis.hi_edge()],
@@ -1484,8 +1531,10 @@ class Histogram2D(HistogramND):
 
 #                   vmin=vmin,vmax=vmax)
 
-        if not self._axes[0].label() is None: ax.set_xlabel(self._axes[0].label())
-        if not self._axes[1].label() is None: ax.set_ylabel(self._axes[1].label())
+        if not self._axes[0].label() is None:
+            ax.set_xlabel(self._axes[0].label())
+        if not self._axes[1].label() is None:
+            ax.set_ylabel(self._axes[1].label())
 
         return im
 

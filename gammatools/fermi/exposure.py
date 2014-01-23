@@ -1,7 +1,14 @@
 import numpy as np
-from histogram import Histogram
+from gammatools.core.histogram import *
 from irf_util import IRFManager
 from catalog import Catalog
+from gammatools.core.util import eq2gal, gal2eq
+import healpy
+
+def get_src_mask(src,ra,dec,radius=5.0):
+    dist = np.sqrt( ((src[0]-ra)*np.cos(src[1]))**2 + (src[1]-dec)**2)
+    msk = dist > np.radians(radius)
+    return msk
 
 class LTCube(object):
 
@@ -19,24 +26,15 @@ class LTCube(object):
         self._tstop = hdulist[0].header['TSTART']
         self._cth_edges = np.array(hdulist[3].data.field(0))
         self._cth_edges = np.concatenate(([1],self._cth_edges))
-
         self._cth_edges = self._cth_edges[::-1]
-        self._cth_center = 0.5*(self._cth_edges[1:] + self._cth_edges[:-1])
+        self._cth_axis = Axis(self._cth_edges)
 
         self._domega = (self._cth_edges[1:]-self._cth_edges[:-1])*2*np.pi
 
 
     def get_src_lthist(self,ra,dec):
-
-#        from astro import eq2gal
-        import healpy        
-
-        print self._cth_edges
         
-        lthist = Histogram(self._cth_edges)
-
-
-
+        lthist = Histogram(self._cth_axis)
         ipix = healpy.ang2pix(64,np.pi/2. - np.radians(dec),
                               np.radians(ra),nest=True)
 
@@ -45,17 +43,54 @@ class LTCube(object):
         lthist._counts = lt
 
         return lthist
+
+    def get_allsky_lthist(self,slat_axis,lon_axis,coordsys='gal'):
+
+        h = HistogramND([lon_axis,slat_axis,self._cth_axis])
+
+        if coordsys=='gal':
+        
+            lon, slat = np.meshgrid(h.axis(0).center(),
+                                    h.axis(1).center(),
+                                    indexing='ij')
+        
+
+            ra, dec = gal2eq(np.degrees(lon),
+                             np.degrees(np.arcsin(slat)))
+        
+            ra = np.radians(ra)
+            dec = np.radians(dec)
+
+        else:
+            ra, dec = np.meshgrid(h.axis(0).center(),
+                                  np.arcsin(h.axis(1).center()),
+                                  indexing='ij')
+
+        
+        ipix = healpy.ang2pix(64,np.ravel(np.pi/2. - dec),
+                              np.ravel(ra),nest=True)
+
+        lt = self._ltmap[ipix,::-1]
+
+        print lt.shape
+        print h.axes()[0].nbins(), h.axes()[1].nbins(), h.axes()[2].nbins()
+        
+        lt = lt.reshape((h.axes()[0].nbins(),
+                         h.axes()[1].nbins(),
+                         h.axes()[2].nbins()))
+
+        h._counts = lt
+
+        return h
+        
         
         
     def get_hlat_ltcube(self):
 
-        from astro import eq2gal
+        
         import healpy
         
-        def get_src_mask(src,ra,dec,radius=5.0):
-            dist = np.sqrt( ((src[0]-ra)*np.cos(src[1]))**2 + (src[1]-dec)**2)
-            msk = dist > np.radians(radius)
-            return msk
+        
 
         nbin = 400
 
