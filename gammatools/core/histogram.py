@@ -20,22 +20,9 @@ from scipy.interpolate import UnivariateSpline
 from scipy.optimize import brentq
 from util import *
 from matplotlib.colors import NoNorm, LogNorm, Normalize
+from gammatools.core.stats import *
 
-def makeHistModel(xedge,ncount,min_count=5):
 
-    if np.sum(ncount) == 0: return Histogram(xedge)
-
-    h = Histogram(xedge)
-    h._counts = copy.deepcopy(ncount)
-    h._var = copy.deepcopy(ncount)
-    h = h.rebin_mincount(min_count)
-
-    ncum = np.concatenate(([0],np.cumsum(h._counts)))
-    fn = UnivariateSpline(h.edges(),ncum,s=0,k=1)
-    mu_count = fn(xedge[1:])-fn(xedge[:-1])
-    mu_count[mu_count<0] = 0
-
-    return Histogram(xedge,counts=mu_count,var=copy.deepcopy(mu_count))
 
 class HistogramND(object):
     """
@@ -181,12 +168,37 @@ class HistogramND(object):
             
         return HistogramND.create(axes,c,v,self._style)
 
-    def normalize(self):
+    def quantile(self,dim,fraction=0.5):
 
-        norm = np.sum(self._counts)
-        if norm != 0: inorm = 1./norm
-        else: inorm = 0
+        sdims = np.setdiff1d(self._dims,[dim])
 
+        print dim, sdims
+        
+        axes = []
+        for i in self._dims:
+
+            if i == dim: continue
+            else: axes.append(self._axes[i])
+
+        h = HistogramND.create(axes,style=self._style)
+
+        for index, x in np.ndenumerate(h._counts):
+            hs = self.slice(sdims,index)            
+            h._counts[index] = HistQuantile(hs).eval(fraction)
+
+        return h
+        
+    
+    def normalize(self,dims=None):
+
+        if dims is None: dims = self._dims
+        else: dims = np.array(dims,ndmin=1,copy=True)
+        
+        norm =  np.apply_over_axes(np.sum,self._counts,dims)
+        inorm = np.zeros(norm.shape)
+
+        inorm[norm!=0] = 1./norm[norm!=0]
+        
         c = self._counts*inorm
         v = self._var*inorm**2
 
@@ -309,7 +321,7 @@ class HistogramND(object):
             o._counts -= x._counts
             o._var += x._var
         else:
-            o._counts += x
+            o._counts -= x
 
         return o
 
@@ -340,7 +352,7 @@ class HistogramND(object):
 
 
     @staticmethod
-    def create(axes,c,v,style):
+    def create(axes,c=None,v=None,style=None):
         ndim = len(axes)
         if ndim == 1: return Histogram(axes[0],counts=c,var=v,style=style)
         elif ndim == 2: 
@@ -575,7 +587,24 @@ class Histogram(HistogramND):
         h._overflow = hist.GetBinContent(n+1)
 
         return h
+    
+    @staticmethod
+    def createHistModel(xedge,ncount,min_count=5):
 
+        if np.sum(ncount) == 0: return Histogram(xedge)
+
+        h = Histogram(xedge)
+        h._counts = copy.deepcopy(ncount)
+        h._var = copy.deepcopy(ncount)
+        h = h.rebin_mincount(min_count)
+
+        ncum = np.concatenate(([0],np.cumsum(h._counts)))
+        fn = UnivariateSpline(h.edges(),ncum,s=0,k=1)
+        mu_count = fn(xedge[1:])-fn(xedge[:-1])
+        mu_count[mu_count<0] = 0
+
+        return Histogram(xedge,counts=mu_count,var=copy.deepcopy(mu_count))
+    
     def to_root(self,name,title):
 
         import ROOT

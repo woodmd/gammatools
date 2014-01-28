@@ -12,7 +12,6 @@ import copy
 from scipy.interpolate import UnivariateSpline
 import scipy.optimize as opt
 import matplotlib.pyplot as plt
-from histogram import makeHistModel
 
 class HistBootstrap(object):
     def __init__(self,hist,fn):
@@ -109,7 +108,7 @@ class HistQuantileBkgFn(object):
 
         
         
-        h = makeHistModel(xedge,self._ncounts[1:nedge],5)
+        h = createHistModel(xedge,self._ncounts[1:nedge],5)
 
 
 
@@ -188,9 +187,9 @@ class HistQuantileBkgHist(object):
 
         nedge = len(self._non)
 
-        
-        hon = makeHistModel(self._xedges,self._non[1:],5)
-        hoff = makeHistModel(self._xedges,self._noff[1:],5)
+
+        hon = createHistModel(self._xedges,self._non[1:],5)
+        hoff = createHistModel(self._xedges,self._noff[1:],5)
 
         non = np.random.poisson(np.concatenate(([0],hon._counts)),
                                 (niter,nedge))
