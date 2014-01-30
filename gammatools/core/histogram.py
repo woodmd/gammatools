@@ -126,6 +126,13 @@ class HistogramND(object):
         self._counts += counts
         self._var += var
 
+    def random(self,method='poisson'):
+
+        c = np.array(np.random.poisson(self._counts),dtype='float')
+        v = copy.copy(c)
+
+        return HistogramND.create(self._axes,c,v,self._style)
+
     def project(self,pdims,bin_range=None):
         """Project the contents of this histogram into a histogram
         spanning the subspace defined by the list pdims.  The optional
@@ -892,10 +899,15 @@ class Histogram(HistogramND):
         
         return habs.quantile(fraction=0.68,method='mc',niter=100)
     
-    def chi2(self,hmodel):
+    def chi2(self,model):
 
         msk = self._var > 0
-        diff = self._counts[msk] - hmodel._counts[msk]
+
+        if isinstance(model,Histogram):
+            diff = self._counts[msk] - model._counts[msk]
+        else:
+            diff = self._counts[msk] - model(self._axis.center())[msk]
+
         chi2 = np.sum(np.power(diff,2)/self._var[msk])
         ndf = len(msk[msk==True])
         return (chi2,ndf)
@@ -1012,13 +1024,12 @@ class Histogram(HistogramND):
 
         h = Histogram(xedges,label=self.label())
         h.fill(self.axis().center(),self._counts,self._var)
+        return h
 
-#        csum = np.concatenate(([0],np.cumsum(self._counts)))
-#        vsum = np.concatenate(([0],np.cumsum(self._var)))
+    def rebin_axis(self,axis):
 
-#        counts = csum[bin_index[1:]]-csum[bin_index[:-1]]
-#        var = vsum[bin_index[1:]]-vsum[bin_index[:-1]]
-
+        h = Histogram(axis,style=self._style)
+        h.fill(self.axis().center(),self._counts,self._var)
         return h
 
     def residual(self,h):

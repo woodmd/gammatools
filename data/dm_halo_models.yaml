@@ -1,0 +1,91 @@
+draco:
+  rs : 0.47
+  dist : 76.0
+  rmax : 5.0
+  rhos : 7.02
+
+ursa_minor:
+  rs : 0.47
+  dist : 76.0
+  rmax : 5.0
+  rhos : 7.02
+
+sculptor:
+  rs : 0.23
+  dist : 86.0
+  rmax : 5.0
+  rhos : 7.37
+
+segue_1:
+  rs : -1.36
+  dist : 23.0
+  rmax : 5.0
+  rhos : 9.14
+#  jval : !!float 1.0e19
+
+carina:
+  rs : 0.47
+  dist : 105.0
+  rmax : 5.0
+  rhos : 7.02
+
+coma_berenices:
+  rs : 0.47
+  dist : 44.0
+  rmax : 5.0
+  rhos : 7.02
+
+fornax:
+  rs : 0.47
+  dist : 147.0
+  rmax : 5.0
+  rhos : 7.02
+
+gc_nfw:
+  rs : 20.0
+  dist : 8.5
+  rmax : 100.0
+  rhos : null
+  rhor : [0.4, 8.5]
+  type : nfw
+
+gc_einasto:
+  rs : 20.0
+  alpha : 0.17
+  dist : 8.5
+  rmax : 100.0
+  rhos : null
+  rhor : [0.4, 8.5]
+  type : einasto
+
+gc_isothermal:
+  rs : 20.0
+  dist : 8.5
+  rmax : 100.0
+  rhos : null
+  rhor : [0.4, 8.5]
+  type : isothermal
+
+gc_einasto_lo:
+  rs : 22.84
+  dist : 8.5
+  rmax : 100.0
+  rhos : 6.13588469507
+  alpha : 0.29
+  type : einasto
+
+gc_einasto_mid:
+  rs : 20.08
+  dist : 8.5
+  rmax : 100.0
+  rhos : 6.29472577166
+  alpha : 0.22
+  type : einasto
+
+gc_einasto_hi:
+  rs : 17.91
+  dist : 8.5
+  rmax : 100.0
+  rhos : 6.36113390741
+  alpha : 0.14
+  type : einasto

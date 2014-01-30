@@ -22,6 +22,7 @@ from scipy.interpolate import bisplev
 from scipy.interpolate import interp1d, UnivariateSpline
 import scipy.special as spfn
 import scipy.optimize as opt
+from gammatools.core.util import *
 
 class LoSFn(object):
     """Integrand function for LoS parameter (J).  The parameter alpha
@@ -94,6 +95,14 @@ class LoSIntegralFn(object):
         self._rmax = rmax
         self._alpha = alpha
         self._ann = ann
+
+    @classmethod
+    def create(cls,config,method='fast'):
+        
+        dp = DensityProfile.create(config)        
+        return LoSIntegralFnFast(dp,config['dist']*Units.kpc,
+                                 config['rmax']*Units.kpc)
+
 
     def __call__(self,psi,dhalo=None):
         """Evaluate the LoS integral at the offset angle psi for a halo
@@ -419,8 +428,7 @@ class DensityProfile(object):
 
     def rho(self,r):
 
-        r = np.asarray(r)
-        if r.ndim == 0: r = r.reshape((1))
+        r = np.array(r,ndmin=1)
 
         if self._rhomax is None and self._rmin is None: 
             return self._rho(r)
@@ -464,6 +472,15 @@ class DensityProfile(object):
                 if k in d: od[k] = d[k]
             return od
 
+        for k, v in o.iteritems():
+            if v is None: continue
+            elif isinstance(v,str): o[k] = Units.parse(v)
+            elif k == 'dist': o[k] *= Units.kpc
+            elif k == 'rs': o[k] *= Units.kpc
+            elif k == 'rhor': o[k] = [o[k][0]*Units.gev_cm3,
+                                      o[k][1]*Units.kpc]
+            elif k ==' jval' : o[k] = o[k]*Units.gev2_cm5
+
         if o['rhos'] is None: o['rhos'] = 1.0
 
         if name == 'nfw':
@@ -478,16 +495,8 @@ class DensityProfile(object):
             print 'No such halo type: ', name
             sys.exit(1)
 
-        if 'rhor' in o:
-            dp.set_rho(o['rhor'][0]*Units.gev_cm3,
-                       o['rhor'][1]*Units.kpc)
-        elif 'jval' in o:
-
-            print o
-
-            dp.set_jval(o['jval']*Units.gev2_cm5,
-                        o['rs'],
-                        o['dist'])
+        if 'rhor' in o: dp.set_rho(o['rhor'][0],o['rhor'][1])
+        elif 'jval' in o: dp.set_jval(o['jval'],o['rs'],o['dist'])
 
         return dp
 
@@ -656,25 +665,6 @@ class UniformProfile(object):
     def _rho(self,r):
         return np.where(r<rs,rhos,0)
 
-class Units(object):
-    pc = 3.08568e18   # pc to cm
-    kpc = pc*1e3      # kpc to cm
-    msun = 1.98892e33 # solar mass to g
-    gev = 1.78266e-24 # gev to g
-    g = 1.0
-    m2 = 1E4
-    hr = 3600.
-    deg2 = np.power(np.pi/180.,2)
-
-    msun_pc3 = msun*np.power(pc,-3) 
-    msun_kpc3 = msun*np.power(kpc,-3)
-    msun2_pc5 = np.power(msun,2)*np.power(pc,-5)
-    msun2_kpc5 = np.power(msun,2)*np.power(kpc,-5)
-    gev2_cm5 = np.power(gev,2)
-    gev_cm3 = np.power(gev,1)
-    gev_cm2 = np.power(gev,1)
-    g_cm3 = 1.0
-    cm3_s = 1.0
 
 if __name__ == '__main__':
     print "Line-of-sight Integral Package..."
