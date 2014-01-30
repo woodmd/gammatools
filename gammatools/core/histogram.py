@@ -69,7 +69,7 @@ class HistogramND(object):
     def axes(self):
         return self._axes
 
-    def axis(self,idim):
+    def axis(self,idim=0):
         return self._axes[idim]
 
     def center(self):
@@ -350,7 +350,33 @@ class HistogramND(object):
 
         return o
 
+    def __div__(self,x):
 
+        if isinstance(x, HistogramND):
+            o = copy.deepcopy(self)
+
+            y1 = self._counts
+            y2 = x._counts
+            y1_var = self._var
+            y2_var = x._var
+
+            msk = ((y1!=0) & (y2!=0))
+
+            o._counts[~msk] = 0.
+            o._var[~msk] = 0.
+            
+            o._counts[msk] = y1[msk] / y2[msk]
+            o._var[msk] = (y1[msk] / y2[msk])**2
+            o._var[msk] *= (y1_var[msk]/y1[msk]**2 + y2_var[msk]/y2[msk]**2)
+
+            return o
+        else:
+            x = np.array(x,ndmin=1)
+            msk = x != 0
+            x[msk] = 1./x[msk]
+            x[~msk] = 0.0
+            return self.__mul__(x)
+    
     @staticmethod
     def create(axes,c=None,v=None,style=None):
         ndim = len(axes)
@@ -620,8 +646,8 @@ class Histogram(HistogramND):
     def update_style(self,style):
         update_dict(self._style,style)
 
-    def axis(self):
-        return self._axis
+#    def axis(self):
+#        return self._axis
 
     def label(self):
         return self._style['label']
@@ -1440,43 +1466,6 @@ class Histogram2D(HistogramND):
         var = ndimage.gaussian_filter(self._var, sigma=sigma_bins)
 
         return Histogram2D(self._xaxis,self._yaxis,counts=counts,var=var)
-
-            
-    def __div__(self,x):
-
-        o = copy.deepcopy(self)
-
-        if isinstance(x, Histogram2D):
-
-            msk = (self._counts == 0) | (x._counts == 0)
-
-            o._counts[msk] = 0.0
-            o._var[msk] = 0.0
-
-            o._counts[msk == False] = \
-                self._counts[msk == False] / x._counts[msk == False]
-#            o._var[i] = (y1[i] / y2[i])**2
-#            o._var[i] *= (y1_var[i]/y1[i]**2 + y2_var[i]/y2[i]**2)
-        else:
-            o._counts /= x
-            o._var /= x**2
-
-        return o
-
-    def __mul__(self,x):
-
-        o = copy.deepcopy(self)
-
-        if isinstance(x, Histogram2D):
-            o._counts = self._counts*x._counts
-            o._var = o._counts*np.sqrt(self._var/self._counts +
-                                       x._var/x._counts)
-        else:
-            o._counts *= x
-            o._var *= x**2
-
-        return o
-
 
     def plot(self,ax=None,**kwargs):
         return self.pcolor(ax,**kwargs)
