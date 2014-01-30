@@ -76,6 +76,17 @@ class Series(object):
 
         ax.errorbar(self._x[msk],self._y[msk],yerr,**style)
 
+    @staticmethod
+    def createFromFile(filename):
+
+        d = np.loadtxt(filename,unpack=True)
+
+        if len(d) == 2: return Series(d[0],d[1])
+        elif len(d) == 3: return Series(d[0],d[1],d[2])
+
+    def interpolate(self,x):
+        return interpolate(self._x,self._y,x)
+
     def mask(self,msk):
 
         o = copy.deepcopy(self)
@@ -87,11 +98,24 @@ class Series(object):
 
         return o
         
+    def __sub__(self,x):
+
+        o = copy.deepcopy(self)
+        o._y -= x
+        return o
+
     def __div__(self,x):
 
         o = copy.deepcopy(self)
         o._y /= x
         if not o._yerr is None: o._yerr /= x
+        return o
+
+    def __mul__(self,x):
+
+        o = copy.deepcopy(self)
+        o._y *= x
+        if not o._yerr is None: o._yerr *= x
         return o
         
 

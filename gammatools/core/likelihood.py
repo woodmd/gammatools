@@ -19,115 +19,7 @@ from util import expand_aliases, get_parameters
 from minuit import Minuit
 from parameter_set import Parameter, ParameterSet
 import matplotlib.pyplot as plt
-        
-class ParamFn(object):
-    """Class for a parameterized function."""
-
-    def __init__(self, param = None, name = None):
-
-        if param is None: self._param = ParameterSet()
-        else: self._param = param
-        self._name = name
-
-    def setName(self,name):
-        """Set the name of the function."""
-        self._name = name
-
-    def name(self):
-        """Return the name of the function."""
-        return self._name
-
-    def npar(self):
-        return self._param.npar()
-
-    def param(self,p=None):
-        """Get the parameter set of this function.  If the optional input
-        argument set is defined then return a copy of the model
-        parameter set with values updated from this set."""
-
-        if p is None: pset = self._param
-        else:
-            pset = copy.deepcopy(self._param)
-            pset.setParam(p)
-
-        return pset
-
-    def setParam(self,pset):
-        """Update the parameters."""
-        self._param.setParam(pset)
-
-    def setParamByIndex(self,index,value):
-        """Set the value of one of the function parameters given its index."""
-
-        self._param.getParByIndex(index).set(value)
-
-    def setParamByName(self,name,value):
-        """Set the value of one of the function parameters given its name."""
-
-        self._param.getParByName(name).set(value)
-
-    def addParameter(self,p):
-        self._param.addParameter(p)
-
-
-class Model(ParamFn):
-    
-    def __init__(self, pset=None, name=None, cname=None):
-        ParamFn.__init__(self,pset,name)
-        self._cname = cname
-
-    def eval(self,x,p=None):
-        
-        pset = self.param(p)
-
-        if isinstance(x,dict):
-            x = np.array(x[self._cname],ndmin=1)
-        else:
-            x = np.array(x,ndmin=1)
-
-        return self._eval(x,pset)
-
-    def integrate(self,xlo,xhi,p=None):
-        
-        pset = self.param(p)
-
-        if isinstance(xlo,dict):
-            xlo = np.array(xlo[self._cname],ndmin=1)
-            xhi = np.array(xhi[self._cname],ndmin=1)
-        else:
-            xlo = np.array(xlo,ndmin=1)
-            xhi = np.array(xhi,ndmin=1)
-
-        return self._integrate(xlo,xhi,pset)
-
-    def histogram(self,edges,p=None):
-        
-        pset = self.param(p)
-
-        if isinstance(edges,dict):
-            edges = np.array(edges[self._cname],ndmin=1)
-        else:
-            edges = np.array(edges,ndmin=1)
-
-        h = Histogram(edges,label=self.name())
-        h._counts = self._integrate(edges[:-1],edges[1:],p)[0]
-        return h
-
-    def rnd(self,n,xmax,p=None):
-
-        x = np.linspace(0,xmax,1000)
-        cdf = self.cdf(x,p)
-        cdf /= cdf[-1]
-
-        fn = UnivariateSpline(cdf,x,s=0,k=1)
-
-        p = np.random.uniform(0.0,1.0,n)
-
-        return fn(p)
-    
-    def cdf(self,x,p=None):    
-        return self.integrate(np.zeros(shape=x.shape),x,p)
-
+from model_fn import ParamFn, Model
 
 class ScaledModel(Model):
     def __init__(self,model,pset,expr,name=None):
@@ -147,13 +39,15 @@ class ScaledModel(Model):
         self._expr = expr
 
     def eval(self,x,p=None):
-        pset = self.param(p)
+        pset = self.param(True)
+        pset.update(p)
 
         if self._expr is None: return self._model.eval(x,pset)
         else: return self._model.eval(x,pset)*eval(self._expr)
 
     def integrate(self,xlo,xhi,p=None):        
-        pset = self.param(p)
+        pset = self.param(True)
+        pset.update(p)
 
         if self._expr is None: return self._model.integrate(xlo,xhi,pset)
         else: return self._model.integrate(xlo,xhi,pset)*eval(self._expr)
@@ -237,7 +131,8 @@ class CompositeParameter(ParamFn):
         self._expr = expr
 
     def eval(self,x,p=None):
-        pset = self.param(p)
+        pset = self.param(True)
+        pset.update(p)
         return eval(self._expr)
 
 class JointLnL(ParamFn):
@@ -254,11 +149,13 @@ class JointLnL(ParamFn):
 
     def eval(self,p=None):
 
-        p = self.param(p)
+        pset = self.param(True)
+        pset.update(p)
+
         s = None
         for i, m in enumerate(self._lnlfn):
-            if i == 0: s = m.eval(p)
-            else: s += m.eval(p)
+            if i == 0: s = m.eval(pset)
+            else: s += m.eval(pset)
 
         return s
 
@@ -283,20 +180,76 @@ class FitResults(ParameterSet):
     def __str__(self):
 
         os = ''
-        for i, k in enumerate(sorted(self._pars.keys())):
-            os += '%s %.6g\n'%(self._pars[k],self._err[i])
+        for i, p in enumerate(self._pars):
+            os += '%s %.6g\n'%(p,self._err[i])
 
         os += 'fval: %.3f\n'%(self._fval)
 #        os += 'cov:\n %s'%(str(self._cov))
 
         return os
 
+class Chi2Fn(ParamFn):
+
+    def __init__(self,x,y,yerr,model):
+        ParamFn.__init__(self,model.param())
+        self._x = x
+        self._y = y
+        self._yerr = yerr
+        self._model = model
+
+    def __call__(self,p):
+        return self.eval(p)
+            
+    def eval(self,p):
+
+        pset = self._model.param(True)
+        pset.update(p)
+
+        print pset
+
+        fv = self._model(self._x,pset)
+
+        var = self._yerr**2
+        delta2 = (self._y-fv)**2
+        v = delta2/var
+        
+        if v.ndim == 2:
+            s = np.sum(v,axis=1)
+        else:
+            s = np.sum(v)
+
+        return s
 
 
+class Chi2HistFn(ParamFn):
+
+    def __init__(self,h,model):
+        ParamFn.__init__(self,model.param())
+        self._h = h
+        self._model = model
+            
+    def eval(self,p):
+
+        pset = self._model.param(True)
+        pset.update(p)
+
+        fv = self._model.histogram(self._h.edges(),pset)
+
+#        print 'fv ', fv.shape
+#        print fv
+
+        var = self._h.var()
+        delta2 = (self._h.counts()-fv)**2
+        v = delta2/var
+        
+
+        if v.ndim == 2:
+            return np.sum(v,axis=1)
+        else:
+            return np.sum(v)
 
 
-
-class Fitter(object):
+class MinuitFitter(object):
     """Wrapper class for performing function minimization with minuit."""
 
     def __init__(self,objfn,tol=1E-3):
@@ -309,7 +262,6 @@ class Fitter(object):
 
         pset = copy.copy(self._objfn.param())
         p = pset.array()
-
 
         if par_index is None: par_index = range(pset.npar())
 
@@ -324,7 +276,7 @@ class Fitter(object):
 
         imin = np.argmin(lnl)
 
-        pset.setParam(prnd[:,imin])
+        pset.update(prnd[:,imin])
 
         print self._objfn.eval(pset)
 
@@ -359,8 +311,7 @@ class Fitter(object):
 
     def fit(self,pset=None):
 
-        if pset is None:
-            pset = copy.copy(self._objfn.param())
+        if pset is None: pset = self._objfn.param(True)
 
         npar = pset.npar()
 
@@ -369,11 +320,12 @@ class Fitter(object):
         hi_lims = npar*[None]
         lims = []
         
-        for i, pid in enumerate(pset.pids()):
-            if not pset.getParByIndex(pid).lims() is None:
-                lims.append(pset.getParByIndex(pid).lims())
+        for i, p in enumerate(pset):
+            if not p.lims() is None: lims.append(p.lims())
             else: lims.append([0.0,0.0])
                             
+        print pset.array()
+
         minuit = Minuit(lambda x: self._objfn.eval(x),
                         pset.array(),fixed=fixed,limits=lims,
                         tolerance=self._tol,strategy=1,
@@ -382,7 +334,7 @@ class Fitter(object):
         (pars,fval) = minuit.minimize()
 
         cov = minuit.errors()
-        pset.setParam(pars)
+        pset.update(pars)
             
         return FitResults(pset,cov,fval)
 

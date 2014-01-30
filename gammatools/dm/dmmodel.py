@@ -9,7 +9,7 @@ import yaml
 import numpy as np
 import matplotlib.pyplot as plt
 import gammatools.dm.jcalc as jcalc
-from gammatools.dm.jcalc import Units
+from gammatools.core.util import Units
 import scipy.special as spfn
 from scipy.optimize import brentq
 from scipy.interpolate import UnivariateSpline
@@ -170,7 +170,7 @@ class DMChanSpectrum(object):
     """Class that computes the differential annihilation yield for
     different DM channels.  Interpolates a set of tabulated values
     from DarkSUSY."""
-    def __init__(self,chan):
+    def __init__(self,chan,mass = 100*Units.gev):
 
         dirname = os.path.dirname(__file__)
 
@@ -179,14 +179,15 @@ class DMChanSpectrum(object):
         xedge = np.linspace(0,1.0,251)
         self._x = 0.5*(xedge[1:]+xedge[:-1])
 
+        self._mass = mass
         self._xwidth = self._x[1:]-self._x[:-1]
 
-        self._mass = np.array([10.0,25.0,50.0,80.3,91.2,
-                               100.0,150.0,176.0,200.0,250.0,
-                               350.0,500.0,750.0,
-                               1000.0,1500.0,2000.0,3000.0,5000.0])
+        self._mass_bins = np.array([10.0,25.0,50.0,80.3,91.2,
+                                    100.0,150.0,176.0,200.0,250.0,
+                                    350.0,500.0,750.0,
+                                    1000.0,1500.0,2000.0,3000.0,5000.0])
 
-        self._mwidth = self._mass[1:]-self._mass[:-1]
+        self._mwidth = self._mass_bins[1:]-self._mass_bins[:-1]
         self._ndec = 10.0
 
         channel = ['cc','bb','tt','tau','ww','zz']
@@ -218,7 +219,7 @@ class DMChanSpectrum(object):
 
 #            self._dndx[c] = d[:,i*18:(i+1)*18]
 
-    def e2dnde(self,m,loge,dloge=None):
+    def e2dnde(self,loge,mass=None,dloge=None):
         """
         Evaluate the spectral energy density.
 
@@ -228,17 +229,18 @@ class DMChanSpectrum(object):
         @return:
         """
         e = np.power(10,loge)
-        return e**2*self.dnde(m,loge,dloge)
+        return e**2*self.dnde(loge,mass,dloge)
  
-    def ednde(self,m,loge,dloge=None):        
+    def ednde(self,loge,mass=None,dloge=None):        
         e = np.power(10,loge)
-        return e*self.dnde(m,loge,dloge)
+        return e*self.dnde(loge,mass,dloge)
 
-    def dnde(self,m,loge,dloge=None):
+    def dnde(self,loge,mass=None,dloge=None):
         
         loge = np.array(loge,ndmin=1)
 
-        m /= Units.gev
+        if mass is None: m = self._mass
+        else: m = mass
 
         if dloge is not None:
             loge_edge = np.linspace(loge[0]-dloge/2.,loge[-1]+dloge/2.,
@@ -267,7 +269,7 @@ class DMChanSpectrum(object):
 
 
     def dndx(self,m,x):
-        return interpolate2d(self._x,self._mass,self._dndx,x,m)
+        return interpolate2d(self._x,self._mass_bins,self._dndx,x,m/Units.gev)
 
 
 class DMModelSpectrum(object):

@@ -57,6 +57,7 @@ class FigureSubplot(object):
 
         self._ax = None
         self._data = []
+        
 
         self._style_counter = {
             'color' : 0,
@@ -69,6 +70,8 @@ class FigureSubplot(object):
         
         self._hline = []
         self._hline_style = []
+        self._text = []
+        self._text_style = []
 
     def set_style(self,k,v):
         self._style[k] = v
@@ -100,10 +103,24 @@ class FigureSubplot(object):
                 
         return copy.deepcopy(style)
         
+    def add_text(self,x,y,s,**kwargs):
+
+        style = { 'color' : 'k', 'fontsize' : 10 }
+        update_dict(style,kwargs,False)
+
+        self._text.append([x,y,s])
+        self._text_style.append(style)
+
     def add_data(self,x,y,yerr=None,**kwargs):
         
         style = self.get_style(**kwargs)
         s = Series(x,y,yerr,style)
+        s.update_style(style)
+        self._data.append(s)
+
+    def add_series(self,s,**kwargs):
+        s = copy.deepcopy(s)
+        style = self.get_style(**kwargs)
         s.update_style(style)
         self._data.append(s)
 
@@ -222,6 +239,9 @@ class FigureSubplot(object):
 
         for i, h in enumerate(self._hline):
             ax.axhline(self._hline[i],**self._hline_style[i])
+
+        for i, t in enumerate(self._text):
+            ax.text(*t,transform=ax.transAxes, **self._text_style[i])
 
         ax.grid(True)
         if len(labels) > 0 and style['legend']:

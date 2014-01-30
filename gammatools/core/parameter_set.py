@@ -25,7 +25,7 @@ class Parameter(object):
     def __init__(self,pid,value,name,fixed=False,lims=None):
         self._pid = pid
         self._name = name
-        self._value = np.array(value,ndmin=2)
+        self._value = np.array(value,ndmin=1)
         self._err = 0
 
         if lims is None: self._lims = [0,0]
@@ -58,7 +58,7 @@ class Parameter(object):
 
     def set(self,v):
 
-        self._value = np.array(v,ndmin=2)
+        self._value = np.array(v,ndmin=1)
 #        if isinstance(v,np.array): self._value = v
 #        else: self._value[...] = v
 
@@ -72,21 +72,21 @@ class ParameterSet(object):
 
     def __init__(self,pars=None):
 
-        self._pars = {}
+        self._pars_dict = {}
+        self._pars = []
         self._par_names = {}
 
         if isinstance(pars,ParameterSet):
-            self._pars = copy.deepcopy(pars._pars)
-            self._par_names = copy.deepcopy(pars._par_names)
+            for p in pars: self.addParameter(p)
         else:
             if not pars is None:
                 for p in pars: self.addParameter(p)
 
     def __iter__(self):
-        return iter(self._pars.values())
+        return iter(self._pars)
 
     def pids(self):
-        return sorted(self._pars.keys())
+        return sorted(self._pars_dict.keys())
     
     def names(self):
         """Return the names of the parameters in this set."""
@@ -94,54 +94,42 @@ class ParameterSet(object):
 
     def pid(self):
         """Return the sorted list of parameter IDs in this set."""
-
-        pid = []
-        pkeys = sorted(self._pars.keys())
-        for i, k in enumerate(pkeys):
-            pid.append(self._pars[k].pid())
-        return pid
+        return sorted(self._pars_dict.keys())
 
     def fixed(self):
 
         fixed = []
-        pkeys = sorted(self._pars.keys())
-        for i, k in enumerate(pkeys):
-            fixed.append(self._pars[k].fixed())
+        for i, p in enumerate(self._pars):
+            fixed.append(p.fixed())
         return fixed
 
     def array(self):
         """Return an NxM numpy array with the values of the parameters
         in this set."""
-        pkeys = sorted(self._pars.keys())
+
 #        if self._pars[pkeys[0]].size() > 1:
-        x = np.zeros((len(self._pars),self._pars[pkeys[0]].size(),1))
-        for i, k in enumerate(pkeys):
-            x[i] = self._pars[k].value()
+        x = np.zeros((len(self._pars),self._pars[0].size()))
+        for i, p in enumerate(self._pars):
+            x[i] = p.value()
 
         return x
-#        else:
-#            x = np.zeros(len(self._pars))
-#            for i, k in enumerate(pkeys):
-#                x[i] = self._pars[k].value()[0]
-#            return x
 
     def makeParameterArray(self,ipar,x):
 
         pset = copy.deepcopy(self)
 
-        for k in pset._pars.keys():
-            if k != ipar: 
-                pset[k] = np.ones(len(x))*self._pars[k].value()
-                pset[k] = pset[k].reshape((len(x),1))
+        for i, p in enumerate(self._pars):
+            if i != ipar: 
+                pset[i].set(np.ones(len(x))*self._pars[i].value())
             else:
-                pset[k] = x
-                pset[k].shape += (1,)
+                pset[i].set(x)
 
         return pset
 
     def clear(self):
 
         self._pars.clear()
+        self._pars_dict.clear()
         self._par_names.clear()
 
     def fixAll(self,fix=True,regex=None):
@@ -153,33 +141,32 @@ class ParameterSet(object):
             for k, v in self._par_names.iteritems():                
                 if re.search(regex,k): keys.append(v)
         else:
-            keys = self._pars.keys()
+            keys = self._pars_dict.keys()
 
-        for k in keys: self._pars[k].fix(fix)
+        for k in keys: self._pars_dict[k].fix(fix)
 
-    def setParam(self,p):
-        """Set parameter values from an existing parameter set or from
+    def update(self,pset):
+        """Update parameter values from an existing parameter set or from
         a numpy array."""
         
-        if isinstance(p,ParameterSet):
-            for k in self._pars.keys():
-                self._pars[k] = p._pars[k]
+        if pset is None: return
+        elif isinstance(pset,ParameterSet):
+            for p in pset:
+                self._pars_dict[p.pid()].set(p.value())
         else:
-            for i, k in enumerate(sorted(self._pars.keys())):
-                self._pars[k]._value = np.array(p[i],ndmin=1)
+            for i, p in enumerate(self._pars):
+                self._pars[i].set(np.array(pset[i],ndmin=1))
 
-                if self._pars[k]._value.ndim == 1:
-                    self._pars[k]._value.shape += (1,)
-
-
-    def createParameter(self,value,name,fixed=False,lims=None):
+    def createParameter(self,value,name,fixed=False,lims=None,pid=None):
         """Create a new parameter and add it to the set.  Returns a
         reference to the new parameter."""
 
-        if len(self._pars.keys()) > 0:
-            pid = sorted(self._pars.keys())[-1]+1
-        else:
-            pid = 0
+        if pid is None:
+
+            if len(self._pars_dict.keys()) > 0:
+                pid = sorted(self._pars_dict.keys())[-1]+1
+            else:
+                pid = 0
 
         p = Parameter(pid,value,name,fixed,lims)
         self.addParameter(p)
@@ -187,53 +174,63 @@ class ParameterSet(object):
 
     def addParameter(self,p):        
 
-        if p.pid() in self._pars and p.name() != self._pars[p.pid()].name():
+        if p.pid() in self._pars:
+            raise Exception('Parameter with ID %i already exists.'%p.pid())
+        elif p.pid() in self._pars and p.name() != self._pars[p.pid()].name():
+            raise Exception('Parameter with name %s already exists.'%p.name())
 #            print "Error : Parameter already exists: ", p.pid()
-            print "Error : Mismatch in parameter name: ", p.pid()
-            sys.exit(1)
+#            print "Error : Mismatch in parameter name: ", p.pid()
+#            sys.exit(1)
 #        if p.name() in self._par_names.keys():
 #            print "Error : Parameter with name already exists: ", p.name()
 #            sys.exit(1)
 
-        self._pars[p.pid()] = copy.deepcopy(p)
+        par = copy.deepcopy(p)
+
+        self._pars_dict[p.pid()] = par
+#        self._pars.append(par)
+        self._pars = []
+        for k in sorted(self._pars_dict.keys()):
+            self._pars.append(self._pars_dict[k])
+
         self._par_names[p.name()] = p.pid()
 
-    def addSet(self,p):        
-        self._pars.update(copy.deepcopy(p._pars))
-        self._par_names.update(p._par_names)
+    def addSet(self,pset): 
 
-    def __getitem__(self,pid):
-        return self._pars[pid].value()
+        for p in pset:
+            if not p.pid() in self._pars_dict.keys():
+                self.addParameter(p)
 
-    def __setitem__(self,pid,val):
-        self._pars[pid]._value = val
+    def __getitem__(self,ipar):
+
+        if isinstance(ipar,str): 
+            return self._pars_dict[self._par_names[ipar]]
+        else: return self._pars[ipar]
+
+#    def __setitem__(self,pid,val):
+#        self._pars[pid] = val
 
     def getParByID(self,ipar):
-        return self._pars[ipar]
-
-#    def getParIndex(self,pid):
-#        pid = sorted(self._pars.keys())[ipar]
-#        return self._pars[pid]
+        return self._pars_dict[ipar]
 
     def getParByIndex(self,ipar):
-        pid = sorted(self._pars.keys())[ipar]
-        return self._pars[pid]
+        return self._pars[ipar]
 
     def getParByName(self,name):
         pid = self._par_names[name]
-        return self._pars[pid]
+        return self._pars_dict[pid]
 
     def setParByName(self,name,val):
         pid = self._par_names[name]
-        self._pars[pid]._value = np.array(val,ndmin=2)
+        self._pars_dict[pid]._value = np.array(val,ndmin=2)
 
     def npar(self):
         return len(self._pars)
 
     def size(self):
 
-        par = self.getParByIndex(0)
-        return par._value.shape[0]
+        if len(self._pars) == 0: return 0
+        else: return self._pars[0].size()
 
 #    def set(self,p):
 #        """Set the parameter list from an array."""
@@ -243,8 +240,7 @@ class ParameterSet(object):
     def __str__(self):
 
         os = ''
-        for k in sorted(self._pars.keys()):
-            os += '%s\n'%(self._pars[k])
+        for p in self._pars: os += '%s\n'%(p)
 
         return os
 

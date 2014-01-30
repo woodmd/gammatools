@@ -14,92 +14,6 @@ from minuit import Minuit
 from util import convolve2d_gauss
 import scipy.special as spfn
 
-def polyval(c,x):
-
-    c = np.array(c, ndmin=1, copy=0)
-
-    if isinstance(x, (tuple, list)):
-        x = np.asarray(x,ndmin=1)
-#    if isinstance(x, np.ndarray):
-#        c = c.reshape(c.shape + (1,)*x.ndim)
-
-#    print 'polyval ', c.shape, x.shape
-#    print c
-
-    c0 = c[-1] + x*0
-    for i in range(2, len(c) + 1) :
-        c0 = c[-i] + c0*x
-    return c0
-
-
-
-class PolyFn(Model):
-    def __init__(self,pset,name=None):
-        Model.__init__(self,pset,name)
-        self._nc = pset.npar()
-
-    @staticmethod
-    def create(norder,coeff=None,offset=0):
-
-        pset = ParameterSet()
-        if coeff is None: coeff = np.zeros(norder)
-        for i in range(norder):
-            pset.addParameter(Parameter(offset+i,coeff[i],'a%i'%i))
-
-        return PolyFn(pset)
-
-    def _eval(self,x,pset):
-        
-        a = pset.array()
-        return polyval(a,x)
-
-    def _integrate(self,dlo,dhi,pset):
-
-        a = pset.array()
-
-        if a.ndim == 1:
-            aint = np.zeros(self._nc+1)
-            aint[1:] = a/np.linspace(1,self._nc,self._nc)
-            return polyval(aint,dhi) - polyval(aint,dlo)
-        else:
-            aint = np.zeros(shape=(self._nc+1,a.shape[1]))
-            c = np.linspace(1,self._nc,self._nc)
-#            c = c.reshape(c.shape + (1,))
-
-            aint[1:] = a/c
-            v = polyval(aint,dhi) - polyval(aint,dlo)
-            return v
-
-class PolarPolyFn(PolyFn):
-
-    @staticmethod
-    def create(norder,coeff=None,offset=0):
-
-        pset = ParameterSet()
-        if coeff is None: coeff = np.zeros(norder)
-        for i in range(norder):
-            pset.addParameter(Parameter(offset+i,coeff[i],'a%i'%i))
-
-        return PolarPolyFn(pset)
-
-    def _integrate(self,dlo,dhi,pset):
-
-        a = pset.array()
-
-        if a.ndim == 1:
-            aint = np.zeros(self._nc+2)
-            aint[2:] = a/np.linspace(1,self._nc,self._nc)
-            return np.pi*(polyval(aint,dhi) - polyval(aint,dlo))
-        else:
-            aint = np.zeros(shape=(self._nc+2,) + a.shape[1:])
-            c = np.linspace(2,self._nc+1,self._nc)
-            c = c.reshape(c.shape + (1,))
-
-#            print 'integrate ', aint.shape, c.shape
-
-            aint[2:] = a/c
-            v = np.pi*(polyval(aint,dhi) - polyval(aint,dlo))
-            return v
 
 class ConvolvedGaussFn(Model):
     def __init__(self,pnorm,psigma,psf_model):   
@@ -340,7 +254,7 @@ class BinnedLnL(ParamFn):
 
     def eval(self,p):
 
-        pset = self._model.param(p)
+        pset = self._model.param(True).update(p)
 
         nbin = len(self._xedge)-1
         xlo = self._xedge[:-1]
@@ -382,7 +296,7 @@ class Binned2DLnL(ParamFn):
 
     def eval(self,p):
 
-        pset = self._model.param(p)
+        pset = self._model.param(True).update(p)
 
         nbinx = len(self._xedge)-1
         nbiny = len(self._yedge)-1
@@ -421,7 +335,8 @@ class OnOffBinnedLnL(ParamFn):
 
     def eval(self,p):
 
-        pset = self._model.param(p)
+        pset = self._model.param(True)
+        pset.update(p)
 
         alpha = self._alpha
 

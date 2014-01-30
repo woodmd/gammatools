@@ -31,6 +31,22 @@ class Units(object):
     g_cm3 = 1.0
     cm3_s = 1.0
 
+    @classmethod
+    def parse(cls,s):
+
+        if not isinstance(s,str): return s
+
+        m = re.search('([-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?)(\s+)?(\w+)?',s)
+
+        if m is None: return s
+
+        v = float(m.group(1))
+        if not m.group(4) is None:
+            v *= cls.__dict__[m.group(4)]
+
+        return v
+
+
 def format_error(v, err, nsig=1, latex=False):
     if err > 0:
         logz = math.floor(math.log10(err)) - (nsig - 1)
