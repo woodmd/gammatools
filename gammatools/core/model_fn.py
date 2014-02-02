@@ -52,9 +52,8 @@ class ParamFn(object):
 
 class Model(ParamFn):
     
-    def __init__(self, pset=None, name=None, cname=None):
+    def __init__(self, pset=None, name=None):
         ParamFn.__init__(self,pset,name)
-        self._cname = cname
 
     def __call__(self,x,p=None):
         return self.eval(x,p)
@@ -122,27 +121,20 @@ class ScaledHistogramModel(Model):
         p0 = pset.createParameter(norm,prefix + 'norm')
         return ScaledHistogramModel(h,ParameterSet([p0]),name)        
 
-    def _eval(self,pset):
+    def _eval(self,x,pset):
+        
+        a = pset.array()
+
+        if a.shape[1] > 1: a = a[...,np.newaxis]        
+        return a[0]*self._h.interpolate(x)
+
+    def _integrate(self,xlo,xhi,pset):
         
         a = pset.array()
 
         if a.shape[1] > 1: a = a[...,np.newaxis]        
         return a[0]*self._h.counts()
 
-    def _integrate(self,pset):
-        
-        a = pset.array()
-
-        if a.shape[1] > 1: a = a[...,np.newaxis]        
-        return a[0]*self._h.counts()
-
-#    def histogram(self,edges,pset=None):
-
-#        pset = self.param(True)
-#        pset.update(p)
-
-#        return a[0]*self._h.counts()
-        
     
 class ScaledModel(Model):
     def __init__(self,model,pset,expr,name=None):
@@ -193,8 +185,7 @@ class CompositeSumModel(Model):
         s = None
         for i, m in enumerate(self._models):
 
-            if isinstance(m,ScaledHistogramModel): v = m.eval(pset)            
-            else: v = m.eval(x,pset)
+            v = m.eval(x,pset)
             
             if i == 0: s = v
             else: s += v
@@ -205,8 +196,7 @@ class CompositeSumModel(Model):
         s = None
         for i, m in enumerate(self._models):
 
-            if isinstance(m,ScaledHistogramModel): m.integrate(pset)            
-            else: v = m.integrate(xlo,xhi,pset)
+            v = m.integrate(xlo,xhi,pset)
 
             if i == 0: s = v
             else: s += v
@@ -217,9 +207,7 @@ class CompositeSumModel(Model):
         hists = []
         for i, m in enumerate(self._models):
 
-            if isinstance(m,ScaledHistogramModel): c = m.histogram(p)  
-            else: c = m.histogram(edges,p)
-            
+            c = m.histogram(edges,p)            
             h = Histogram(edges,label=m.name(),counts=c,var=0)
             
             hists.append(h)
