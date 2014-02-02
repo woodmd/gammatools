@@ -320,7 +320,7 @@ class BFGSFitter(object):
             if p.fixed():
                 bounds.append([p.value().flat[0],p.value().flat[0]])
             else:
-                bounds.append([None,None])
+                bounds.append(p.lims())
 
         from scipy.optimize import fmin_l_bfgs_b as fmin_bfgs
 

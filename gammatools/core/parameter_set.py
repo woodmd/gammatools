@@ -28,7 +28,7 @@ class Parameter(object):
         self._value = np.array(value,ndmin=1)
         self._err = 0
 
-        if lims is None: self._lims = [0,0]
+        if lims is None: self._lims = [None,None]
         else: self._lims = lims
         self._fixed = fixed
 
@@ -61,6 +61,12 @@ class Parameter(object):
         self._value = np.array(v,ndmin=1)
 #        if isinstance(v,np.array): self._value = v
 #        else: self._value[...] = v
+
+    def setLoBound(self,v):
+        self._lims[0] = v
+
+    def setHiBound(self,v):
+        self._lims[1] = v
 
     def __str__(self):
         return '%5i %5i %25s %s'%(self._pid,self._fixed,self._name,

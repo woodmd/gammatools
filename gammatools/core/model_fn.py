@@ -88,10 +88,9 @@ class Model(ParamFn):
         
         pset = self.param(True)
         pset.update(p)
-
         edges = np.array(edges,ndmin=1)
 
-        return self._integrate(edges[:-1],edges[1:],p)
+        return self._integrate(edges[:-1],edges[1:],pset)
 
     def rnd(self,n,xmin,xmax,p=None):
 
@@ -101,9 +100,9 @@ class Model(ParamFn):
 
         fn = UnivariateSpline(cdf,x,s=0,k=1)
 
-        p = np.random.uniform(0.0,1.0,n)
+        pv = np.random.uniform(0.0,1.0,n)
 
-        return fn(p)
+        return fn(pv)
     
     def cdf(self,x,p=None):    
         return self.integrate(np.zeros(shape=x.shape),x,p)
@@ -124,17 +123,14 @@ class ScaledHistogramModel(Model):
     def _eval(self,x,pset):
         
         a = pset.array()
-
         if a.shape[1] > 1: a = a[...,np.newaxis]        
         return a[0]*self._h.interpolate(x)
 
     def _integrate(self,xlo,xhi,pset):
         
         a = pset.array()
-
         if a.shape[1] > 1: a = a[...,np.newaxis]        
         return a[0]*self._h.counts()
-
     
 class ScaledModel(Model):
     def __init__(self,model,pset,expr,name=None):
@@ -207,7 +203,7 @@ class CompositeSumModel(Model):
         hists = []
         for i, m in enumerate(self._models):
 
-            c = m.histogram(edges,p)            
+            c = m.histogram(edges,p) 
             h = Histogram(edges,label=m.name(),counts=c,var=0)
             
             hists.append(h)

@@ -99,12 +99,12 @@ class TestLikelihood(unittest.TestCase):
         hm1 = Histogram(Axis.create(-3.0,3.0,100))
         hm1.fill(hm1.axis().center(),fn1(hm1.axis().center()))
         
-        hm2 = hm0 + hm1
+        hm2 = hm0*0.9 + hm1*0.8
         
         pset1 = ParameterSet()
         
-        m0 = ScaledHistogramModel.create(hm0,pset=pset1)
-        m1 = ScaledHistogramModel.create(hm1,pset=pset1)
+        m0 = ScaledHistogramModel.create(hm0,pset=pset1,name='m0')
+        m1 = ScaledHistogramModel.create(hm1,pset=pset1,name='m1')
 
         msum = CompositeSumModel([m0,m1])
         chi2_fn = Chi2HistFn(hm2,msum)
@@ -115,5 +115,5 @@ class TestLikelihood(unittest.TestCase):
         
         f = fitter.fit(pset1)
         
-        assert_almost_equal(f[0].value(),1.0,4)
-        assert_almost_equal(f[1].value(),1.0,4)
+        assert_almost_equal(f[0].value(),0.9,4)
+        assert_almost_equal(f[1].value(),0.8,4)
