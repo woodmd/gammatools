@@ -240,24 +240,37 @@ class HistogramND(object):
         dim_index = np.array(dim_index,ndmin=1,copy=True)
         dims = np.setdiff1d(self._dims,sdims)
 
-        axes= []
-        new_shape = []
+        axes= len(self._dims)*[None]
+        new_shape = len(self._dims)*[None]
         slices = len(self._dims)*[None]
 
-        for i in dims: 
-            axes.append(self._axes[i])
-            new_shape.append(self._axes[i].nbins())
+        for i in dims:
+            axes[i] = self._axes[i]
+            new_shape[i] = self._axes[i].nbins()
             slices[i] = slice(self._axes[i].nbins())
             
         for i, idim in enumerate(sdims):
-            if idim >= self._ndim or dim_index[i] >= self._axes[idim].nbins():
+
+            index_range = np.array(dim_index[i],ndmin=1)
+            
+            if idim >= self._ndim or index_range[0] >= self._axes[idim].nbins():
                 raise ValueError('Dimension or Index out of range')
+            
+            if len(index_range) == 2:
+                new_axis = self._axes[idim].slice(index_range[0],
+                                                  index_range[1])
 
-            if dim_index[i] < 0: 
-                slices[idim] = slice(dim_index[i],dim_index[i]-1,-1)
+                axes[idim] = new_axis
+                slices[idim] = slice(index_range[0],index_range[1])
+                new_shape[idim] = new_axis.nbins()                
+            elif index_range[0] < 0: 
+                slices[idim] = slice(index_range[0],index_range[0]-1,-1)
             else:
-                slices[idim] = slice(dim_index[i],dim_index[i]+1)
+                slices[idim] = slice(index_range[0],index_range[0]+1)
 
+        axes = filter(None,axes)
+        new_shape = filter(None,new_shape)
+        
         c = self._counts[slices].reshape(new_shape)
         v = self._var[slices].reshape(new_shape)
 
@@ -480,6 +493,13 @@ class Axis(object):
         else: delta = x[1]-x[0]
         return Axis.create(x[0]-0.5*delta,x[-1]+0.5*delta,len(x),label=label)
 
+    def slice(self,lobin,hibin):
+        if hibin is None: hibin = self._nbins
+        if lobin < 0: lobin -= 1
+        
+        edges = self._edges[lobin:hibin+1]        
+        return Axis(edges,label=self._label)
+    
     def nbins(self):
         return self._nbins
 
@@ -923,10 +943,15 @@ class Histogram(HistogramND):
         optionally specified by providing a scalar or vector for the w
         argument.
         """
-        w = np.array(w,copy=True)
-
+        x = np.array(x,ndmin=1,copy=True)
+        w = np.array(w,ndmin=1,copy=True)
+        if len(w) < len(x): w = np.ones(len(x))*w
+        
         if var is None: var = w
-
+        else:
+            var = np.array(var,ndmin=1,copy=True)
+            if len(var) < len(w): var = np.ones(len(w))*var
+        
         if w.ndim == 1:
 
             c1 = np.histogram(x,bins=self._axis.edges(),weights=w)[0]

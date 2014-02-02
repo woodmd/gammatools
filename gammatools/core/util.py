@@ -6,6 +6,13 @@ import re
 
 class Units(object):
 
+    s = 1.0
+    min = 60.*s
+    hr = 60.*min
+    day = 24.*hr
+    week = 7.*day
+    year = 365.*day
+    
     pc = 3.08568e18   # pc to cm
     kpc = pc*1e3      # kpc to cm
     msun = 1.98892e33 # solar mass to g

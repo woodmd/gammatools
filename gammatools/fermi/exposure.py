@@ -23,7 +23,7 @@ class LTCube(object):
         self._ltmap = hdulist[1].data.field(0)
 
         self._tstart = hdulist[0].header['TSTART']
-        self._tstop = hdulist[0].header['TSTART']
+        self._tstop = hdulist[0].header['TSTOP']
         self._cth_edges = np.array(hdulist[3].data.field(0))
         self._cth_edges = np.concatenate(([1],self._cth_edges))
         self._cth_edges = self._cth_edges[::-1]

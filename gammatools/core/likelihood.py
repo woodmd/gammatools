@@ -21,74 +21,6 @@ from parameter_set import Parameter, ParameterSet
 import matplotlib.pyplot as plt
 from model_fn import ParamFn, Model
 
-class ScaledModel(Model):
-    def __init__(self,model,pset,expr,name=None):
-        Model.__init__(self,name=name)
-
-#        pset = model.param()
-        par_names = get_parameters(expr)
-        for p in par_names:            
-            self._param.addParameter(pset.getParByName(p))
-        self._param.addSet(model.param())
-        self._model = model
-
-        aliases = {}
-        for k, p in self._param._pars.iteritems():
-            aliases[p.name()] = 'pset[%i]'%(p.pid())
-        expr = expand_aliases(aliases,expr)
-        self._expr = expr
-
-    def eval(self,x,p=None):
-        pset = self.param(True)
-        pset.update(p)
-
-        if self._expr is None: return self._model.eval(x,pset)
-        else: return self._model.eval(x,pset)*eval(self._expr)
-
-    def integrate(self,xlo,xhi,p=None):        
-        pset = self.param(True)
-        pset.update(p)
-
-        if self._expr is None: return self._model.integrate(xlo,xhi,pset)
-        else: return self._model.integrate(xlo,xhi,pset)*eval(self._expr)
-
-
-class CompositeModel(Model):
-
-    def __init__(self):
-        Model.__init__(self)
-        self._models = []
-
-    def addModel(self,m):
-        self._models.append(m)
-        self._param.addSet(m.param())
-
-    def _eval(self,x,pset=None):
-        s = None
-        for i, m in enumerate(self._models):
-            
-            v = m.eval(x,pset)
-            if i == 0: s = v
-            else: s += v
-        return s
-            
-    def _integrate(self,xlo,xhi,pset=None):
-
-        s = None
-        for i, m in enumerate(self._models):
-
-            v = m.integrate(xlo,xhi,pset)
-            if i == 0: s = v
-            else: s += v
-        return s
-
-    def histogramComponents(self,edges,p=None):
-
-        hists = []
-        for i, m in enumerate(self._models):
-            hists.append(m.histogram(edges,p))
-        return hists
-
 class CompProdModel(Model):
 
     def __init__(self):
@@ -161,10 +93,13 @@ class JointLnL(ParamFn):
 
 class FitResults(ParameterSet):
 
-    def __init__(self,pset,cov,fval):
+    def __init__(self,pset,fval,cov=None):
         ParameterSet.__init__(self,pset)
+
+        if cov is None: cov=np.zeros(shape=(pset.npar(),pset.npar()))
+        else: self._cov = cov
+        
         self._err = np.sqrt(np.diag(cov))
-        self._cov = cov
         self._fval = fval
 
     def fval(self):
@@ -205,8 +140,6 @@ class Chi2Fn(ParamFn):
         pset = self._model.param(True)
         pset.update(p)
 
-        print pset
-
         fv = self._model(self._x,pset)
 
         var = self._yerr**2
@@ -227,7 +160,11 @@ class Chi2HistFn(ParamFn):
         ParamFn.__init__(self,model.param())
         self._h = h
         self._model = model
-            
+
+    def __call__(self,p):
+
+        return self.eval(p)
+        
     def eval(self,p):
 
         pset = self._model.param(True)
@@ -239,16 +176,22 @@ class Chi2HistFn(ParamFn):
 #        print fv
 
         var = self._h.var()
-        delta2 = (self._h.counts()-fv)**2
-        v = delta2/var
+        ivar = np.zeros(shape=var.shape)
+        ivar[var>0] = 1./var[var>0]
         
+        delta2 = (self._h.counts()-fv)**2
+        v = delta2*ivar
 
+#        print 'v.shape ', v.shape
+        
         if v.ndim == 2:
             return np.sum(v,axis=1)
         else:
             return np.sum(v)
 
 
+
+        
 class MinuitFitter(object):
     """Wrapper class for performing function minimization with minuit."""
 
@@ -336,7 +279,7 @@ class MinuitFitter(object):
         cov = minuit.errors()
         pset.update(pars)
             
-        return FitResults(pset,cov,fval)
+        return FitResults(pset,fval,cov)
 
     def plot_lnl_scan(self,pset):
         print pset
@@ -355,11 +298,6 @@ class MinuitFitter(object):
             plt.plot(p[j],y-pset.fval())
             plt.axvline(pset[j])
 
-                         
-        
-        
-    
-
     @staticmethod
     def fit2(objfn):
         """Convenience method for fitting."""
@@ -369,9 +307,13 @@ class MinuitFitter(object):
 
 class BFGSFitter(object):
 
+    def __init__(self,objfn,tol=1E-3):
+
+        self._objfn=objfn
+    
     def fit(self,pset=None):
 
-        from scipy.optimize import minimize
+        if pset is None: pset = self._objfn.param(True)
 
         bounds = []
         for p in pset:
@@ -380,49 +322,20 @@ class BFGSFitter(object):
             else:
                 bounds.append([None,None])
 
-        bounds[4] = [0,None]
-        bounds[5] = [0,None]
-        bounds[8] = [0,None]
-
-        print bounds
-        print pset.array()
-
         from scipy.optimize import fmin_l_bfgs_b as fmin_bfgs
-#        from scipy.optimize import fmin_bfgs
-#       from scipy.optimize import anneal
 
-#        res = minimize(lambda x: self._objfn.eval(x),
-#                       pset.array(),method='L-BFGS-B',bounds=bounds,
-#                       factr=10.0)
+        res = fmin_bfgs(self._objfn,
+                        pset.array(),None,bounds=bounds,
+                        approx_grad=1)
 
-        print 'Performing BFGS Fit'
+        pset.update(res[0])        
+        self._fit_results = FitResults(pset,res[1])
 
-        class TestFn(object):
-
-            def __init__(self,fn):
-                self._fn = fn
-                self._ncall = 0
-
-            def __call__(self,p):
-                self._ncall +=1
-
-                print self._ncall
-                print p
-
-                return self._fn.eval(p)
-
-            
-
-        testfn = TestFn(self._objfn)
-
-#lambda x: self._objfn.eval(x),
-        res = fmin_bfgs(testfn,
-                       pset.array(),None,bounds=bounds,
-                       approx_grad=1)
+        # How to compute errors?
+        
+        return copy.deepcopy(self._fit_results)
+        
 #,epsilon=1E-10,
 #                        iprint=0,pgtol=1E-10)
 
-#        res = anneal(lambda x: self._objfn.eval(x),
-#                       pset.array(),None,bounds=bounds)
 
-        print res

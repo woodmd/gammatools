@@ -78,9 +78,8 @@ class ParameterSet(object):
 
         if isinstance(pars,ParameterSet):
             for p in pars: self.addParameter(p)
-        else:
-            if not pars is None:
-                for p in pars: self.addParameter(p)
+        elif not pars is None:
+            for p in pars: self.addParameter(p)
 
     def __iter__(self):
         return iter(self._pars)
@@ -148,11 +147,12 @@ class ParameterSet(object):
     def update(self,pset):
         """Update parameter values from an existing parameter set or from
         a numpy array."""
-        
+
         if pset is None: return
         elif isinstance(pset,ParameterSet):
             for p in pset:
-                self._pars_dict[p.pid()].set(p.value())
+                if p.pid() in self._pars_dict:
+                    self._pars_dict[p.pid()].set(p.value())
         else:
             for i, p in enumerate(self._pars):
                 self._pars[i].set(np.array(pset[i],ndmin=1))

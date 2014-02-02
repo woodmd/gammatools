@@ -30,6 +30,8 @@ class TestHistogram(unittest.TestCase):
 
         h = Histogram2D(xaxis,yaxis,counts=c,var=v)
 
+        # Slice by Bin Index
+        
         hsx = h.slice(0,2)
 
         cx = np.cos(xaxis.center()[2])*np.sin(yaxis.center())
@@ -43,6 +45,69 @@ class TestHistogram(unittest.TestCase):
 
         assert_almost_equal(hsy.counts(),cy)
         assert_almost_equal(hsy.var(),cy**2)
+
+        hsx = h.slice(0,-2)
+
+        cx = np.cos(xaxis.center()[-2])*np.sin(yaxis.center())
+
+        assert_almost_equal(hsx.counts(),cx)
+        assert_almost_equal(hsx.var(),cx**2)
+        
+        hsy = h.slice(1,-2)
+
+        cy = np.cos(xaxis.center())*np.sin(yaxis.center()[-2])
+
+        assert_almost_equal(hsy.counts(),cy)
+        assert_almost_equal(hsy.var(),cy**2)
+        
+        # Slice by bin range
+        
+        hsx = h.slice(0,[[2,4]])
+
+        cx = np.cos(xaxis.center()[2:4,np.newaxis])*np.sin(yaxis.center())
+
+        assert_almost_equal(hsx.counts(),cx)
+        assert_almost_equal(hsx.var(),cx**2)
+        
+        hsy = h.slice(1,[[2,4]])
+
+        cy = np.cos(xaxis.center()[:,np.newaxis])* \
+            np.sin(yaxis.center()[np.newaxis,2:4])
+
+        assert_almost_equal(hsy.counts(),cy)
+        assert_almost_equal(hsy.var(),cy**2)
+
+        hsx = h.slice(0,[[2,None]])
+
+        cx = np.cos(xaxis.center()[2:,np.newaxis])*np.sin(yaxis.center())
+
+        assert_almost_equal(hsx.counts(),cx)
+        assert_almost_equal(hsx.var(),cx**2)
+        
+        hsy = h.slice(1,[[2,None]])
+
+        cy = np.cos(xaxis.center()[:,np.newaxis])* \
+            np.sin(yaxis.center()[np.newaxis,2:])
+
+        assert_almost_equal(hsy.counts(),cy)
+        assert_almost_equal(hsy.var(),cy**2)
+
+        hsx = h.slice(0,[[-2,None]])
+
+        cx = np.cos(xaxis.center()[-2:,np.newaxis])*np.sin(yaxis.center())
+
+        assert_almost_equal(hsx.counts(),cx)
+        assert_almost_equal(hsx.var(),cx**2)
+        
+        hsy = h.slice(1,[[-2,None]])
+
+        cy = np.cos(xaxis.center()[:,np.newaxis])* \
+            np.sin(yaxis.center()[np.newaxis,-2:])
+
+        assert_almost_equal(hsy.counts(),cy)
+        assert_almost_equal(hsy.var(),cy**2)
+        
+        # Slice by Value
         
         hsx = h.sliceByValue(0,0.5)
 
@@ -57,8 +122,6 @@ class TestHistogram(unittest.TestCase):
 
         assert_almost_equal(hsy.counts(),cy)
         assert_almost_equal(hsy.var(),cy**2)
-
-
 
     def test_histogram2d_marginalize(self):
 

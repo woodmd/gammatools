@@ -4,6 +4,8 @@ from numpy.testing import assert_array_equal, assert_almost_equal
 from gammatools.core.parameter_set import *
 from gammatools.core.likelihood import *
 from gammatools.core.model_fn import *
+from gammatools.core.histogram import *
+
 
 class TestLikelihood(unittest.TestCase):
 
@@ -83,3 +85,35 @@ class TestLikelihood(unittest.TestCase):
         fitter = MinuitFitter(chi2_fn)
 
         print fitter.fit()
+
+    def test_hist_model_fit(self):
+
+        pset0 = ParameterSet()
+        
+        fn0 = GaussFn.create(100.0,0.0,0.1,pset0)
+        fn1 = GaussFn.create(50.0,1.0,0.1,pset0)
+
+        hm0 = Histogram(Axis.create(-3.0,3.0,100))
+        hm0.fill(hm0.axis().center(),fn0(hm0.axis().center()))
+
+        hm1 = Histogram(Axis.create(-3.0,3.0,100))
+        hm1.fill(hm1.axis().center(),fn1(hm1.axis().center()))
+        
+        hm2 = hm0 + hm1
+        
+        pset1 = ParameterSet()
+        
+        m0 = ScaledHistogramModel.create(hm0,pset=pset1)
+        m1 = ScaledHistogramModel.create(hm1,pset=pset1)
+
+        msum = CompositeSumModel([m0,m1])
+        chi2_fn = Chi2HistFn(hm2,msum)
+        fitter = BFGSFitter(chi2_fn)
+
+        pset1[0].set(1.5)
+        pset1[1].set(0.5)
+        
+        f = fitter.fit(pset1)
+        
+        assert_almost_equal(f[0].value(),1.0,4)
+        assert_almost_equal(f[1].value(),1.0,4)

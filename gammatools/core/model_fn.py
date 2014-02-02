@@ -64,10 +64,7 @@ class Model(ParamFn):
         pset = self.param(True)
         pset.update(p)
 
-        if isinstance(x,dict):
-            x = np.array(x[self._cname],ndmin=1)
-        else:
-            x = np.array(x,ndmin=1)
+        x = np.array(x,ndmin=1)
 
         return self._eval(x,pset)
 
@@ -83,12 +80,8 @@ class Model(ParamFn):
         pset = self.param(True)
         pset.update(p)
 
-        if isinstance(xlo,dict):
-            xlo = np.array(xlo[self._cname],ndmin=1)
-            xhi = np.array(xhi[self._cname],ndmin=1)
-        else:
-            xlo = np.array(xlo,ndmin=1)
-            xhi = np.array(xhi,ndmin=1)
+        xlo = np.array(xlo,ndmin=1)
+        xhi = np.array(xhi,ndmin=1)
 
         return self._integrate(xlo,xhi,pset)
 
@@ -97,10 +90,7 @@ class Model(ParamFn):
         pset = self.param(True)
         pset.update(p)
 
-        if isinstance(edges,dict):
-            edges = np.array(edges[self._cname],ndmin=1)
-        else:
-            edges = np.array(edges,ndmin=1)
+        edges = np.array(edges,ndmin=1)
 
         return self._integrate(edges[:-1],edges[1:],p)
 
@@ -119,6 +109,123 @@ class Model(ParamFn):
     def cdf(self,x,p=None):    
         return self.integrate(np.zeros(shape=x.shape),x,p)
 
+class ScaledHistogramModel(Model):
+
+    def __init__(self,h,pset,name=None):
+        Model.__init__(self,pset,name)
+        self._h = copy.deepcopy(h)
+    
+    @staticmethod
+    def create(h,norm=1.0,pset=None,name=None,prefix=''):
+
+        if pset is None: pset = ParameterSet()
+        p0 = pset.createParameter(norm,prefix + 'norm')
+        return ScaledHistogramModel(h,ParameterSet([p0]),name)        
+
+    def _eval(self,pset):
+        
+        a = pset.array()
+
+        if a.shape[1] > 1: a = a[...,np.newaxis]        
+        return a[0]*self._h.counts()
+
+    def _integrate(self,pset):
+        
+        a = pset.array()
+
+        if a.shape[1] > 1: a = a[...,np.newaxis]        
+        return a[0]*self._h.counts()
+
+#    def histogram(self,edges,pset=None):
+
+#        pset = self.param(True)
+#        pset.update(p)
+
+#        return a[0]*self._h.counts()
+        
+    
+class ScaledModel(Model):
+    def __init__(self,model,pset,expr,name=None):
+        Model.__init__(self,name=name)
+
+#        pset = model.param()
+        par_names = get_parameters(expr)
+        for p in par_names:            
+            self._param.addParameter(pset.getParByName(p))
+        self._param.addSet(model.param())
+        self._model = model
+
+        aliases = {}
+        for k, p in self._param._pars.iteritems():
+            aliases[p.name()] = 'pset[%i]'%(p.pid())
+        expr = expand_aliases(aliases,expr)
+        self._expr = expr
+
+    def eval(self,x,p=None):
+        pset = self.param(True)
+        pset.update(p)
+
+        if self._expr is None: return self._model.eval(x,pset)
+        else: return self._model.eval(x,pset)*eval(self._expr)
+
+    def integrate(self,xlo,xhi,p=None):        
+        pset = self.param(True)
+        pset.update(p)
+
+        if self._expr is None: return self._model.integrate(xlo,xhi,pset)
+        else: return self._model.integrate(xlo,xhi,pset)*eval(self._expr)
+
+class CompositeSumModel(Model):
+
+    def __init__(self,models=None):
+        Model.__init__(self)
+        self._models = []
+
+        if not models is None:
+            for m in models: self.addModel(m)
+        
+    def addModel(self,m):
+        self._models.append(copy.deepcopy(m))
+        self._param.addSet(m.param())
+
+    def _eval(self,x,pset=None):
+
+        s = None
+        for i, m in enumerate(self._models):
+
+            if isinstance(m,ScaledHistogramModel): v = m.eval(pset)            
+            else: v = m.eval(x,pset)
+            
+            if i == 0: s = v
+            else: s += v
+        return s
+            
+    def _integrate(self,xlo,xhi,pset=None):
+
+        s = None
+        for i, m in enumerate(self._models):
+
+            if isinstance(m,ScaledHistogramModel): m.integrate(pset)            
+            else: v = m.integrate(xlo,xhi,pset)
+
+            if i == 0: s = v
+            else: s += v
+        return s
+
+    def histogramComponents(self,edges,p=None):
+
+        hists = []
+        for i, m in enumerate(self._models):
+
+            if isinstance(m,ScaledHistogramModel): c = m.histogram(p)  
+            else: c = m.histogram(edges,p)
+            
+            h = Histogram(edges,label=m.name(),counts=c,var=0)
+            
+            hists.append(h)
+        return hists
+
+    
 def polyval(c,x):
 
     c = np.array(c, ndmin=2, copy=True)
@@ -145,11 +252,21 @@ class GaussFn(Model):
 
 
     @staticmethod
-    def create(norm,mu,sigma):
+    def create(norm,mu,sigma,pset=None):
         
-        pass
+        if pset is None: pset = ParameterSet()
+        p0 = pset.createParameter(norm,'norm')
+        p1 = pset.createParameter(mu,'mu')
+        p2 = pset.createParameter(sigma,'sigma')
+        return GaussFn(ParameterSet([p0,p1,p2]))
 
+    def _eval(self,x,pset):
 
+        a = pset.array()
+        sig2 = a[2]        
+        return a[0]/np.sqrt(2.*np.pi*sig2)*np.exp(-(x-a[1])**2/(2.0*sig2))
+
+    
 class LogParabola(Model):
 
     def __init__(self,pset,name=None):
@@ -168,24 +285,81 @@ class LogParabola(Model):
         pset.createParameter(np.log10(norm),'norm')
         pset.createParameter(alpha,'alpha')
         pset.createParameter(beta,'beta')
-        pset.createParameter(eb,'eb')
+        pset.createParameter(np.log10(eb),'eb')
         return LogParabola(pset)
 
-    
+class PowerLawExp(Model):
+
+    def __init__(self,pset,name=None):
+        Model.__init__(self,pset,name)
+        
+    def _eval(self,x,pset):
+
+        a = pset.array()
+        es = 10**(x-a[3])
+        return 10**a[0]*np.power(es,-a[1])*np.exp(-10**(x-a[2]))
+
+    @staticmethod
+    def create(norm,alpha,ecut,eb):
+
+        pset = ParameterSet()
+        pset.createParameter(np.log10(norm),'norm')
+        pset.createParameter(alpha,'alpha')
+        pset.createParameter(np.log10(ecut),'ecut')
+        pset.createParameter(np.log10(eb),'eb')
+        return PowerLawExp(pset)
+
+class PowerLaw(Model):
+
+    def __init__(self,pset,name=None):
+        Model.__init__(self,pset,name)      
+
+    def _eval(self,x,pset):
+
+        a = pset.array()
+        es = 10**(x-a[2])
+        return 10**a[0]*np.power(es,-a[1])
+
+    def _integrate(self,xlo,xhi,p):
+
+        x = 0.5*(xhi+xlo)
+        dx = xhi-xlo
+
+        a = pset.array()
+        
+        norm = 10**a[0]
+        gamma = a[1]
+        enorm = a[2]
+
+        g1 = -gamma+1
+        return norm/g1*10**(gamma*enorm)*(10**(xhi*g1) - 10**(xlo*g1))
+
+    @staticmethod
+    def create(norm,gamma,eb,pset=None,name=None,prefix=''):
+
+        if pset is None: pset = ParameterSet()
+        p0 = pset.createParameter(np.log10(norm),prefix+'norm')
+        p1 = pset.createParameter(gamma,prefix+'gamma')
+        p2 = pset.createParameter(np.log10(eb),prefix+'eb')
+        return PowerLaw(ParameterSet([p0,p1,p2]),name)
+        
 class PolyFn(Model):
     def __init__(self,pset,name=None):
         Model.__init__(self,pset,name)
         self._nc = pset.npar()
 
     @staticmethod
-    def create(norder,coeff=None,offset=0):
+    def create(norder,coeff=None,pset=None,name=None,prefix=''):
 
-        pset = ParameterSet()
+        if pset is None: pset = ParameterSet()
         if coeff is None: coeff = np.zeros(norder)
-        for i in range(norder):
-            pset.addParameter(Parameter(offset+i,coeff[i],'a%i'%i))
 
-        return PolyFn(pset)
+        pars = []
+        for i in range(norder):
+            p = pset.createParameter(coeff[i],prefix+'a%i'%i)
+            pars.append(p)
+
+        return PolyFn(ParameterSet(pars),name)
 
     def _eval(self,x,pset):
         
@@ -241,3 +415,5 @@ class PolarPolyFn(PolyFn):
             aint[2:] = a/c
             v = np.pi*(polyval(aint,dhi) - polyval(aint,dlo))
             return v
+
+
