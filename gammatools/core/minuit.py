@@ -123,6 +123,10 @@ class Minuit(object):
 
 
         for i in xrange(self.npars):
+
+            if self.limits[i][0] is None: self.limits[i][0] = 0.0
+            if self.limits[i][1] is None: self.limits[i][1] = 0.0
+            
             self.minuit.DefineParameter(i,self.param_names[i],self.params[i],self.steps[i],self.limits[i][0],self.limits[i][1])
 
         self.minuit.SetErrorDef(self.up)

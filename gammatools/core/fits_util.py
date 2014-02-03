@@ -1,0 +1,411 @@
+"""
+@file  fits_util.py
+
+@brief Various utility classes for manipulating FITS data.
+
+@author Matthew Wood       <mdwood@slac.stanford.edu>
+"""
+
+__author__   = "Matthew Wood"
+__date__     = "01/01/2014"
+
+import re
+import copy
+import matplotlib.pyplot as plt
+import pywcsgrid2
+import pywcsgrid2.allsky_axes
+import pywcs
+import numpy as np
+from gammatools.core.algebra import Vector3D
+from gammatools.fermi.catalog import *
+from gammatools.core.util import *
+from gammatools.core.histogram import *
+
+
+from pywcsgrid2.allsky_axes import make_allsky_axes_from_header
+
+def get_circle(ra,dec,rad_deg,n=100):
+    th = np.linspace(np.radians(rad_deg),
+                     np.radians(rad_deg),n)
+    phi = np.linspace(0,2*np.pi,n)
+
+    v = Vector3D.createThetaPhi(th,phi)
+
+    v.rotatey(np.pi/2.-np.radians(dec))
+    v.rotatez(np.radians(ra))
+
+    return np.degrees(v.lon()), np.degrees(v.lat())
+
+class FITSAxis(Axis):
+
+    def __init__(self,header,iaxis,logaxis=False,offset=0.0):
+
+        self._type = header.get('CTYPE'+str(iaxis+1))
+        self._refpix = header.get('CRPIX'+str(iaxis+1))-1
+        self._refval = header.get('CRVAL'+str(iaxis+1))
+        self._delta = header.get('CDELT'+str(iaxis+1)) 
+        self._naxis = header.get('NAXIS'+str(iaxis+1))
+        if logaxis:
+            self._delta = np.log10((self._refval+self._delta)/self._refval)
+            self._refval = np.log10(self._refval)
+
+#        xmin = self._refval+(self._refpix-offset)*self._delta
+#        xmax = self._refval+(self._refpix+self._naxis-offset)*self._delta
+#        if edges is None:
+            
+        edges = np.linspace(0.0,self._naxis,self._naxis+1)
+        
+        if re.search('GLON',self._type) is None and \
+                re.search('GLAT',self._type) is None:
+            self._galcoord = False
+        else:
+            self._galcoord = True
+
+        super(FITSAxis, self).__init__(edges)
+            
+
+    def naxis(self):
+        return self._naxis
+    
+    def pix_to_coord(self,p):
+        return self._refval + (p-self._refpix)*self._delta
+
+    def coord_to_pix(self,x):
+        return self._refpix + (x-self._refval)/self._delta
+
+    def coord_to_index(self,x):
+        pix = self.coord_to_pix(x)
+        index = np.round(pix)
+        return index
+
+    @staticmethod
+    def create_axes(header):
+
+        if 'NAXIS' in header: naxis = header.get('NAXIS')
+        elif 'WCSAXES' in header: naxis = header.get('WCSAXES')
+        
+        axes = []
+        for i in range(naxis):
+            
+            ctype = header.get('CTYPE'+str(i+1))
+
+            if ctype == 'Energy' or ctype == 'photon energy':
+                axes.append(FITSAxis(header,i,logaxis=True))
+            else:
+                axes.append(FITSAxis(header,i))
+
+        return axes
+
+
+class SkyCube(HistogramND):
+
+    def __init__(self,wcs,axes,counts):
+        super(SkyCube, self).__init__([axes],counts=counts,var=counts)
+        self._wcs = wcs
+
+    def get_spectrum(self,lon,lat):
+
+        xy = self._wcs.wcs_sky2pix(lon,lat, 0)
+        ilon = np.round(xy[0][0])
+        ilat = np.round(xy[1][0])
+
+        ilon = min(max(0,ilon),self._axes[0]._naxis-1)
+        ilat = min(max(0,ilat),self._axes[1]._naxis-1)
+
+        c = self._counts.T[ilon,ilat,:]
+        edges = self._axes[2].edges()
+        return Histogram.createFromArray(edges,c)
+
+
+    def plot_energy_slices(self,rebin=4,logz=False):
+
+        frame_per_fig = 1
+        nx = 1
+        ny = 1
+
+        plt.figure()
+        
+        images = self.get_energy_slices(rebin)
+        for i, im in enumerate(images):
+            subplot = '%i%i%i'%(nx,ny,i%frame_per_fig+1)
+
+#            im = im.smooth(0.1)
+            
+            im.plot(subplot=subplot,logz=logz)
+
+            break
+#            im.plot_catalog()
+#            im.plot_circle(2.0)
+    
+    def get_energy_slices(self,rebin=2):
+
+        nslice = int(np.ceil(self._axes[2].naxis()/float(rebin)))
+
+        print self._axes[2].naxis(), rebin, nslice
+        
+        images = []
+        
+        for i in range(nslice):
+
+            ilo = i*rebin
+            ihi = min((i+1)*rebin,self._axes[2].naxis())
+
+            print i, ilo, ihi
+            
+            counts = np.sum(self._counts[ilo:ihi],axis=0)
+            image = SkyImage(self._wcs,self._axes[:2],counts)
+            images.append(image)
+
+        return images
+    
+    def energy_slice(self,ibin):
+
+        counts = np.sum(self._counts[ibin:ibin+1],axis=0)
+        return SkyImage(self._wcs,self._axes[:2],counts)
+        
+    def marginalize(self,emin,emax):
+
+        ebins = self._axes[2].edges()
+        imin = np.argmin(np.abs(emin-ebins))
+        imax = np.argmin(np.abs(emax-ebins))
+
+        print imin, imax
+
+        print self._counts.shape
+        
+        counts = np.sum(self._counts[imin:imax+1],axis=0)
+
+        print counts.shape
+        
+        return SkyImage(self._wcs,self._axes[:2],counts)
+        
+    def get_integrated_map(self,emin,emax):
+        
+        ebins = self._axes[2].edges()
+
+        loge = 0.5*(ebins[1:] + ebins[:-1])
+        dloge = ebins[1:] - ebins[:-1]
+
+        imin = np.argmin(np.abs(emin-ebins))
+        imax = np.argmin(np.abs(emax-ebins))
+
+
+
+        edloge = 10**loge[imin:imax+1]*dloge[imin:imax+1]
+
+        counts = np.sum(self._counts[imin:imax+1].T*edloge*np.log(10.),
+                        axis=2)
+
+        return SkyImage(self._wcs,self._axes[:2],counts)
+
+    def fill(self,loge,lon,lat):
+
+        pass
+        
+    @staticmethod
+    def createFromFITS(fitsfile,ihdu=0):
+        
+        hdu = pyfits.open(fitsfile)
+        
+        header = hdu[ihdu].header
+        wcs = pywcs.WCS(header,naxis=[1,2],relax=True)
+#        wcs1 = pywcs.WCS(header,naxis=[3])
+        
+        axes = copy.deepcopy(FITSAxis.create_axes(header))
+        
+        return SkyCube(wcs,axes,copy.deepcopy(hdu[ihdu].data.astype(float)))
+
+class SkyImage(Histogram2D):
+
+    def __init__(self,wcs,axes,counts,roi_radius_deg=180.):
+
+        self._wcs = wcs
+        self._header = self._wcs.to_header(True)
+        
+        self._ra = self._header['CRVAL1']
+        self._dec = self._header['CRVAL2']
+                        
+        self._roi_radius = roi_radius_deg
+        
+        super(SkyImage, self).__init__(axes[0],axes[1],counts=counts,var=counts)
+
+    def __getnewargs__(self):
+
+        self._wcs = pywcs.WCS(self._header)
+        return ()
+#        return (self._wcs,self._counts,self._ra,self._dec,self._roi_radius)
+
+    @staticmethod
+    def createFromTree(tree,lon,lat,lon_var,lat_var,roi_radius_deg,cut='',
+                       bin_size_deg=0.2,coordsys='cel'):
+
+        im = SkyImage.createROI(lon,lat,roi_radius_deg,bin_size_deg,coordsys)        
+        im.fill(get_vector(tree,lon_var,cut=cut),
+                get_vector(tree,lat_var,cut=cut))
+        return im
+    
+    @staticmethod
+    def createFromFITS(fitsfile,ihdu=0):
+        
+        hdu = pyfits.open(fitsfile)
+        
+        header = hdu[ihdu].header
+        wcs = pywcs.WCS(header,relax=True)
+        axes = copy.deepcopy(FITSAxis.create_axes(header))
+        
+        return SkyImage(wcs,axes,copy.deepcopy(hdu[ihdu].data.astype(float).T))
+        
+    @staticmethod
+    def createROI(ra,dec,roi_radius_deg,bin_size_deg=0.2,coordsys='cel'):
+        nbin = np.ceil(2.0*roi_radius_deg/bin_size_deg)
+        deg_to_pix = bin_size_deg
+        wcs = pywcs.WCS(naxis=2)
+
+        wcs.wcs.crpix = [nbin/2.+0.5, nbin/2.+0.5]
+        wcs.wcs.cdelt = np.array([-deg_to_pix,deg_to_pix])
+        wcs.wcs.crval = [ra, dec]
+        
+        if coordsys == 'cel': wcs.wcs.ctype = ["RA---AIT", "DEC--AIT"]
+        else: wcs.wcs.ctype = ["GLON-AIT", "GLAT-AIT"]            
+        wcs.wcs.equinox = 2000.0
+
+        header = wcs.to_header(True)
+        header['NAXIS1'] = nbin
+        header['NAXIS2'] = nbin
+        
+        axes = FITSAxis.create_axes(header)
+        im = SkyImage(wcs,axes,np.zeros(shape=(nbin,nbin)),roi_radius_deg)
+        return im
+
+#        lon, lat = get_circle(ra,dec,roi_radius_deg)
+#        xy =  wcs.wcs_sky2pix(lon, lat, 0)
+
+#        xmin = np.min(xy[0])
+#        xmax = np.max(xy[0])
+
+#        if roi_radius_deg >= 90.:
+#            xypole0 = wcs.wcs_sky2pix(0.0, -90.0, 0)
+#            xypole1 = wcs.wcs_sky2pix(0.0, 90.0, 0)
+#            ymin = xypole0[1]
+#            ymax = xypole1[1]
+#        else:
+#            ymin = np.min(xy[1])
+#            ymax = np.max(xy[1])
+    
+    def fill(self,lon,lat):
+
+        pixcrd = self._wcs.wcs_sky2pix(lon,lat, 0)
+        super(SkyImage,self).fill(pixcrd[0],pixcrd[1])
+
+    def interpolate(self,lon,lat):
+        
+        pixcrd = self._wcs.wcs_sky2pix(lon, lat, 0)
+        return interpolate2d(self._xedge,self._yedge,self._counts,
+                             *pixcrd)
+
+    def smooth(self,sigma):
+        sigma /= np.abs(self._axes[0]._delta)
+        
+        from scipy import ndimage
+
+        im = copy.deepcopy(self)
+        im._counts = ndimage.gaussian_filter(self._counts, sigma=sigma,
+                                             mode='nearest')
+
+        return im
+
+    def plot_catalog(self,src_color='w',marker_threshold=10,label_threshold=20.):
+        
+        if self._axes[0]._galcoord:
+            ra, dec = gal2eq(self._ra,self._dec)
+        else:
+            ra, dec = self._ra, self._dec
+            
+        cat = Catalog()
+        srcs = cat.get_source_by_position(ra,dec,self._roi_radius)
+
+        src_lon = []
+        src_lat = []
+
+        labels = []
+        signif_avg = []
+        
+        for s in srcs:
+            
+            src_lon.append(s['RAJ2000'])
+            src_lat.append(s['DEJ2000'])
+            labels.append(s['Source_Name'])
+            signif_avg.append(s['Signif_Avg'])
+        
+        if self._axes[0]._galcoord:
+            src_lon, src_lat = eq2gal(src_lon,src_lat)
+            
+            
+        pixcrd = self._wcs.wcs_sky2pix(src_lon,src_lat, 0)
+
+        for i in range(len(labels)):
+
+            if signif_avg[i] > label_threshold:             
+                plt.gca().text(pixcrd[0][i],pixcrd[1][i],labels[i],
+                               color=src_color,size=8,clip_on=True)
+
+            if signif_avg[i] > marker_threshold:            
+                plt.gca().plot(pixcrd[0][i],pixcrd[1][i],linestyle='None',marker='+',
+                               color='g', markerfacecolor = 'None',
+                               markeredgecolor=src_color,clip_on=True)
+        
+        plt.gca().set_xlim(self.axis(0).lo_edge(),self.axis(0).hi_edge())
+        plt.gca().set_ylim(self.axis(1).lo_edge(),self.axis(1).hi_edge())
+                    
+    def plot_circle(self,rad_deg,radec=None,**kwargs):
+
+        if radec is None: radec = (self._ra,self._dec)
+
+        lon,lat = get_circle(radec[0],radec[1],rad_deg)
+        xy =  self._wcs.wcs_sky2pix(lon,lat, 0)
+        plt.gca().plot(xy[0],xy[1],**kwargs)
+
+        plt.gca().set_xlim(self.axis(0).lo_edge(),self.axis(0).hi_edge())
+        plt.gca().set_ylim(self.axis(1).lo_edge(),self.axis(1).hi_edge())    
+
+    def plot(self,subplot=111,logz=False,show_catalog=False,**kwargs):
+
+        from matplotlib.colors import NoNorm, LogNorm, Normalize
+
+        if logz: norm = LogNorm()
+        else: norm = Normalize()
+
+        ax = pywcsgrid2.subplot(subplot, header=self._wcs.to_header())
+#        ax = pywcsgrid2.axes(header=self._wcs.to_header())
+#        ax = make_allsky_axes_from_header(plt.gcf(), rect=111,
+#                                          header=self._wcs.to_header(True),
+#                                          lon_center=0.)
+
+
+        im = ax.imshow(self._counts.T,#np.power(self._counts.T,1./3.),
+                       interpolation='nearest',origin='lower',norm=norm,
+                       extent=[self.axis(0).edges()[0],self.axis(0).edges()[-1],
+                               self.axis(1).edges()[0],self.axis(1).edges()[-1]])
+
+#        norm=LogNorm()
+        
+        ax.set_ticklabel_type("d", "d")
+
+        if self._axes[0]._galcoord:
+            ax.set_xlabel('GLON')
+            ax.set_ylabel('GLAT')
+        else:        
+            ax.set_xlabel('RA')
+            ax.set_ylabel('DEC')
+
+        plt.colorbar(im)
+        ax.grid()
+
+        if show_catalog: self.plot_catalog(**kwargs)
+        
+#        ax.add_compass(loc=1)
+#       
+#        ax.set_display_coord_system("gal")       
+ #       ax.locator_params(axis="x", nbins=12)
+
+        return ax

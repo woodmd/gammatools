@@ -484,6 +484,18 @@ class Axis(object):
         self._width = 2*self._err
 
     @staticmethod
+    def createFromDict(d):
+
+        c = copy.deepcopy(d)
+
+        if not 'label' in c: c['label'] = None
+        
+        if 'edges' in c: return Axis(c['edges'],label=c['label'])
+        elif 'lo' in c: return Axis.create(c['lo'],c['hi'],c['nbin'],
+                                           label=c['label'])
+
+        
+    @staticmethod
     def create(lo,hi,nbin,label=None):
         return Axis(np.linspace(lo,hi,nbin+1),label=label)
 

@@ -5,7 +5,21 @@ from gammatools.core.histogram import *
 
 
 class TestHistogram(unittest.TestCase):
-    
+
+    def test_axis_init(self):
+
+        edges = np.linspace(0,1,11)
+        
+        # Initialize from edge array
+
+        # Initialize from python dictionary
+
+        axis = Axis.createFromDict({'edges' : edges})
+        assert_almost_equal(axis.edges(),edges)
+
+        axis = Axis.createFromDict({'lo' : 0.0, 'hi' : 1.0, 'nbin' : 10})
+        assert_almost_equal(axis.edges(),edges)
+        
     def test_histogram_init(self):
 
         axis = Axis(np.linspace(0,1,6))

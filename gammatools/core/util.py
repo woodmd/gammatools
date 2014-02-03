@@ -482,6 +482,9 @@ def gc2gal(phi,th):
 
 def gal2eq(l, b):
 
+    l = np.array(l,ndmin=1)
+    b = np.array(b,ndmin=1)
+    
     l = np.radians(l)
     b = np.radians(b)
 
@@ -507,8 +510,11 @@ def gal2eq(l, b):
 
 def eq2gal(ra, dec):
 
+    ra = np.array(ra,ndmin=1)
+    dec = np.array(dec,ndmin=1)
+    
     ra, dec = np.radians(ra), np.radians(dec)
-
+    
     np.sinb = np.sin(dec) * np.cos(DEC_0) - np.cos(dec) * np.sin(ra - RA_0) * np.sin(DEC_0)
 
     b = np.arcsin(np.sinb)

@@ -24,9 +24,9 @@ import copy
 def latlon_to_xyz(lat,lon):
     phi = lon
     theta = np.pi/2.-lat
-    return [np.sin(theta)*np.cos(phi),
-            np.sin(theta)*np.sin(phi),
-            np.cos(theta)]
+    return np.array([np.sin(theta)*np.cos(phi),
+                     np.sin(theta)*np.sin(phi),
+                     np.cos(theta)]).T
 
 
 class CatalogSource(object):
@@ -113,10 +113,9 @@ class Catalog(object):
             print 'No Source with name found: ', name
             sys.exit(1)
 
-    def get_source_by_radec(self,ra,dec,radius):
-
+    def get_source_by_position(self,ra,dec,radius):
+        
         x = latlon_to_xyz(np.radians(dec),np.radians(ra))
-
         costh = np.sum(x*self._src_radec,axis=1)        
         costh[costh>1.0] = 1.0
         msk = np.where(np.arccos(costh) < np.radians(radius))[0]
