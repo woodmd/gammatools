@@ -11,7 +11,7 @@ class Vector3D(object):
     def separation(self,v):      
         costh = np.sum((self._x.T*v._x.T).T,axis=0)        
         return np.arccos(costh)
-        
+    
     def norm(self):
         return np.sqrt(np.sum(self._x*self._x,axis=0))
 

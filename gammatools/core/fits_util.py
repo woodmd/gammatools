@@ -38,19 +38,19 @@ def get_circle(ra,dec,rad_deg,n=100):
 
 class FITSAxis(Axis):
 
-    def __init__(self,header,iaxis,logaxis=False,offset=0.0):
+    def __init__(self,ctype,crpix,crval,cdelt,naxis,logaxis=False,offset=0.0):
 
-        self._type = header.get('CTYPE'+str(iaxis+1))
-        self._refpix = header.get('CRPIX'+str(iaxis+1))-1
-        self._refval = header.get('CRVAL'+str(iaxis+1))
-        self._delta = header.get('CDELT'+str(iaxis+1)) 
-        self._naxis = header.get('NAXIS'+str(iaxis+1))
+        self._type = ctype
+        self._crpix = crpix
+        self._crval = crval
+        self._delta = cdelt
+        self._naxis = naxis
         if logaxis:
-            self._delta = np.log10((self._refval+self._delta)/self._refval)
-            self._refval = np.log10(self._refval)
+            self._delta = np.log10((self._crval+self._delta)/self._crval)
+            self._crval = np.log10(self._crval)
 
-#        xmin = self._refval+(self._refpix-offset)*self._delta
-#        xmax = self._refval+(self._refpix+self._naxis-offset)*self._delta
+#        xmin = self._crval+(self._crpix-offset)*self._delta
+#        xmax = self._crval+(self._crpix+self._naxis-offset)*self._delta
 #        if edges is None:
             
         edges = np.linspace(0.0,self._naxis,self._naxis+1)
@@ -68,16 +68,29 @@ class FITSAxis(Axis):
         return self._naxis
     
     def pix_to_coord(self,p):
-        return self._refval + (p-self._refpix)*self._delta
+        return self._crval + (p-self._crpix)*self._delta
 
     def coord_to_pix(self,x):
-        return self._refpix + (x-self._refval)/self._delta
+        return self._crpix + (x-self._crval)/self._delta
 
     def coord_to_index(self,x):
         pix = self.coord_to_pix(x)
         index = np.round(pix)
         return index
 
+    @staticmethod
+    def create_from_axis(ctype,axis):
+        return FITSAxis(ctype,0,axis.lo_edge(),axis.width()[0],axis.nbins())
+    
+    @staticmethod
+    def create_from_header(header,iaxis,logaxis=False,offset=0.0):
+        return FITSAxis(header.get('CTYPE'+str(iaxis+1)),
+                        header.get('CRPIX'+str(iaxis+1))-1,
+                        header.get('CRVAL'+str(iaxis+1)),
+                        header.get('CDELT'+str(iaxis+1)),
+                        header.get('NAXIS'+str(iaxis+1)),
+                        logaxis,offset)
+    
     @staticmethod
     def create_axes(header):
 
@@ -88,21 +101,44 @@ class FITSAxis(Axis):
         for i in range(naxis):
             
             ctype = header.get('CTYPE'+str(i+1))
-
             if ctype == 'Energy' or ctype == 'photon energy':
-                axes.append(FITSAxis(header,i,logaxis=True))
+                axis = FITSAxis.create_from_header(header,i,logaxis=True)
             else:
-                axes.append(FITSAxis(header,i))
+                axis = FITSAxis.create_from_header(header,i)
+
+            axes.append(axis)
 
         return axes
 
 
 class SkyCube(HistogramND):
 
-    def __init__(self,wcs,axes,counts):
-        super(SkyCube, self).__init__([axes],counts=counts,var=counts)
+    def __init__(self,wcs,axes,counts=None):
+        super(SkyCube, self).__init__(axes,counts=counts,var=counts)
         self._wcs = wcs
 
+    def slice(self,sdims,dim_index):
+
+        h = HistogramND.slice(self,sdims,dim_index)
+        if h.ndim() == 3:
+            return SkyCube(self._wcs,h.axes(),h.counts())
+        elif h.ndim() == 2:        
+            return SkyImage(self._wcs,h.axes(),h.counts())
+        else:
+            return h
+
+    def project(self,pdims,bin_range=None):
+
+        h = HistogramND.project(self,pdims,bin_range)
+        if h.ndim() == 2:
+            return SkyImage(self._wcs,h.axes(),h.counts())
+
+    def marginalize(self,mdims,bin_range=None):
+
+        mdims = np.array(mdims,ndmin=1,copy=True)
+        pdims = np.setdiff1d(self._dims,mdims)
+        return self.project(pdims,bin_range)
+        
     def get_spectrum(self,lon,lat):
 
         xy = self._wcs.wcs_sky2pix(lon,lat, 0)
@@ -140,8 +176,6 @@ class SkyCube(HistogramND):
     def get_energy_slices(self,rebin=2):
 
         nslice = int(np.ceil(self._axes[2].naxis()/float(rebin)))
-
-        print self._axes[2].naxis(), rebin, nslice
         
         images = []
         
@@ -163,22 +197,8 @@ class SkyCube(HistogramND):
         counts = np.sum(self._counts[ibin:ibin+1],axis=0)
         return SkyImage(self._wcs,self._axes[:2],counts)
         
-    def marginalize(self,emin,emax):
-
-        ebins = self._axes[2].edges()
-        imin = np.argmin(np.abs(emin-ebins))
-        imax = np.argmin(np.abs(emax-ebins))
-
-        print imin, imax
-
-        print self._counts.shape
-        
-        counts = np.sum(self._counts[imin:imax+1],axis=0)
-
-        print counts.shape
-        
-        return SkyImage(self._wcs,self._axes[:2],counts)
-        
+    
+                
     def get_integrated_map(self,emin,emax):
         
         ebins = self._axes[2].edges()
@@ -198,10 +218,12 @@ class SkyCube(HistogramND):
 
         return SkyImage(self._wcs,self._axes[:2],counts)
 
-    def fill(self,loge,lon,lat):
+    def fill(self,lon,lat,loge):
 
-        pass
-        
+        pixcrd = self._wcs.wcs_sky2pix(lon,lat, 0)
+        ecrd = self._axes[2].coord_to_pix(loge)
+        super(SkyCube,self).fill(np.vstack((pixcrd[0],pixcrd[1],ecrd)))
+            
     @staticmethod
     def createFromFITS(fitsfile,ihdu=0):
         
@@ -212,9 +234,32 @@ class SkyCube(HistogramND):
 #        wcs1 = pywcs.WCS(header,naxis=[3])
         
         axes = copy.deepcopy(FITSAxis.create_axes(header))
-        
-        return SkyCube(wcs,axes,copy.deepcopy(hdu[ihdu].data.astype(float)))
+        return SkyCube(wcs,axes,copy.deepcopy(hdu[ihdu].data.astype(float).T))
 
+    @staticmethod
+    def createFromTree(tree,lon,lat,lon_var,lat_var,egy_var,roi_radius_deg,
+                       energy_axis,cut='',bin_size_deg=0.2,coordsys='cel'):
+
+        im = SkyCube.createROI(lon,lat,roi_radius_deg,energy_axis,bin_size_deg,coordsys)        
+        im.fill(get_vector(tree,lon_var,cut=cut),
+                get_vector(tree,lat_var,cut=cut),
+                get_vector(tree,egy_var,cut=cut))
+        return im
+    
+    @staticmethod
+    def createROI(ra,dec,roi_radius_deg,energy_axis,
+                  bin_size_deg=0.2,coordsys='cel'):
+
+        nbin = np.ceil(2.0*roi_radius_deg/bin_size_deg)
+        
+        wcs = SkyImage.createWCS(ra,dec,roi_radius_deg,bin_size_deg,coordsys)
+        header = wcs.to_header(True)
+        header['NAXIS1'] = nbin
+        header['NAXIS2'] = nbin
+        axes = FITSAxis.create_axes(header)
+        axes.append(FITSAxis.create_from_axis('Energy',energy_axis))
+        return SkyCube(wcs,axes)
+    
 class SkyImage(Histogram2D):
 
     def __init__(self,wcs,axes,counts,roi_radius_deg=180.):
@@ -254,9 +299,9 @@ class SkyImage(Histogram2D):
         axes = copy.deepcopy(FITSAxis.create_axes(header))
         
         return SkyImage(wcs,axes,copy.deepcopy(hdu[ihdu].data.astype(float).T))
-        
+
     @staticmethod
-    def createROI(ra,dec,roi_radius_deg,bin_size_deg=0.2,coordsys='cel'):
+    def createWCS(ra,dec,roi_radius_deg,bin_size_deg=0.2,coordsys='cel'):
         nbin = np.ceil(2.0*roi_radius_deg/bin_size_deg)
         deg_to_pix = bin_size_deg
         wcs = pywcs.WCS(naxis=2)
@@ -268,6 +313,12 @@ class SkyImage(Histogram2D):
         if coordsys == 'cel': wcs.wcs.ctype = ["RA---AIT", "DEC--AIT"]
         else: wcs.wcs.ctype = ["GLON-AIT", "GLAT-AIT"]            
         wcs.wcs.equinox = 2000.0
+        return wcs
+                
+    @staticmethod
+    def createROI(ra,dec,roi_radius_deg,bin_size_deg=0.2,coordsys='cel'):
+        nbin = np.ceil(2.0*roi_radius_deg/bin_size_deg)
+        wcs = SkyImage.createWCS(ra,dec,roi_radius_deg,bin_size_deg,coordsys)
 
         header = wcs.to_header(True)
         header['NAXIS1'] = nbin
@@ -314,7 +365,8 @@ class SkyImage(Histogram2D):
 
         return im
 
-    def plot_catalog(self,src_color='w',marker_threshold=10,label_threshold=20.):
+    def plot_catalog(self,src_color='w',marker_threshold=10,
+                     label_threshold=20.):
         
         if self._axes[0]._galcoord:
             ra, dec = gal2eq(self._ra,self._dec)
@@ -368,6 +420,22 @@ class SkyImage(Histogram2D):
         plt.gca().set_xlim(self.axis(0).lo_edge(),self.axis(0).hi_edge())
         plt.gca().set_ylim(self.axis(1).lo_edge(),self.axis(1).hi_edge())    
 
+
+    def plot2(self,logz=False):
+
+        ax = plt.subplot(111,projection='hammer')
+
+        if logz: norm = LogNorm()
+        else: norm = Normalize()
+        
+        im = ax.imshow(self._counts.T,#np.power(self._counts.T,1./3.),
+                       interpolation='nearest',origin='lower',norm=norm,
+                              extent=[np.radians(-180.),np.radians(180),np.radians(-90),np.radians(90)])
+                      # extent=[self.axis(0).edges()[0],self.axis(0).edges()[-1],
+                      #         self.axis(1).edges()[0],self.axis(1).edges()[-1]])
+
+        plt.gca().grid(True)
+        
     def plot(self,subplot=111,logz=False,show_catalog=False,**kwargs):
 
         from matplotlib.colors import NoNorm, LogNorm, Normalize

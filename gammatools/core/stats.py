@@ -326,7 +326,7 @@ class HistQuantile(object):
         ncounts_cum = np.cumsum(ncounts)
         ncounts_tot = ncounts_cum[-1]
 
-        fn_ncdf = UnivariateSpline(edges,ncounts_cum,s=0,k=2)
+        fn_ncdf = UnivariateSpline(edges,ncounts_cum,s=0,k=1)
 
         return opt.brentq(lambda t: fn_ncdf(t)-ncounts_tot*fraction,
                           edges[0],edges[-1])
@@ -339,7 +339,7 @@ class HistQuantile(object):
         
         counts = np.concatenate(([0],h._counts))
         counts_cum = np.cumsum(counts)
-        fn_ncdf = UnivariateSpline(h.edges(),counts_cum,s=0,k=2)
+        fn_ncdf = UnivariateSpline(h.edges(),counts_cum,s=0,k=1)
         return fn_ncdf(x)
 
         
@@ -349,8 +349,7 @@ class HistQuantile(object):
         ncounts_cum = np.cumsum(ncounts)
         ncounts_tot = ncounts_cum[-1]
 
-        fn_ncdf = UnivariateSpline(self._x,ncounts_cum,s=0)
-
+        fn_ncdf = UnivariateSpline(self._x,ncounts_cum,s=0,k=1)        
         xq = opt.brentq(lambda t: fn_ncdf(t)-ncounts_tot*fraction,
                         self._x[0],self._x[-1])
 

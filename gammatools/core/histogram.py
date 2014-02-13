@@ -178,8 +178,6 @@ class HistogramND(object):
     def quantile(self,dim,fraction=0.5):
 
         sdims = np.setdiff1d(self._dims,[dim])
-
-        print dim, sdims
         
         axes = []
         for i in self._dims:
@@ -325,7 +323,9 @@ class HistogramND(object):
 
         o = copy.deepcopy(self)
 
-        if isinstance(x, HistogramND):
+        if x is None:
+            return o
+        elif isinstance(x, HistogramND):
             o._counts += x._counts
             o._var += x._var
         else:
@@ -1533,8 +1533,6 @@ class Histogram2D(HistogramND):
 
         clear_dict_by_keys(style,Histogram2D.default_pcolor_style.keys(),False)
 
-        print xedge.flat[0], xedge.flat[-1], yedge.flat[0], yedge.flat[-1]
-        
         p = plt.pcolormesh(xedge,yedge,self._counts.T,norm=norm,
                            **style)
 

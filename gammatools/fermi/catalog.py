@@ -17,7 +17,7 @@ import numpy as np
 import sys
 import pyfits
 import os
-#from algebra import Vector3D
+from gammatools.core.algebra import Vector3D
 import yaml
 import copy
 
@@ -35,6 +35,16 @@ class CatalogSource(object):
 
         self.__dict__.update(data)
 
+        self._cel_vec = Vector3D.createLatLon(np.radians(self.DEJ2000),
+                                              np.radians(self.RAJ2000))
+
+        self._gal_vec = Vector3D.createLatLon(np.radians(self.GLAT),
+                                              np.radians(self.GLON))
+        
+        #[np.sin(theta)*np.cos(phi),
+        #                     np.sin(theta)*np.sin(phi),
+        #                     np.cos(theta)]
+        
         self._names = []
         for k in Catalog.src_name_cols:
 
@@ -62,11 +72,11 @@ class CatalogSource(object):
         dec = np.radians(self.DEJ2000)
         ra = np.radians(self.RAJ2000)
 
-        cut = 'acos(sin(%.8f)*sin(FT1Dec*%.8f)'%(dec,np.pi/180.)
+        cut = '(acos(sin(%.8f)*sin(FT1Dec*%.8f)'%(dec,np.pi/180.)
         cut += '+ cos(%.8f)'%(dec)
-        cut += '*cos(FT1Dec*%.8f)*'%(np.pi/180.)
+        cut += '*cos(FT1Dec*%.8f)'%(np.pi/180.)
         cut += '*cos(%.8f-FT1Ra*%.8f))'%(ra,np.pi/180.)
-        cut += ' < %.8f'%(np.radians(radius))
+        cut += ' < %.8f)'%(np.radians(radius))
         return cut
 
     def __str__(self):
@@ -123,6 +133,9 @@ class Catalog(object):
         srcs = [ self._src_data[i] for i in msk]
         return srcs
 
+    def sources(self):
+
+        return self._src_data
 
     @staticmethod
     def load_from_fits(fitsfile):

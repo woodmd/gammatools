@@ -120,6 +120,24 @@ class ScaledHistogramModel(Model):
         p0 = pset.createParameter(norm,prefix + 'norm')
         return ScaledHistogramModel(h,ParameterSet([p0]),name)        
 
+    def var(self,p):
+
+        pset = self.param(True)
+        pset.update(p)
+        
+        a = pset.array()
+        if a.shape[1] > 1: a = a[...,np.newaxis]        
+        return a[0]**2*self._h.var()
+
+    def counts(self,p):
+
+        pset = self.param(True)
+        pset.update(p)
+        
+        a = pset.array()
+        if a.shape[1] > 1: a = a[...,np.newaxis]        
+        return a[0]*self._h.counts()
+    
     def _eval(self,x,pset):
         
         a = pset.array()
@@ -176,6 +194,28 @@ class CompositeSumModel(Model):
         self._models.append(copy.deepcopy(m))
         self._param.addSet(m.param())
 
+    def counts(self,pset=None):
+
+        s = None
+        for i, m in enumerate(self._models):
+
+            v = m.counts(pset)
+            
+            if i == 0: s = v
+            else: s += v
+        return s
+
+    def var(self,pset=None):
+
+        s = None
+        for i, m in enumerate(self._models):
+
+            v = m.var(pset)
+            
+            if i == 0: s = v
+            else: s += v
+        return s
+        
     def _eval(self,x,pset=None):
 
         s = None

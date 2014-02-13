@@ -170,19 +170,15 @@ class Chi2HistFn(ParamFn):
         pset = self._model.param(True)
         pset.update(p)
 
-        fv = self._model.histogram(self._h.edges(),pset)
+        fv = self._model.counts(pset)
+        fvar = self._model.var(pset)
 
-#        print 'fv ', fv.shape
-#        print fv
-
-        var = self._h.var()
+        var = self._h.var() + fvar
         ivar = np.zeros(shape=var.shape)
         ivar[var>0] = 1./var[var>0]
         
         delta2 = (self._h.counts()-fv)**2
         v = delta2*ivar
-
-#        print 'v.shape ', v.shape
         
         if v.ndim == 2:
             return np.sum(v,axis=1)
