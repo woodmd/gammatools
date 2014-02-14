@@ -136,36 +136,6 @@ def rebin(x,n):
 
     return z
 
-
-class Detector(object):
-    def __init__(self,f):
-
-        self._cols = []
-
-        for line in open(f):
-            line = line.rstrip()
-            m = re.search('#!',line)
-            if m is None: continue
-            else:
-                self._cols = line.split()[1:]
-
-        d = np.loadtxt(f,unpack=True)
-
-        v = {}
-
-        for i in range(len(d)):
-            v[self._cols[i]] = d[i]
-
-        self.__dict__.update(v)
-
-        self.loge_edges = np.linspace(self.emin[0],self.emax[-1],
-                                       len(self.emin)+1)
-
-#        self._ebins = np.concatenate((self._emin,self._emax[-1]))
-#        print self.__dict__
-
-    
-
 class DMChanSpectrum(object):
     """Class that computes the differential annihilation yield for
     different DM channels.  Interpolates a set of tabulated values

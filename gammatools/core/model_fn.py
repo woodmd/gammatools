@@ -11,6 +11,7 @@ __author__   = "Matthew Wood <mdwood@slac.stanford.edu>"
 import numpy as np
 import copy
 import re
+import abc
 from scipy.interpolate import UnivariateSpline
 from histogram import Histogram
 from util import expand_aliases, get_parameters
@@ -50,8 +51,9 @@ class ParamFn(object):
         """Update the parameters."""
         self._param.update(pset)
 
-class Model(ParamFn):
-    
+class Model(ParamFn):    
+    __metaclass__  = abc.ABCMeta
+
     def __init__(self, pset=None, name=None):
         ParamFn.__init__(self,pset,name)
 
@@ -66,6 +68,10 @@ class Model(ParamFn):
         x = np.array(x,ndmin=1)
 
         return self._eval(x,pset)
+    
+    @abc.abstractmethod
+    def _eval(self,x,p):
+        pass
 
     def set_norm(self,norm,xlo,xhi):
 
@@ -84,6 +90,12 @@ class Model(ParamFn):
 
         return self._integrate(xlo,xhi,pset)
 
+    def _integrate(self,xlo,xhi,p):
+
+        w = xhi-xlo
+        xc = 0.5*(xhi+xlo)
+        return w*self._eval(xc,p)
+
     def histogram(self,edges,p=None):
         
         pset = self.param(True)
@@ -91,6 +103,11 @@ class Model(ParamFn):
         edges = np.array(edges,ndmin=1)
 
         return self._integrate(edges[:-1],edges[1:],pset)
+
+    def create_histogram(self,axis,p=None):
+
+        c = self.histogram(axis.edges(),p)
+        return Histogram(axis,counts=c,var=0)
 
     def rnd(self,n,xmin,xmax,p=None):
 
@@ -285,12 +302,24 @@ class GaussFn(Model):
         return GaussFn(ParameterSet([p0,p1,p2]))
 
     def _eval(self,x,pset):
+        return self.evals(x,pset.array())
 
-        a = pset.array()
-        sig2 = a[2]        
+    @staticmethod
+    def evals(x,a):
+        sig2 = a[2]**2        
         return a[0]/np.sqrt(2.*np.pi*sig2)*np.exp(-(x-a[1])**2/(2.0*sig2))
-
     
+class SpectralModel(Model):
+
+    def flux(self,x,pset):
+        return self._eval(x,pset)
+    
+    def eflux(self,x,pset):
+        return 10**x*self._eval(x,pset)
+
+    def e2flux(self,x,pset):
+        return 10**(2*x)*self._eval(x,pset)
+
 class LogParabola(Model):
 
     def __init__(self,pset,name=None):

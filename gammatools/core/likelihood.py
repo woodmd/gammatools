@@ -123,6 +123,45 @@ class FitResults(ParameterSet):
 
         return os
 
+def chi2(y,var,fy,fvar=None):
+    tvar = var 
+    if not fvar is None: tvar += fvar
+    ivar = np.zeros(shape=var.shape)
+    ivar[var>0] = 1./tvar[tvar>0]
+        
+    delta2 = (y-fy)**2
+    return delta2*ivar
+
+class BinnedChi2Fn(ParamFn):
+
+    def __init__(self,h,model):
+        ParamFn.__init__(self,model.param())
+        self._h = h
+        self._model = model
+
+    def __call__(self,p):
+        return self.eval(p)
+            
+    def eval(self,p):
+
+        pset = self._model.param(True)
+        pset.update(p)
+
+        fv = self._model.histogram(self._h.edges(),pset)
+
+        v = chi2(self._h.counts(),self._h.var(),fv)
+             
+#        var = self._h.var()
+#        delta2 = (self._h.counts()-fv)**2
+#        v = delta2/var
+
+        if v.ndim == 2:
+            s = np.sum(v,axis=1)
+        else:
+            s = np.sum(v)
+
+        return s
+
 class Chi2Fn(ParamFn):
 
     def __init__(self,x,y,yerr,model):
@@ -145,7 +184,7 @@ class Chi2Fn(ParamFn):
         var = self._yerr**2
         delta2 = (self._y-fv)**2
         v = delta2/var
-        
+
         if v.ndim == 2:
             s = np.sum(v,axis=1)
         else:

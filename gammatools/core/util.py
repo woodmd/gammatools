@@ -3,6 +3,8 @@ import errno
 import numpy as np
 import scipy.special as spfn
 import re
+import cPickle as pickle
+import gzip
 
 class Units(object):
 
@@ -20,6 +22,10 @@ class Units(object):
     mev = 1E-3*gev
     tev = 1E3*gev
     ev = 1E-9*gev
+
+    _mev = 1./mev
+    _gev = 1./gev
+    _tev = 1./tev
 
     erg = 1./1.602177E-12*ev
     g = 1.0
@@ -134,18 +140,22 @@ def dispatch_jobs(exe,args,opts,queue=None,
         os.system(batch_cmd)
             
 
-def save_object(obj,outfile):
+def save_object(obj,outfile,compress=False,protocol=pickle.HIGHEST_PROTOCOL):
 
-    import cPickle as pickle
-    fp = open(outfile,'w')
-    pickle.dump(obj,fp,protocol = pickle.HIGHEST_PROTOCOL)
+    if compress:
+        fp = gzip.GzipFile(outfile + '.gz', 'wb')
+    else:
+        fp = open(outfile,'wb')
+    pickle.dump(obj,fp,protocol = protocol)
     fp.close()
 
 def load_object(infile):
 
-    import cPickle as pickle
+    if not re.search('\.gz?',infile) is None:
+        fp = gzip.open(infile)
+    else:
+        fp = open(infile,'rb')
 
-    fp = open(infile,'rb')
     o = pickle.load(fp)
     fp.close()
     return o

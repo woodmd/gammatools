@@ -1,45 +1,52 @@
 draco:
-  rs : 0.47
+  rs : 2.95
   dist : 76.0
   rmax : 5.0
-  rhos : 7.02
+  rhos : '1.0471e+07 msun_kpc3'
+  type : nfw
 
 ursa_minor:
-  rs : 0.47
+  rs : 2.95
   dist : 76.0
   rmax : 5.0
-  rhos : 7.02
+  rhos : '1.0471e+07 msun_kpc3'
+  type : nfw
 
 sculptor:
-  rs : 0.23
+  rs : 1.70
   dist : 86.0
   rmax : 5.0
-  rhos : 7.37
+  rhos : '2.344e+07 msun_kpc3'
+  type : nfw
 
 segue_1:
-  rs : -1.36
+  rs : 0.0437
   dist : 23.0
   rmax : 5.0
   rhos : 9.14
+  type : nfw
 #  jval : !!float 1.0e19
 
 carina:
-  rs : 0.47
+  rs : 2.95
   dist : 105.0
   rmax : 5.0
   rhos : 7.02
+  type : nfw
 
 coma_berenices:
-  rs : 0.47
+  rs : 2.95
   dist : 44.0
   rmax : 5.0
   rhos : 7.02
+  type : nfw
 
 fornax:
-  rs : 0.47
+  rs : 2.95
   dist : 147.0
   rmax : 5.0
   rhos : 7.02
+  type : nfw
 
 gc_nfw:
   rs : 20.0

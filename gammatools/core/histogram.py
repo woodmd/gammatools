@@ -18,6 +18,7 @@ import copy
 import matplotlib.pyplot as plt
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import brentq
+import scipy.stats as stats
 from util import *
 from matplotlib.colors import NoNorm, LogNorm, Normalize
 from gammatools.core.stats import *
@@ -73,6 +74,7 @@ class HistogramND(object):
         return self._axes[idim]
 
     def center(self):
+
         c = []
         for i in self._dims:
             c.append(self._axes[i].center())
@@ -931,18 +933,28 @@ class Histogram(HistogramND):
         
         return habs.quantile(fraction=0.68,method='mc',niter=100)
     
-    def chi2(self,model):
+    def chi2(self,model,min_counts=None):
 
-        msk = self._var > 0
+        msk = (self._var > 0)
+        if not min_counts is None:
+            msk &= (self._counts>5)
 
         if isinstance(model,Histogram):
             diff = self._counts[msk] - model._counts[msk]
         else:
             diff = self._counts[msk] - model(self._axis.center())[msk]
 
+#        print self._axis.center()[msk]
+#        print diff
+
         chi2 = np.sum(np.power(diff,2)/self._var[msk])
         ndf = len(msk[msk==True])
-        return (chi2,ndf)
+
+        pval = 1 - stats.chi2.cdf(chi2, ndf)
+
+
+
+        return [chi2,ndf,pval]
 
     def set(self,i,w,var=None):
         self._counts[i] = w

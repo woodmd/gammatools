@@ -137,6 +137,9 @@ class ParameterSet(object):
         self._pars_dict.clear()
         self._par_names.clear()
 
+    def fix(self,ipar,fix=True):
+        self._pars[ipar].fix(fix)
+
     def fixAll(self,fix=True,regex=None):
         """Fix or free all parameters in the set."""
 
