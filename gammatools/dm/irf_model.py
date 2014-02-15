@@ -5,9 +5,13 @@ from gammatools.core.model_fn import *
 from gammatools.core.bspline import *
 
 class IRFModel(object):
-    def __init__(self,aeff,psf_r68,edisp_r68):
+    def __init__(self,aeff,bkg,psf_r68,edisp_r68):
 
         self._aeff = aeff
+        self._bkg = bkg
+
+        self._bkg /= self._bkg.axis().width()
+        
         self._psf = psf_r68
         self._edisp = edisp_r68
 
@@ -17,6 +21,23 @@ class IRFModel(object):
                               self._aeff.err()[msk],
                               np.linspace(4.0,8.0,16),4)
 
+        msk = (self._bkg.counts() > 0)&(self._bkg.axis().center()>4.0)
+        bkg_err = np.log10(1.0 + self._bkg.err()[msk]/self._bkg.counts()[msk])
+        
+        self._log_bkg_fn = BSpline.fit(self._bkg.axis().center()[msk],
+                                       np.log10(self._bkg.counts()[msk]),
+                                       bkg_err,
+                                       np.linspace(4.0,8.0,8),4)
+
+
+        
+#        plt.figure()
+#        self._bkg.plot()
+#        x = np.linspace(4,8,100)        
+#        plt.plot(x,10**self._bkg_fn(x))        
+#        plt.gca().set_yscale('log')        
+#        plt.show()
+        
         self._eaxis = Axis.create(self._aeff.axis().lo_edge(),
                                   self._aeff.axis().hi_edge(),
                                   800)
@@ -78,13 +99,20 @@ class IRFModel(object):
 
         return self._aeff_fn(x)
 
+    def fill_bkg_histogram(self,axis,livetime):
+
+        h = Histogram(axis)
+        h.fill(axis.center(),
+               10**self._log_bkg_fn(axis.center())*axis.width()*livetime)
+
+        return h
+        
     @staticmethod
     def createCTAIRF(f):
 
         d = yaml.load(open(f,'r'))
 
         
-
         aeff = Histogram(d['aeff_ptsrc_rebin']['xedges']+3.0,
                          counts=d['aeff_ptsrc_rebin']['counts'],
                          var=d['aeff_ptsrc_rebin']['var'])
@@ -92,6 +120,10 @@ class IRFModel(object):
         aeff *= Units.m2
 
 
+        bkg = Histogram(d['bkg_wcounts_rate']['xedges']+3.0,
+                        counts=d['bkg_wcounts_rate']['counts'],
+                        var=d['bkg_wcounts_rate']['var'])
+        
         psf = Histogram(d['th68']['xedges']+3.0,
                          counts=d['th68']['counts'],
                          var=0)
@@ -100,19 +132,30 @@ class IRFModel(object):
                          counts=np.log10(1.0+d['edisp68']['counts']),
                          var=0)
 
-        return IRFModel(aeff,psf,edisp)
+        return IRFModel(aeff,bkg,psf,edisp)
 
 
+class BkgSpectrumModel(Model):
+
+    def __init__(self,irf,livetime):
+        Model.__init__(self)
+        self._irf = irf
+        self._livetime = livetime
+
+    def _eval(self,x,pset):
+
+        return 10**self._irf._log_bkg_fn(x)*self._livetime
+        
 class CountsSpectrumModel(Model):
 
     ncall = 0
 
-    def __init__(self,irf,spfn,fold_edisp=False):
+    def __init__(self,irf,spfn,livetime,fold_edisp=False):
         Model.__init__(self,spfn.param())
         self._irf = irf
         self._spfn = spfn
         self._fold_edisp = fold_edisp
-        self._livetime = 100*Units.hr
+        self._livetime = livetime
 
     def _eval(self,x,pset):
 
@@ -128,7 +171,6 @@ class CountsSpectrumModel(Model):
 
     def e2flux(self,h):
 
-        livetime = 50*Units.hr
         exp = self._irf.aeff(h.axis().center())*self._livetime
         exp[exp<0] = 0
 
@@ -139,6 +181,31 @@ class CountsSpectrumModel(Model):
         hf = copy.deepcopy(h)
         hf *= 10**(2*h.axis().center())/delta
         hf /= exp
+
+        hf._counts[msk] = 0
+        hf._var[msk] = 0
+
+        return hf
+
+    def e2flux2(self,h):
+
+#        exp = self._irf.aeff(h.axis().center())*self._livetime
+#        exp[exp<0] = 0
+
+        exp_fn = lambda t: self._irf.aeff(t)*self._livetime*self._spfn(t)
+        
+        exp2 = self._irf.smooth_fn(h.axis().center(),exp_fn)
+        flux = self._spfn(h.axis().center())
+        
+        msk = h.axis().center() < 4.5
+
+        delta = 10**h.axis().edges()[1:]-10**h.axis().edges()[:-1]
+
+        hf = copy.deepcopy(h)
+        hf *= 10**(2*h.axis().center())/delta
+
+        hf *= flux
+        hf /= exp2
 
         hf._counts[msk] = 0
         hf._var[msk] = 0

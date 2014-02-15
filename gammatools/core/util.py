@@ -40,6 +40,7 @@ class Units(object):
     gev2_cm5 = np.power(gev,2)
     gev_cm3 = np.power(gev,1)
     gev_cm2 = np.power(gev,1)
+    gev_m2 = np.power(gev,1)/m2
     erg_cm2 = erg
     g_cm3 = 1.0
     cm3_s = 1.0
@@ -109,9 +110,11 @@ def clear_dict_by_keys(d,keys,clear_if_present=True):
 
 
 def dispatch_jobs(exe,args,opts,queue=None,
-                  resources='rhel60',split_args=True):
+                  resources='rhel60',skip=None,split_args=True):
 
     skip_keywords = ['queue','resources','batch']
+
+    if not skip is None: skip_keywords += skip
     
     if queue is None and 'queue' in opts.__dict__ and \
             not opts.queue is None:

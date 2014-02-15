@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import matplotlib.pyplot as plt
 import numpy as np
 from gammatools.core.histogram import *
@@ -24,26 +26,62 @@ class AxionModel(Model):
         return self._spfn(x,p)*self._gphist.interpolate(x)
         
 
+def calc_e2flux(dh,mh,fn):
+
+    h = dh/mh
+
+    x = h.axis().center()
+    delta = 10**h.axis().edges()[1:]-10**h.axis().edges()[:-1]
+        
+    h *= fn(x)*10**(2*x)*Units.mev
+
+    return h
+    
 usage = "usage: %(prog)s [options] [detector file]"
 description = """A description."""
 
 parser = argparse.ArgumentParser(usage=usage,description=description)
 
-parser.add_argument('--model', default=None, 
-                    help = '')
+#parser.add_argument('--model', default=None, 
+#                    help = '')
 
 parser.add_argument('--irf', default=None, 
                     help = '')
 
+parser.add_argument('--queue', default=None, 
+                    help = '')
+
+parser.add_argument('--output', default=None, 
+                    help = '')
+
+parser.add_argument('files', nargs='+')
+
 args = parser.parse_args()
 
+if len(args.files) < 1:
+    parser.error("At least one argument required.")
+
+if not args.queue is None:
+    dispatch_jobs(os.path.abspath(__file__),args.files,args,args.queue,
+                  skip=['files'])
+    sys.exit(0)
+
+
+input_model = args.files[0]
+    
 irf = IRFModel.createCTAIRF(args.irf)
-axion_data = load_object(args.model)
+axion_data = load_object(input_model)
+
+sd = yaml.load(open(args.irf,'r'))
+
 
 fn = LogParabola.create(2.468515027e-11*Units._mev,
                         2.026562251,
                         0.09306285428,
                         1000.92)
+
+
+livetime = 50*Units.hr
 
 o = { 'chi2_sig'  : [],
       'chi2_null' : [],
@@ -54,6 +92,10 @@ o = { 'chi2_sig'  : [],
       'mh_null_fit' : [],
       'mh_axion0' : [],
       'mh_axion1' : [],
+      'dh_excess_null_e2flux' : [],
+      'dh_excess_axion1_e2flux' : [],
+      'mh_axion1_e2flux' : [],
+      'mh_axion1_fit_e2flux' : [],
       'g' : axion_data['g'],
       'src' : axion_data['src'],
       'm' : axion_data['m'] }
@@ -61,8 +103,8 @@ o = { 'chi2_sig'  : [],
 
 np.random.seed(1)
 
-for i in range(len(axion_data['Pgg'])):
-#for i in range(2):
+#for i in range(len(axion_data['Pgg'])):
+for i in range(2):
     print i
 
     pgg_hist = Histogram(Axis.createFromArray(np.log10(axion_data['EGeV'])+3.0),
@@ -70,16 +112,35 @@ for i in range(len(axion_data['Pgg'])):
 
     axion_fn = AxionModel(pgg_hist,fn)
 
-    cm_null = CountsSpectrumModel(irf,fn,fold_edisp=True)
-    cm_axion0 = CountsSpectrumModel(irf,axion_fn)
-    cm_axion1 = CountsSpectrumModel(irf,axion_fn,fold_edisp=True)
+    cm_bkg = BkgSpectrumModel(irf,livetime)    
+    cm_ps_null = CountsSpectrumModel(irf,fn,livetime,fold_edisp=True)
+    cm_ps_axion0 = CountsSpectrumModel(irf,axion_fn,livetime)
+    cm_ps_axion1 = CountsSpectrumModel(irf,axion_fn,livetime,fold_edisp=True)
 
+    cm_null = CompositeSumModel([cm_bkg,cm_ps_null])
+    cm_axion0 = CompositeSumModel([cm_bkg,cm_ps_axion0])
+    cm_axion1 = CompositeSumModel([cm_bkg,cm_ps_axion1])
+    
     axis = Axis.create(4.5,7,2.5*64)
 
-    dh_null = cm_null.create_histogram(axis).random()
-    dh_axion0 = cm_axion0.create_histogram(axis).random()
-    dh_axion1 = cm_axion1.create_histogram(axis).random()
+    mh_bkg = cm_bkg.create_histogram(axis)
+    mh_ps_null = cm_ps_null.create_histogram(axis)
+    mh_ps_axion0 = cm_ps_axion0.create_histogram(axis)
+    mh_ps_axion1 = cm_ps_axion1.create_histogram(axis)
     
+    dh_bkg = mh_bkg.random()
+    dh_ps_null = mh_ps_null.random()
+    dh_ps_axion0 = mh_ps_axion0.random()
+    dh_ps_axion1 = mh_ps_axion1.random()
+    
+    dh_null = dh_bkg + dh_ps_null
+    dh_axion0 = dh_bkg + dh_ps_axion0 #cm_axion0.create_histogram(axis).random()
+    dh_axion1 = dh_bkg + dh_ps_axion1 #cm_axion1.create_histogram(axis).random()
+
+    dh_excess_null = dh_null - mh_bkg
+    dh_excess_axion0 = dh_axion0 - mh_bkg
+    dh_excess_axion1 = dh_axion1 - mh_bkg
+        
     # Fit null hypothesis to axion data
     chi2_fn = BinnedChi2Fn(dh_axion1,cm_null)
     chi2_fn.param().fix(3)
@@ -96,13 +157,14 @@ for i in range(len(axion_data['Pgg'])):
 
     mh_null = cm_null.create_histogram(axis)
     mh_null_fit = cm_null.create_histogram(axis,pset_null)
-    mh_sig_fit = cm_null.create_histogram(axis,pset_axion1)
+    mh_axion1_fit = cm_null.create_histogram(axis,pset_axion1)
+    mh_ps_axion1_fit = cm_ps_null.create_histogram(axis,pset_axion1)
     
     mh_axion0 = cm_axion0.create_histogram(axis)
     mh_axion1 = cm_axion1.create_histogram(axis)
 
     # Chi2 of axion spectrum with null hypothesis
-    chi2_sig = dh_axion1.chi2(mh_sig_fit,5.0)
+    chi2_sig = dh_axion1.chi2(mh_axion1_fit,5.0)
 
     # Chi2 of input spectrum with null hypothesis
     chi2_null = dh_null.chi2(mh_null,5.0)
@@ -114,16 +176,30 @@ for i in range(len(axion_data['Pgg'])):
     print chi2_null
     print chi2_null_fit
 
-    h0_e2flux = cm_null.e2flux(dh_null.rebin(2))
-    h1_e2flux = cm_axion0.e2flux(dh_axion0.rebin(2))
-    h2_e2flux = cm_axion1.e2flux(dh_axion1.rebin(2))
+    axis2 = mh_null.rebin(2).rebin_mincount(20).axis()
+    
+    
+    dh_excess_null_e2flux = \
+        calc_e2flux(dh_excess_null.rebin_axis(axis2),
+                    mh_ps_null.rebin_axis(axis2),fn)
+    
+    dh_excess_axion1_e2flux = \
+        calc_e2flux(dh_excess_axion1.rebin_axis(axis2),
+                    mh_ps_null.rebin_axis(axis2),fn)
 
-    mh_axion0_e2flux = cm_axion0.e2flux(mh_axion0.rebin(2))
-    mh_axion1_e2flux = cm_axion1.e2flux(mh_axion1.rebin(2))
+    mh_axion1_fit_e2flux = calc_e2flux(mh_ps_axion1_fit,
+                                       mh_ps_null,fn)
+    
+    mh_axion1_e2flux = calc_e2flux(mh_ps_axion1,
+                                   mh_ps_null,fn)
+
 
     o['chi2_sig'].append(chi2_sig)
     o['chi2_null'].append(chi2_null)
     o['chi2_null_fit'].append(chi2_null_fit)
+
+    if i > 10: continue
+    
     o['dh_null_fit'].append(dh_null_fit)
     o['dh_axion0'].append(dh_axion0)
     o['dh_axion1'].append(dh_axion1)
@@ -132,13 +208,32 @@ for i in range(len(axion_data['Pgg'])):
     o['mh_axion0'].append(mh_axion0)
     o['mh_axion1'].append(mh_axion1)
 
+    o['dh_excess_null_e2flux'].append(dh_excess_null_e2flux)
+    o['dh_excess_axion1_e2flux'].append(dh_excess_axion1_e2flux)
+    
+    o['mh_axion1_e2flux'].append(mh_axion1_e2flux)
+    o['mh_axion1_fit_e2flux'].append(mh_axion1_fit_e2flux)
+    o['pgg_hist'].append(pgg_hist)
 
-m = re.search('(.+)\.pickle\.gz?',args.model)
-if not m is None:
-    outfile = m.group(1) + '_fit.pickle'
 
-save_object(o,outfile,True)
+fit_data = { 'chi2_sig' : o['chi2_sig'],
+             'chi2_null' : o['chi2_null'],
+             'chi2_null_fit' : o['chi2_null_fit'],
+             'g' : o['g'],
+             'm' : o['m'],
+             'src' : o['src'] }
 
+if args.output is None:
+    m = re.search('(.+)\.pickle\.gz?',input_model)
+    if not m is None:
+        outfile_fit = m.group(1) + '_fit.pickle'
+        outfile_hist = m.group(1) + '_hist.pickle'
+else:
+    outfile_fit = os.path.splitext(args.output)[0] + '_fit.pickle'
+    outfile_hist = os.path.splitext(args.output)[0] + '_hist.pickle'
+        
+save_object(o,outfile_hist,True)
+save_object(fit_data,outfile_fit,True)
 
 sys.exit(0)
 
@@ -176,7 +271,7 @@ plt.figure()
 dh_null.plot()
 dh_axion0.plot()
 dh_axion1.plot()
-mh_sig_fit.plot(hist_style='line',color='k')
+mh_axion1_fit.plot(hist_style='line',color='k')
 
 
 
@@ -202,7 +297,7 @@ fig = ft.create(1,'axion_counts_residual',
                 xlabel='Energy [log$_{10}$(E/MeV)]')
 
 
-fig[0].add_hist(mh_sig_fit,hist_style='line')
+fig[0].add_hist(mh_axion1_fit,hist_style='line')
 fig[0].add_hist(dh_axion1)
 
 fig.plot(ylim_ratio=[-0.5,0.5],style='residual2')
@@ -223,5 +318,46 @@ fig[0].add_hist(mh_axion1_e2flux,hist_style='line',label='ALP Smoothed')
 fig.plot(ylim_ratio=[-0.5,0.5],style='residual2')
 
 #fig.plot(style='residual2')
+
+plt.figure()
+
+
+dh_excess_null_e2flux.plot()
+dh_excess_axion1_e2flux.plot()
+x = np.linspace(4.5,7,800)
+plt.plot(x,axion_fn(x)*10**(2*x)*Units.mev**2/Units.mev)
+plt.plot(x,fn(x)*10**(2*x)*Units.mev**2/Units.mev)
+
+plt.gca().set_yscale('log')
+
+
+plt.plot(sd['flux_ptsrc']['x']+3.0,
+         sd['flux_ptsrc']['counts']*Units.gev_m2/Units.mev)
+
+
+ft = FigTool()
+
+fig = ft.create(1,'axion_model_density',
+                ylabel='Counts Density',
+                xlabel='Energy [log$_{10}$(E/MeV)]',
+                yscale='log',linestyles=['-'])
+
+
+#    fig[0].add_data(x,fn(x,pset_axion1)*10**(2*x)*Units.mev**2/Units.mev,
+#                    marker='None',linestyle='-')
+
+fig[0].add_hist(mh_axion1_fit_e2flux,hist_style='line',linestyle='-',
+                label='LogParabola Fit')
+    
+fig[0].add_hist(mh_axion1_e2flux,hist_style='line',linestyle='-',
+                label='ALP')
+   
+fig[0].add_hist(dh_excess_axion1_e2flux,linestyle='None',label='Data',
+                color='k')
+
+
+fig.plot(ylim_ratio=[-0.8,0.8],style='residual2')
+    
+
 
 plt.show()

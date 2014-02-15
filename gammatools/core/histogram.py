@@ -1214,7 +1214,7 @@ class Histogram2D(HistogramND):
 
     default_imshow_style = { 'interpolation' : 'nearest' }
     default_pcolor_style = { 'shading' : 'flat' }
-    default_contour_style = { }
+    default_contour_style = { 'levels' : [] }
     default_style = { 'keep_aspect' : False, 'logz' : False }
 
     def __init__(self, xaxis, yaxis, label = '__nolabel__', 
