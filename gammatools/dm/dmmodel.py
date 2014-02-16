@@ -3,7 +3,6 @@
 import os
 import sys
 import re
-
 import yaml
 
 import numpy as np
@@ -14,9 +13,7 @@ import scipy.special as spfn
 from scipy.optimize import brentq
 from scipy.interpolate import UnivariateSpline
 from gammatools.core.util import *
-
-from optparse import Option
-from optparse import OptionParser
+from gammatools.core.histogram import *
 
 class LimitData(object):
 
@@ -90,21 +87,27 @@ class ModelPMSSM(object):
 class JFunction(object):
     """Class that stores the J density profile convolved with an
     energy-dependent PSF."""
-    def __init__(self,fn,loge_edges,th68):
+    def __init__(self,fn,irf):
 
-        self._psi_edges = np.linspace(0,np.radians(3.0),400)
-        self._loge_edges = loge_edges
+        self._irf = irf
 
-        self._psi = 0.5*(self._psi_edges[1:] + self._psi_edges[:-1])
-        self._loge = 0.5*(loge_edges[1:] + loge_edges[:-1])
+        self._loge_axis = self._irf._psf.axis()
+        th68 = self._irf._psf.counts()
+
+        self._psi_axis = Axis(np.linspace(0,np.radians(3.0),401))
+        self._psi = self._psi_axis.center()
+        self._loge = self._loge_axis.center()+Units.log10_mev
 
         self._z = np.zeros(shape=(len(self._loge),len(self._psi)))
+
+        self._h = Histogram2D(self._loge_axis,self._psi_axis)
 
         for i in range(len(self._loge)):
             self._z[i] = convolve2d_gauss(fn,self._psi,
                                           np.radians(th68[i]/1.50959),
-                                          np.radians(2.0))
-        
+                                          self._psi[-1])
+        self._h._counts = self._z
+
     def __call__(self,loge,psi):
 
         return interpolate2d(self._loge,self._psi,self._z,
@@ -212,31 +215,11 @@ class DMChanSpectrum(object):
         if mass is None: m = self._mass
         else: m = mass
 
-        if dloge is not None:
-            loge_edge = np.linspace(loge[0]-dloge/2.,loge[-1]+dloge/2.,
-                                    len(loge)*10+1)
-            logep = 0.5*(loge_edge[1:] + loge_edge[:-1])
-        else:
-            logep = loge
-
-
-        e = np.power(10,logep)
+        e = np.power(10,loge)
         x = (np.log10(e/m)+self._ndec)/self._ndec
         dndx = self.dndx(m,x)
         dndx[e>=m] = 0
-
-        if dloge is None:
-            return dndx*0.434/(self._ndec*e)*250.
-        else:
-            dnde = dndx*0.434/(self._ndec*e)*250.
-            z = np.zeros(len(loge))
-            for i in range(len(z)):
-                z[i] = np.sum(dnde[i*10:(i+1)*10]*e[i*10:(i+1)*10])
-            z *= np.log(10.)/(np.power(10,loge+dloge/2.) - 
-                              np.power(10,loge-dloge/2.))*(logep[1]-logep[0])
-
-            return z
-
+        return dndx*0.434/(self._ndec*(e))*250.
 
     def dndx(self,m,x):
         return interpolate2d(self._x,self._mass_bins,self._dndx,x,m/Units.gev)
@@ -269,8 +252,7 @@ class DMModelSpectrum(object):
         """Return the differential gamma-ray rate per annihilation or
         decay."""
 
-        loge = np.asarray(loge)
-        if loge.ndim == 0: loge.resize((1))
+        loge = np.array(loge,ndmin=1)
 
         if dloge is not None:
             loge_edge = np.linspace(loge[0]-dloge/2.,loge[-1]+dloge/2.,
@@ -295,7 +277,7 @@ class DMModelSpectrum(object):
             return z
 
 class DMModel(object):
-    def __init__(self, sp, jp, mass = 1.0, sigmav = 1.0):
+    def __init__(self, sp, jp, mass = 100.0*Units.gev, sigmav = 1.0):
 
         self._mass = mass
         self._sigmav = sigmav
@@ -319,149 +301,66 @@ class DMModel(object):
         sp = DMModelSpectrum.create(spfile)
         return DMModel(sp,jp,1.0,1.0)
 
-    def e2flux(self,loge,psi,dloge=None):
-        return np.power(10,2*loge)*self.flux(loge,psi,dloge)
+    def e2flux(self,loge,psi):
+        return np.power(10,2*loge)*self.flux(loge,psi)
 
-    def eflux(self,loge,psi,dloge=None):
-        return (np.power(10,loge)*self.flux(loge,psi,dloge).T).T
+    def eflux(self,loge,psi):
+        return np.power(10,loge)*self.flux(loge,psi)
 
-    def flux(self,loge,psi,dloge=None):
-
-#        djdomega = self._jp(psi)
+    def flux(self,loge,psi):
         djdomega = self._jp(loge,psi)
         flux = 1./(8.*np.pi)*self._sigmav*np.power(self._mass,-2)* \
-            self._sp.dnde(self._mass,loge,dloge)
+            self._sp.dnde(loge,self._mass)
 
-        return np.outer(flux,djdomega)
-
-
-
-
-#        return 1./(8.*np.pi)*self._sigmav*np.power(self._mass,-2)* \
-#            self._sp.dnde(self._mass,loge,dloge)*jp._jspline(self._psi)
-
-
+        return flux*djdomega
 
 class DMLimitCalc(object):
 
-    def __init__(self,det,redge=0.0):
+    def __init__(self,irf,redge=0.0):
 
-        self._det = det
-        self._th68 = self._det.th68
-        self._bkg_rate = (self._det.proton_wcounts_density + 
-                          self._det.electron_wcounts_density)/(50.0*Units.hr*
-                                                               Units.deg2)
-        self._emin = self._det.emin
-        self._emax = self._det.emax
-        self._loge = 0.5*(self._det.emin + self._det.emax)
+        self._irf = irf
+#        self._th68 = self._irf._psf.counts()        
+#        self._bkg_rate = (self._det.proton_wcounts_density + 
+#                          self._det.electron_wcounts_density)/(50.0*Units.hr*
+#                                                               Units.deg2)
+
+        self._loge_axis = Axis.create(np.log10(Units.gev)+1.4,
+                                      np.log10(Units.gev)+3.2,18)
+        self._loge = self._loge_axis.center()
         
-        self._dloge = self._det.emax - self._det.emin
-        self._aeff = self._det.aeff_pcut*Units.m2
+        self._dloge = self._loge_axis.width()
+        self._aeff = self._irf.aeff(self._loge - Units.log10_mev)
+        self._bkg_rate = irf.bkg(self._loge - Units.log10_mev)*self._dloge
+
 
         self._redge = [np.radians(redge),np.radians(0.99)]
 
-        self._psi_edge = np.linspace(np.radians(0.0),np.radians(1.0),101)
-        self._psi = 0.5*(self._psi_edge[1:] + self._psi_edge[:-1])            
-        self._domega = np.pi*(np.power(self._psi_edge[1:],2)-
-                              np.power(self._psi_edge[:-1],2))
+        self._psi_axis = Axis(np.linspace(np.radians(0.0),np.radians(1.0),101))
+        self._psi = self._psi_axis.center()
+        self._domega = np.pi*(np.power(self._psi_axis.edges()[1:],2)-
+                              np.power(self._psi_axis.edges()[:-1],2))
 
         self._iedge = [np.where(self._psi >= self._redge[0])[0][0],
                        np.where(self._psi >= self._redge[1])[0][0]]
-        
-        return 
-
-        sc = self.counts(mchi,sigmav,tau)
-        bc = self.bkg_counts(tau)
-        lnl = self.lnl(sc,bc,0.2)
-
-        plt.figure()
-
-        plt.plot(np.degrees(self._psi),lnl[1],label='%f'%(self._loge[1]))
-        plt.plot(np.degrees(self._psi),lnl[2],label='%f'%(self._loge[2]))
-        plt.plot(np.degrees(self._psi),lnl[3],label='%f'%(self._loge[3]))
-        plt.plot(np.degrees(self._psi),lnl[4],label='%f'%(self._loge[4]))
-        plt.plot(np.degrees(self._psi),lnl[5],label='%f'%(self._loge[5]))
-
-        plt.gca().legend()
-        plt.gca().grid(True)
-
-        plt.figure()
-
-        plt.plot(np.degrees(self._psi),np.cumsum(lnl[1]),
-                 label='%f'%(self._loge[1]))
-        plt.plot(np.degrees(self._psi),np.cumsum(lnl[2]),
-                 label='%f'%(self._loge[2]))
-        plt.plot(np.degrees(self._psi),np.cumsum(lnl[3]),
-                 label='%f'%(self._loge[3]))
-        plt.plot(np.degrees(self._psi),np.cumsum(lnl[4]),
-                 label='%f'%(self._loge[4]))
-        plt.plot(np.degrees(self._psi),np.cumsum(lnl[5]),
-                 label='%f'%(self._loge[5]))
-
-        plt.gca().legend()
-        plt.gca().grid(True)
-
-        plt.show()
-
-        sys.exit(0)
-
-        return
-
-#        print self.significance(sc,bc,0.2)
- #       print self.significance(2*sc,bc,0.2)
-        
-        plt.figure()
-        plt.plot(np.degrees(self._psi),sc[3],marker='o')
-        plt.plot(np.degrees(self._psi),bc[3],marker='o')
-
-        
-        plt.figure()
-        plt.plot(np.degrees(self._psi),sc[4],marker='o')
-        plt.plot(np.degrees(self._psi),bc[4],marker='o')
-
-        plt.show()
-
-        return
-
-        plt.figure()
-        plt.plot(psi[1:],jp.cumsum(psi)/jsum)
-
-        plt.figure()
-
-        plt.plot(np.degrees(psi),len(psi)*[bkg_rate[2]*tau*Units.deg2])
-#        plt.plot(psi,bkg_rate[2]*tau + counts[2]*sprof)
-        plt.plot(np.degrees(psi),(bkg_rate[2]*tau + sprof*counts[2])*Units.deg2)
-        plt.gca().set_ylim(0)
-        
+               
     def counts(self,model,tau):
         """Compute the signal counts distribution as a function of
         energy and source offset."""
 
-        eflux = np.zeros(shape=(len(self._loge),len(self._psi)))
+        x, y = np.meshgrid(self._loge,self._psi,indexing='ij')
+        eflux = model.eflux(np.ravel(x),np.ravel(y))
+        eflux = eflux.reshape((len(self._loge),len(self._psi)))
 
-        for i in range(len(self._loge)):
-
-            fn = lambda t: model.eflux(self._loge[i],t,0.2) 
-            eflux[i] = fn(self._psi)
-
-#            eflux[i] = convolve(fn,self._psi,
-#                                np.radians(self._th68[i]/1.50959),
-#                                np.radians(2.0))
-
-        eflux *= self._domega
-        counts = (self._dloge*np.log(10.)*eflux.T*self._aeff*tau).T
+        exp = (self._dloge*np.log(10.)*self._aeff*tau)
+        counts = eflux*exp[:,np.newaxis]*self._domega
         counts = counts[:,self._iedge[0]:]
 
         return counts
 
     def bkg_counts(self,tau):
         counts = np.zeros(shape=(len(self._loge),len(self._psi)))
-        
-        for i in range(len(self._loge)):
-            counts[i] = self._domega*self._bkg_rate[i]*tau
-
+        counts = self._domega[np.newaxis,:]*self._bkg_rate[:,np.newaxis]*tau
         counts = counts[:,self._iedge[0]:]
-
         return counts
 
     def lnl(self,sc,bc,alpha):
@@ -517,8 +416,6 @@ class DMLimitCalc(object):
 
         def psf(x,s):
             return np.exp(-x**2/(2*s**2))
-
-
 
         plt.plot(np.degrees(self._psi),sc_density[ipeak]*(np.pi/180.)**2,
                  label='Signal')
@@ -623,18 +520,16 @@ class DMLimitCalc(object):
         ul = []
         bc = self.bkg_counts(tau)
 
-        for m in mchi:
+        for i, m in enumerate(mchi):
 
             dmmodel._mass = m
             dmmodel._sigmav = np.power(10.,-28.)
 
             sc = self.counts(dmmodel,tau)
-
             t = np.linspace(np.log10(10./np.sum(sc)),
                             np.log10(10./np.sum(sc))+4,20)
             sc2 = outer(sc,np.power(10,t))
             s = self.significance(sc2.T,bc.T,alpha)
-
             fn = UnivariateSpline(t,s,k=2,s=0)
 
             t0 = brentq(lambda t: fn(t) - sthresh ,t[0],t[-1])

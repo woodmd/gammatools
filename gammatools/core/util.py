@@ -23,15 +23,25 @@ class Units(object):
     tev = 1E3*gev
     ev = 1E-9*gev
 
+    log10_mev = np.log10(mev)
+    log10_gev = np.log10(gev)
+    log10_tev = np.log10(tev)
+
     _mev = 1./mev
     _gev = 1./gev
     _tev = 1./tev
 
     erg = 1./1.602177E-12*ev
     g = 1.0
-    m2 = 1E4
+
+    m = 1E2
+    km = 1E3*m
+
+    m2 = m**2
+    km2 = km**2
     hr = 3600.
     deg2 = np.power(np.pi/180.,2)
+    _deg2 = deg2**(-1)
 
     msun_pc3 = msun*np.power(pc,-3) 
     msun_kpc3 = msun*np.power(kpc,-3)

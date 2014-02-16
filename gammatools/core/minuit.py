@@ -7,21 +7,22 @@ $Header: /nfs/slac/g/glast/ground/cvs/users/mdwood/python/minuit.py,v 1.1 2013/0
 """
 import sys, os
 # normal CMT setup does not put ROOT.py in the python path
-if sys.platform == 'win32':
-    import win32api
-    console_title = win32api.GetConsoleTitle()
-try:
-    import ROOT
-except:
-    sys.path.append(os.path.join(os.environ['ROOTSYS'], 'bin'))
-    import ROOT
+#if sys.platform == 'win32':
+#    import win32api
+#    console_title = win32api.GetConsoleTitle()
 
-if sys.platform == 'win32':
-    win32api.SetConsoleTitle(console_title) #restore title bar! 
-    import pyreadline # fix for tab completion
-    pyreadline.parse_and_bind('set show-all-if-ambiguous on')
+#try:
+#    import ROOT
+#except:
+#    sys.path.append(os.path.join(os.environ['ROOTSYS'], 'bin'))
+#    import ROOT
 
-from ROOT import TMinuit,Long,Double
+#if sys.platform == 'win32':
+#    win32api.SetConsoleTitle(console_title) #restore title bar! 
+#    import pyreadline # fix for tab completion
+#    pyreadline.parse_and_bind('set show-all-if-ambiguous on')
+
+
 
 import numpy as np
 from numpy.linalg import inv
@@ -93,6 +94,8 @@ class Minuit(object):
 
 
     def __init__(self,myFCN,params,**kwargs):
+
+        from ROOT import TMinuit,Long,Double
 
         self.limits = np.zeros((len(params),2))
         self.steps = .04*np.ones(len(params)) # about 10 percent in log10 space

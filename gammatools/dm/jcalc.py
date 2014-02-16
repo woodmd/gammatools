@@ -477,6 +477,7 @@ class DensityProfile(object):
             elif isinstance(v,str): o[k] = Units.parse(v)
             elif k == 'dist': o[k] *= Units.kpc
             elif k == 'rs': o[k] *= Units.kpc
+            elif k == 'rhos': o[k] *= Units.msun_kpc3
             elif k == 'rhor': o[k] = [o[k][0]*Units.gev_cm3,
                                       o[k][1]*Units.kpc]
             elif k ==' jval' : o[k] = o[k]*Units.gev2_cm5
