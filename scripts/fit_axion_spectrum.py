@@ -96,6 +96,8 @@ o = { 'chi2_sig'  : [],
       'dh_excess_axion1_e2flux' : [],
       'mh_axion1_e2flux' : [],
       'mh_axion1_fit_e2flux' : [],
+      'pgg_hist' : [],
+      'flux_ptsrc' : sd['flux_ptsrc'],
       'g' : axion_data['g'],
       'src' : axion_data['src'],
       'm' : axion_data['m'] }
@@ -103,8 +105,8 @@ o = { 'chi2_sig'  : [],
 
 np.random.seed(1)
 
-#for i in range(len(axion_data['Pgg'])):
-for i in range(2):
+for i in range(len(axion_data['Pgg'])):
+#for i in range(2):
     print i
 
     pgg_hist = Histogram(Axis.createFromArray(np.log10(axion_data['EGeV'])+3.0),

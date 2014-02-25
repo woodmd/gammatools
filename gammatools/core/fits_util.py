@@ -366,7 +366,7 @@ class SkyImage(Histogram2D):
         return im
 
     def plot_catalog(self,src_color='w',marker_threshold=10,
-                     label_threshold=20.):
+                     label_threshold=20., **kwargs):
         
         if self._axes[0]._galcoord:
             ra, dec = gal2eq(self._ra,self._dec)
@@ -452,8 +452,10 @@ class SkyImage(Histogram2D):
 
         im = ax.imshow(self._counts.T,#np.power(self._counts.T,1./3.),
                        interpolation='nearest',origin='lower',norm=norm,
-                       extent=[self.axis(0).edges()[0],self.axis(0).edges()[-1],
-                               self.axis(1).edges()[0],self.axis(1).edges()[-1]])
+                       extent=[self.axis(0).edges()[0],
+                               self.axis(0).edges()[-1],
+                               self.axis(1).edges()[0],
+                               self.axis(1).edges()[-1]],**kwargs)
 
 #        norm=LogNorm()
         
