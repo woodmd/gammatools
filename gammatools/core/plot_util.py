@@ -50,14 +50,13 @@ class FigureSubplot(object):
               'legend'   : True,
               'norm_index' : None }
 
-    def __init__(self,**kwargs):
+    def __init__(self,ax,**kwargs):
         
         self._style = copy.deepcopy(FigureSubplot.style)
         update_dict(self._style,kwargs)
 
-        self._ax = None
-        self._data = []
-        
+        self._ax = ax
+        self._data = []        
 
         self._style_counter = {
             'color' : 0,
@@ -73,25 +72,23 @@ class FigureSubplot(object):
         self._text = []
         self._text_style = []
 
+    def ax(self):
+        return self._ax
+
     def set_style(self,k,v):
         self._style[k] = v
 
     def set_title(self,title):
         self.set_style('title',title)
         
-    def get_style(self,**kwargs):
-            
-        style = { 'color'     : None,
-                  'marker'    : None,
-                  'markersize'    : None,
-                  'linestyle' : None,
-                  'hist_style' : None,
-                  'hist_xerr' : None,
-                  'msk'       : None }
-        
+    def get_style(self,h,**kwargs):
+             
+        style = copy.deepcopy(h.style())       
         style.update(kwargs)
         
-        for k in self._style_counter.keys():        
+        for k in self._style_counter.keys():  
+
+            if not k in style: continue
             if not style[k] is None: continue
 
             if isinstance(self._style[k],list):
@@ -112,22 +109,30 @@ class FigureSubplot(object):
         self._text_style.append(style)
 
     def add_data(self,x,y,yerr=None,**kwargs):
-        
-        style = self.get_style(**kwargs)
-        s = Series(x,y,yerr,style)
+
+        s = Series(x,y,yerr)        
+        style = self.get_style(s,**kwargs)
         s.update_style(style)
         self._data.append(s)
 
     def add_series(self,s,**kwargs):
+
         s = copy.deepcopy(s)
-        style = self.get_style(**kwargs)
+        style = self.get_style(s,**kwargs)
         s.update_style(style)
         self._data.append(s)
 
     def add_hist(self,h,**kwargs):
         
         h = copy.deepcopy(h)
-        style = self.get_style(**kwargs)
+        style = self.get_style(h,**kwargs)
+        h.update_style(style)
+        self._data.append(h)
+
+    def add(self,h,**kwargs):
+        
+        h = copy.deepcopy(h)
+        style = self.get_style(h,**kwargs)
         h.update_style(style)
         self._data.append(h)
 
@@ -204,12 +209,12 @@ class FigureSubplot(object):
                 if residual:
                     self._data[i]._counts -= 1.0
 
-    def plot(self,ax,**kwargs):
+    def plot(self,**kwargs):
         
         style = copy.deepcopy(self._style)
         update_dict(style,kwargs)
 
-        self._ax = ax
+        ax = self._ax
 
         yscale = style['yscale']
         if 'yscale' in kwargs: yscale = kwargs.pop('yscale')
@@ -268,9 +273,16 @@ class FigureSubplot(object):
         
 class RatioSubplot(FigureSubplot):
 
-    def __init__(self):
+    def __init__(self,src_subplot,ax,**kwargs):
+        super(RatioSubplot,self).__init__(ax,**kwargs)
+        self._src_subplot = src_subplot
 
-        pass
+    def plot(self,**kwargs):
+
+        self._data = copy.deepcopy(self._src_subplot._data)
+        self.normalize()
+        super(RatioSubplot,self).plot(**kwargs)
+        
 
 class Figure(object):
     
@@ -281,19 +293,23 @@ class Figure(object):
               'format' : 'png',
               'fig_dir' : './',
               'figscale' : 1.0,
-              'subplots_per_fig' : 1 }
+              'figsize' : (8.0,6.0),
+              'panes_per_fig' : 1 }
 
-    def __init__(self,figlabel,nx=1,ny=1,**kwargs):
+    def __init__(self,figlabel,nsubplot=0,**kwargs):
         
         self._style = copy.deepcopy(Figure.style) 
         update_dict(self._style,FigureSubplot.style,True)
         update_dict(self._style,kwargs)
 
-        nsub = nx*ny
+        print kwargs
+        print self._style
+
+        self._fig = plt.figure(figsize=self._style['figsize'])
 
         self._figlabel = figlabel
         self._subplots = []        
-        self.add_subplot(nsub)        
+        self.add_subplot(nsubplot)        
 
     def __getitem__(self,key):
 
@@ -303,13 +319,11 @@ class Figure(object):
 
         for i in range(n):        
             style = copy.deepcopy(self._style)
-
             update_dict(style,kwargs)
 
-#            for k, v in style.iteritems():
-#                if k in kwargs: style[k] = kwargs[k]
-        
-            self._subplots.append(FigureSubplot(**style))
+            ax = self._fig.add_subplot(111)
+
+            self._subplots.append(FigureSubplot(ax,**style))
 
     def normalize(self,**kwargs):
 
@@ -340,47 +354,18 @@ class Figure(object):
 
         return fig
 
-    def _plot_twopane(self,**kwargs):
-        
-#        nfig = int(len(self._subplots))
-#        if nfig > 1:
-#            fig_name = '%s_%02i.%s'%(self._figlabel,
-#                                     i,self._style['format'])
-#        else:
-        fig_name = '%s.%s'%(self._figlabel,self._style['format'])
-            
-
-#        subp_kwargs['legend'] = False
-#        subp_kwargs['yscale'] = 'lin'
-#        subp_kwargs['ylim'] = kwargs['ylim_ratio']
-#        subp_kwargs['show_args'] = kwargs['show_ratio_args']        
-#        kwargs['xlabel'] = None
-        
-        fig = self._plot_twopane_shared_axis(self._subplots[0],
-                                             self._subplots[1],
-                                             **kwargs)
-
-        fig.savefig(fig_name)
-
-#                                wspace=None, hspace=None)
-            
-#            ax1.set_yticklabels([ lbl.get_text()
-#                                  for lbl in ax1.get_yticklabels()[:-1] ]+ 
-#                                ['']) 
-            
-#                if not fontsize is None: set_font_size(ax,fontsize)
-            #,bbox_inches='tight')
-            
-
     def plot(self,**kwargs):
 
-        style = copy.deepcopy(self._style)
-        style.update(kwargs)
+        fig_name = '%s.%s'%(self._figlabel,self._style['format'])
+        for p in self._subplots: p.plot(**kwargs)
+        self._fig.savefig(fig_name)
+
+        return
+
         
         if style['style'] == 'ratio2' or style['style'] == 'residual2': 
             style['figure_style'] = 'twopane'
             
-
         residual = False
         if style['style'] == 'residual2' or style['style'] == 'residual':
             residual = True
@@ -388,10 +373,7 @@ class Figure(object):
         if style['style'] == 'ratio2' or style['style'] == 'residual2':
             ratio_subp = self._subplots[0].create_ratio_subplot(residual,
                                                                 **kwargs)
-            ratio_subp.set_style('legend',False)
-            ratio_subp.set_style('yscale','lin')
-            ratio_subp.set_style('show_args',style['show_ratio_args'])
-            ratio_subp.set_style('mask_args',style['mask_ratio_args'])
+            
             self._subplots[0].set_style('xlabel',None)
             self._subplots.append(ratio_subp)
             
@@ -405,8 +387,8 @@ class Figure(object):
         style = copy.deepcopy(self._style)
         style.update(kwargs)
         
-        nsub = self._style['subplots_per_fig']        
-        nfig = int(np.ceil(float(len(self._subplots))/float(nsub)))
+        nsub = self._style['panes_per_fig']        
+        nfig = int(np.ceil(float(len(self._panes))/float(nsub)))
 
         for i in range(nfig):
 
@@ -437,16 +419,53 @@ class Figure(object):
             fig = plt.figure(figsize=figsize)
             for j in range(nsub):
                 isub = j+i*nsub
-                if isub + 1 > len(self._subplots): continue
+                if isub + 1 > len(self._panes): continue
                 
                 ax = fig.add_subplot(nx,ny,j+1)
-                self._subplots[isub].plot(ax,**kwargs)
+                self._panes[isub].plot(ax,**kwargs)
 #                if not fontsize is None: set_font_size(ax,fontsize)
 
             plt.subplots_adjust(left=0.12, bottom=0.12,
                                 right=0.95, top=0.95)
                 
             fig.savefig(fig_name)#,bbox_inches='tight')
+
+class RatioFigure(Figure):
+
+    def __init__(self,figlabel,**kwargs):
+
+        super(RatioFigure,self).__init__(figlabel,**kwargs)
+
+        style = copy.deepcopy(self._style)
+        update_dict(style,kwargs)
+
+        height_ratio=1.6
+
+        gs1 = gridspec.GridSpec(2, 1, height_ratios = [height_ratio,1])
+        ax0 = self._fig.add_subplot(gs1[0,0])
+        ax1 = self._fig.add_subplot(gs1[1,0],sharex=ax0)
+
+        style0 = copy.deepcopy(style)
+        style1 = copy.deepcopy(style)
+
+        style0['xlabel'] = None
+        style1['ylabel'] = ''
+        style1['yscale'] = 'lin'
+        style1['ylim'] = None
+        style1['legend'] = False
+
+#        ratio_subp.set_style('show_args',style['show_ratio_args'])
+#        ratio_subp.set_style('mask_args',style['mask_ratio_args'])
+
+        fp0 = FigureSubplot(ax0,**style0)
+        fp1 = RatioSubplot(fp0,ax1,**style1)
+
+        self._fig.subplots_adjust(hspace=0.1)
+        plt.setp([ax0.get_xticklabels()],visible=False)
+
+        self._subplots.append(fp0)
+        self._subplots.append(fp1)
+
 
 class FigTool(object):
 
@@ -468,6 +487,7 @@ class FigTool(object):
                   'color' : ['b','g','r','m','c','grey','brown'],
                   'linestyle' : ['-','--','-.','-','--','-.','-'],
                   'markersize' : [6.0],
+                  'figsize' : None,
                   'hist_style' : 'errorbar',
                   'norm_index'  : None,
                   'legend_loc' : 'lower right',
@@ -497,15 +517,18 @@ class FigTool(object):
                                     help=v[2] + ' [default: %s]'%v[0])
         
         
-    def create(self,nax,figlabel,**kwargs):
+    def create(self,figlabel,figstyle=None,nax=1,**kwargs):
 
         if not self._fig_prefix is None:
             figlabel = self._fig_prefix + '_' + figlabel
 
-        for k, v in self._style.iteritems():
-            if not k in kwargs: kwargs[k] = v
-            
-        return Figure(figlabel,nax,**kwargs)
+        style = copy.deepcopy(self._style)
+        style.update(kwargs)
+
+        if figstyle == 'ratio2':
+            return RatioFigure(figlabel,**style)
+        else:
+            return Figure(figlabel,nax,**style)
 
 if __name__ == '__main__':
 

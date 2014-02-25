@@ -793,7 +793,7 @@ class Histogram(HistogramND):
             style['fmt'] = '-'
             style['drawstyle'] = 'steps-pre'
             style['marker'] = 'None'
-            return self.errorbar(ax=ax,counts=c,
+            return self._errorbar(ax=ax,counts=c,
                                  x=edges,**style)
 
         else:

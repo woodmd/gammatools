@@ -230,8 +230,8 @@ class DMModelSpectrum(object):
     a specific DM model using a pretabulated spectrum.  """
     def __init__(self,egy,dnde):
 
-        self._loge = np.log10(egy)
-        self._dnde = 8.*np.pi*dnde*1E-29*np.power(Units.gev,-2)
+        self._loge = np.log10(egy) + np.log10(Units.gev)
+        self._dnde = 8.*np.pi*dnde*1E-29*np.power(Units.gev,-3)
 
     @staticmethod
     def create(spfile):
@@ -240,44 +240,24 @@ class DMModelSpectrum(object):
 #        self._loge = np.log10(d[0])
 #        self._dnde = 8.*np.pi*d[1]*1E-29*np.power(Units.gev,-2)
 
-    def e2dnde(self,mass,loge,dloge=None):        
+    def e2dnde(self,loge,mass=None,dloge=None):        
         e = np.power(10,loge)
-        return e**2*self.dnde(mass,loge,dloge)
+        return e**2*self.dnde(loge,mass,dloge)
  
-    def ednde(self,mass,loge,dloge=None):        
+    def ednde(self,loge,mass=None,dloge=None):        
         e = np.power(10,loge)
-        return e*self.dnde(mass,loge,dloge)
+        return e*self.dnde(loge,mass,dloge)
 
-    def dnde(self,mass,loge,dloge=None):
+    def dnde(self,loge,mass=None,dloge=None):
         """Return the differential gamma-ray rate per annihilation or
         decay."""
 
         loge = np.array(loge,ndmin=1)
-
-        if dloge is not None:
-            loge_edge = np.linspace(loge[0]-dloge/2.,loge[-1]+dloge/2.,
-                                    len(loge)*10+1)
-            logep = 0.5*(loge_edge[1:] + loge_edge[:-1])
-        else:
-            logep = loge
-
-        e = np.power(10,logep)
-        dnde = interpolate(self._loge,self._dnde,logep)
-#        dnde[e>=m] = 0
-
-        if dloge is None:
-            return dnde
-        else:
-            z = np.zeros(len(loge))
-            for i in range(len(z)):
-                z[i] = np.sum(dnde[i*10:(i+1)*10]*e[i*10:(i+1)*10])
-            z *= np.log(10.)/(np.power(10,loge+dloge/2.) - 
-                              np.power(10,loge-dloge/2.))*(logep[1]-logep[0])
-
-            return z
+        dnde = interpolate(self._loge,self._dnde,loge)
+        return dnde
 
 class DMModel(object):
-    def __init__(self, sp, jp, mass = 100.0*Units.gev, sigmav = 1.0):
+    def __init__(self, sp, jp, mass = 1.0, sigmav = 1.0):
 
         self._mass = mass
         self._sigmav = sigmav

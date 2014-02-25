@@ -13,18 +13,61 @@ import numpy as np
 import matplotlib.pyplot as plt
 from util import *
 
-class Series(object):
+class Band(object):
 
     default_draw_style = { 'marker' : None,
-                           'color' : None,
-                           'markersize' : None,
-                           'markerfacecolor' : None,
-                           'markeredgecolor' : None,
+                           'facecolor' : None,                           
                            'linestyle' : None,
                            'linewidth' : 1,
+                           'alpha' : 0.4,
                            'label' : None }
 
-    default_style = { 'msk' : None }
+    default_style = { }
+
+    def __init__(self,x,ylo,yhi,style=None):
+
+        self._x = np.array(x,copy=True)
+        self._ylo = np.array(ylo,copy=True)
+        self._yhi = np.array(yhi,copy=True)
+
+        self._style = copy.deepcopy(dict(Series.default_style.items() +
+                                         Series.default_draw_style.items()))
+        if not style is None: update_dict(self._style,style)
+
+    def plot(self,ax=None,**kwargs):
+
+        if ax is None: ax = plt.gca()
+
+        style = copy.deepcopy(self._style)
+        update_dict(style,kwargs)
+
+        clear_dict_by_keys(style,Series.default_draw_style.keys(),False)
+        clear_dict_by_vals(style,None)
+
+        ax.fill_between(self._x,self._ylo,self._yhi,**style)
+
+class Series(object):
+
+    default_errorbar_style = { 'marker' : None,
+                               'color' : None,
+                               'markersize' : None,
+                               'markerfacecolor' : None,
+                               'markeredgecolor' : None,
+                               'linestyle' : None,
+                               'linewidth' : 1,
+                               'label' : None }
+
+    default_scatter_style = { 'marker' : None,
+                               'color' : None,
+                              'edgecolor' : None,
+#                               'markersize' : None,
+#                               'markerfacecolor' : None,
+#                               'markeredgecolor' : None,
+#                               'linestyle' : None,
+#                               'linewidth' : 1,
+                               'label' : None }
+
+    default_style = { 'msk' : None, 'draw_style' : 'errorbar' }
     
 
     def __init__(self,x,y,yerr=None,style=None):
@@ -37,7 +80,8 @@ class Series(object):
         self._msk.fill(True)
         
         self._style = copy.deepcopy(dict(Series.default_style.items() +
-                                         Series.default_draw_style.items()))
+                                         Series.default_scatter_style.items() +
+                                         Series.default_errorbar_style.items()))
         if not style is None: update_dict(self._style,style)
 
     def x(self):
@@ -60,6 +104,17 @@ class Series(object):
 
     def plot(self,ax=None,**kwargs):
 
+        style = copy.deepcopy(self._style)
+        update_dict(style,kwargs)
+
+        if style['draw_style'] == 'errorbar':
+            self._errorbar(ax,**style)
+        else:
+            self._scatter(ax,**style)
+
+        
+    def _errorbar(self,ax=None,**kwargs):
+
         if ax is None: ax = plt.gca()
 
         style = copy.deepcopy(self._style)
@@ -68,13 +123,41 @@ class Series(object):
         if style['msk'] is None: msk = self._msk
         else: msk = style['msk']
         
-        clear_dict_by_keys(style,Series.default_draw_style.keys(),False)
+        clear_dict_by_keys(style,Series.default_errorbar_style.keys(),False)
         clear_dict_by_vals(style,None)
 
         if not self._yerr is None: yerr = self._yerr[msk]
         else: yerr = self._yerr
 
         ax.errorbar(self._x[msk],self._y[msk],yerr,**style)
+
+    def _scatter(self,ax=None,**kwargs):
+
+        if ax is None: ax = plt.gca()
+
+        style = copy.deepcopy(self._style)
+        update_dict(style,kwargs)
+
+        if style['msk'] is None: msk = self._msk
+        else: msk = style['msk']
+        
+        clear_dict_by_keys(style,Series.default_scatter_style.keys(),False)
+        clear_dict_by_vals(style,None)
+
+        if not self._yerr is None: yerr = self._yerr[msk]
+        else: yerr = self._yerr
+
+        print style
+
+        ax.scatter(self._x[msk],self._y[msk],**style)
+
+
+    @staticmethod
+    def createFromDict(d):
+
+        o  = {'x' : None, 'y' : None, 'yerr' : None, 'style' : None }
+        o.update(d)
+        return Series(**d)
 
     @staticmethod
     def createFromFile(filename):
