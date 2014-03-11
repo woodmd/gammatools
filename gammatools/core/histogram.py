@@ -19,11 +19,43 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import brentq
 import scipy.stats as stats
-from util import *
+from gammatools.core.util import *
 from matplotlib.colors import NoNorm, LogNorm, Normalize
-from gammatools.core.stats import *
+#from gammatools.core.stats import *
 
+def get_quantile(x,y,f):
+    y = np.cumsum(y)    
+    fn = UnivariateSpline(x,y,s=0,k=1)
+    return brentq(lambda t: fn(t)-y[-1]*f,x[0],x[-1])
 
+def get_quantile_error(x,y,yvar,f):
+    y = np.cumsum(y)    
+    yvar = np.cumsum(yvar)    
+
+    if y[-1] == 0: return [np.inf,np.inf]
+    
+    yerr = np.sqrt(yvar)
+    
+    fn = UnivariateSpline(x,y,s=0,k=1)
+    xq = brentq(lambda t: fn(t)-y[-1]*f,x[0],x[-1])
+
+    i = np.where(y > y[-1]*f)[0][0]
+
+    yhi = y[-1]*f+yerr[i]
+    ylo = y[-1]*f-yerr[i]
+
+    if yhi < y[-1]: xq_hi = brentq(lambda t: fn(t)-yhi,x[0],x[-1])
+    else: xq_hi = x[-1]
+
+    if ylo > y[0]: xq_lo = brentq(lambda t: fn(t)-ylo,x[0],x[-1])
+    else: xq_lo = x[0]
+    
+    xq_err = 0.5*(xq_hi-xq_lo)
+    xq_var = xq_err**2
+
+#    print xq, xq_hi, xq_lo, xq_err
+
+    return [xq,xq_var]
 
 class HistogramND(object):
     """
@@ -64,7 +96,6 @@ class HistogramND(object):
         return len(self._axes)
 
     def style(self):
-
         return self._style
     
     def axes(self):
@@ -74,7 +105,9 @@ class HistogramND(object):
         return self._axes[idim]
 
     def center(self):
-
+        """Return the center coordinate of each bin in this histogram
+        as an NxM array."""
+        
         c = []
         for i in self._dims:
             c.append(self._axes[i].center())
@@ -92,6 +125,29 @@ class HistogramND(object):
         
     def var(self):
         return self._var
+
+    def inverse(self):
+        c = 1./self._counts
+        var = c**2*self._var/self._counts**2
+        return HistogramND.create(self._axes,c,var,self._style)
+    
+    def power10(self):
+
+        err = np.sqrt(self._var)
+
+        msk = (self._counts != np.inf)
+
+        c = np.zeros(shape=self._counts.shape)
+        clo = np.zeros(shape=self._counts.shape)
+        chi = np.zeros(shape=self._counts.shape)
+        
+        c[msk] = np.power(10,self._counts[msk])
+        clo[msk] = np.power(10,self._counts[msk]-err[msk])
+        chi[msk] = np.power(10,self._counts[msk]+err[msk])
+
+        counts = c 
+        var = (0.5*(chi-clo))**2
+        return HistogramND.create(self._axes,counts,var,self._style)
     
     def fill(self,z,w=1.0,v=None):
         """
@@ -177,7 +233,7 @@ class HistogramND(object):
             
         return HistogramND.create(axes,c,v,self._style)
 
-    def quantile(self,dim,fraction=0.5):
+    def quantile(self,dim,fraction=0.5,method='var'):
 
         sdims = np.setdiff1d(self._dims,[dim])
         
@@ -189,10 +245,37 @@ class HistogramND(object):
 
         h = HistogramND.create(axes,style=self._style)
 
+#        h._counts = np.percentile(self._counts,fraction*100.,axis=dim)
+                
         for index, x in np.ndenumerate(h._counts):
-            hs = self.slice(sdims,index)            
-            h._counts[index] = HistQuantile(hs).eval(fraction)
 
+            hs = self.slice(sdims,index)
+            
+            if method == 'var':
+
+                cs = np.concatenate(([0],hs.counts()))
+                vs = np.concatenate(([0],hs.var()))
+            
+                q, qvar = get_quantile_error(hs.axis().edges(),cs,vs,fraction)
+#            h._counts[index] = HistQuantile(hs).eval(fraction)
+                h._counts[index] = q
+                h._var[index] = qvar
+
+            elif method == 'bootstrap_poisson':
+
+                c = np.random.poisson(np.concatenate(([0],hs.counts())),
+                                      (100,hs.axis().nbins()+1))
+
+                xq = []
+                
+                for i in range(100):
+                    xq.append(get_quantile(hs.axis().edges(),c[i],fraction))
+
+                h._counts[index] = \
+                    get_quantile(hs.axis().edges(),
+                                 np.concatenate(([0],hs.counts())),fraction)
+                h._var[index] = np.std(np.array(xq))**2
+                    
         return h
         
     
@@ -251,7 +334,10 @@ class HistogramND(object):
             
         for i, idim in enumerate(sdims):
 
-            index_range = np.array(dim_index[i],ndmin=1)
+            if dim_index[i] is None:
+                index_range = np.array([0,self.axis(idim).nbins()])
+            else:
+                index_range = np.array(dim_index[i],ndmin=1)
             
             if idim >= self._ndim or index_range[0] >= self._axes[idim].nbins():
                 raise ValueError('Dimension or Index out of range')
@@ -408,7 +494,7 @@ class HistogramND(object):
         else: return HistogramND(axes,counts=c,var=v,style=style)
 
     @staticmethod
-    def createFromTree(t,vars,axes,cut='',fraction=1.0,
+    def createFromTree(t,vars,axes,cut=None,fraction=1.0,
                        label = '__nolabel__'):
 
         nentries=t.GetEntries()
@@ -419,6 +505,16 @@ class HistogramND(object):
         for v in vars: x.append(get_vector(t,v,cut,nentries,first_entry))
         z = np.vstack(x)
 
+        for i, a in enumerate(axes):
+            if isinstance(a,dict):
+                vmin = min(z[i])
+                vmax = max(z[i])
+
+                vmin -= 1E-8*(vmax-vmin)
+                vmax += 1E-8*(vmax-vmin)
+                
+                axes[i] = Axis.create(vmin,vmax,a['nbin'])
+        
         h = HistogramND(axes)
         h.fill(z)
 
@@ -889,7 +985,7 @@ class Histogram(HistogramND):
         return np.argmin(np.abs(self._x-x))
 
     def interpolate(self,x,noerror=True):
-
+        
         x = np.array(x,ndmin=1)
         c = interpolate(self._axis.center(),self._counts,x)
         v = interpolate(self._axis.center(),self._var,x)
@@ -1439,23 +1535,23 @@ class Histogram2D(HistogramND):
 
         return hq
 
-    def quantile(self,iaxis,fraction=0.68,**kwargs):
+#    def quantile(self,iaxis,fraction=0.68,**kwargs):
 
-        import stats
+#        import stats
 
-        iaxis = (iaxis+1)%2
+#        iaxis = (iaxis+1)%2
 
-        hq = Histogram(self._axes[iaxis].edges())
+#        hq = Histogram(self._axes[iaxis].edges())
 
-        for i in range(self.nbins(iaxis)):
-            h = self.slice(iaxis,i)
+#        for i in range(self.nbins(iaxis)):
+#            h = self.slice(iaxis,i)
 
-            q,qerr = stats.HistQuantile(h).eval(fraction,**kwargs)
+#            q,qerr = stats.HistQuantile(h).eval(fraction,**kwargs)
 
-            hq._counts[i] = q
-            hq._var[i] = qerr**2
+#            hq._counts[i] = q
+#            hq._var[i] = qerr**2
 
-        return hq
+#        return hq
 
     def unbiased_quantile(self,fraction=0.68,unbias_method=None):
         hmed = self.quantile(fraction=0.5)
@@ -1614,8 +1710,10 @@ class Histogram2D(HistogramND):
 
         return im
 
-def get_vector(chain,var,cut='',nentries=None,first_entry=0):
+def get_vector(chain,var,cut=None,nentries=None,first_entry=0):
 
+    if cut is None: cut = ''
+    
     chain.SetEstimate(chain.GetEntries())
     if nentries is None: nentries = chain.GetEntries()
     ncut = chain.Draw('%s'%(var),cut,'goff',nentries,first_entry)
