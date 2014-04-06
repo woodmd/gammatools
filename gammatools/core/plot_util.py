@@ -302,9 +302,6 @@ class Figure(object):
         update_dict(self._style,FigureSubplot.style,True)
         update_dict(self._style,kwargs)
 
-        print kwargs
-        print self._style
-
         self._fig = plt.figure(figsize=self._style['figsize'])
 
         self._figlabel = figlabel
@@ -451,7 +448,7 @@ class RatioFigure(Figure):
         style0['xlabel'] = None
         style1['ylabel'] = ''
         style1['yscale'] = 'lin'
-        style1['ylim'] = None
+        style1['ylim'] = style['ylim_ratio']
         style1['legend'] = False
 
 #        ratio_subp.set_style('show_args',style['show_ratio_args'])

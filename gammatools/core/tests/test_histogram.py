@@ -412,3 +412,28 @@ class TestHistogram(unittest.TestCase):
 
         assert_almost_equal(h2.counts(),h1.counts()/xc)
         assert_almost_equal(h2.var(),h1.var()/xc**2)
+
+    def test_histogram_quantile(self):
+
+
+        h = Histogram(np.linspace(-4,4,100))
+
+        x = h.axis().center()
+        
+        s2 = 0.1**2
+        mu = 0.1
+        
+        h.fill(x,1./np.sqrt(2*np.pi*s2)*np.exp(-(x-mu)**2/(2.*s2)))
+
+        q, qerr = h.quantile(fraction=0.5)
+
+        assert_almost_equal(q,mu,3)
+
+        q, qerr = h.central_quantile(fraction=0.68)
+
+        print q
+
+        
+        q, qerr = h.central_quantile(fraction=0.95)
+
+        print q

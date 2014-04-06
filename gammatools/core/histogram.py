@@ -126,6 +126,9 @@ class HistogramND(object):
     def var(self):
         return self._var
 
+    def err(self):
+        return np.sqrt(self._var)
+
     def inverse(self):
         c = 1./self._counts
         var = c**2*self._var/self._counts**2
@@ -233,7 +236,7 @@ class HistogramND(object):
             
         return HistogramND.create(axes,c,v,self._style)
 
-    def quantile(self,dim,fraction=0.5,method='var'):
+    def quantile(self,dim,fraction=0.5,method='var',niter=100):
 
         sdims = np.setdiff1d(self._dims,[dim])
         
@@ -264,11 +267,11 @@ class HistogramND(object):
             elif method == 'bootstrap_poisson':
 
                 c = np.random.poisson(np.concatenate(([0],hs.counts())),
-                                      (100,hs.axis().nbins()+1))
+                                      (niter,hs.axis().nbins()+1))
 
                 xq = []
                 
-                for i in range(100):
+                for i in range(niter):
                     xq.append(get_quantile(hs.axis().edges(),c[i],fraction))
 
                 h._counts[index] = \
@@ -658,6 +661,7 @@ class Histogram(HistogramND):
     addition, and division by a scalar or another histogram object."""
 
     default_draw_style = { 'marker' : None,
+                           'markersize' : None,
                            'color' : None,
                            'drawstyle' : 'default',
                            'markerfacecolor' : None,
@@ -1006,28 +1010,45 @@ class Histogram(HistogramND):
         return Histogram(self._axis,label=self.label(),
                          counts=counts,var=var)
 
-    def quantile(self,fraction=0.68,**kwargs):
+    def quantile(self,fraction=0.68,method='var',niter=100,**kwargs):
 
-        import stats
+        if method == 'var':
 
-        return stats.HistQuantile(self).eval(fraction,**kwargs)
+            cs = np.concatenate(([0],self.counts()))
+            vs = np.concatenate(([0],self.var()))
+            
+            return get_quantile_error(self.axis().edges(),cs,vs,fraction)
+        elif method == 'bootstrap_poisson':
 
-    def unbiased_quantile(self,fraction=0.68,unbias_method=None):
-        hmed = self.quantile(fraction=0.5)
-        hmean = self.mean()
+            c = np.random.poisson(np.concatenate(([0],self.counts())),
+                                  (niter,self.axis().nbins()+1))
+
+            xq = []                
+            for i in range(niter):
+                xq.append(get_quantile(self.axis().edges(),c[i],fraction))
+
+            q = get_quantile(self.axis().edges(),
+                             np.concatenate(([0],self.counts())),fraction)
+            qvar = np.std(np.array(xq))**2
+
+            return q, qvar
+            
+#        import stats
+#        return stats.HistQuantile(self).eval(fraction,**kwargs)
+
+    def central_quantile(self,fraction=0.68,unbias_method='median'):
 
         if  unbias_method == 'median': loc = self.quantile(fraction=0.5)[0]
         elif unbias_method == 'mean': loc = self.mean()
         else:
             raise('Exception')
         
-        habs = Histogram(np.linspace(0,max(loc-self.axis().edges()),
+        habs = Histogram(np.linspace(0,max(np.abs(loc-self.axis().edges())),
                                      self.axis().nbins()))
         habs.fill(np.abs(self.axis().center()-loc),
                   self._counts,var=self._var)
-
         
-        return habs.quantile(fraction=0.68,method='mc',niter=100)
+        return habs.quantile(fraction,method='bootstrap_poisson',niter=100)
     
     def chi2(self,model,min_counts=None):
 
@@ -1332,16 +1353,18 @@ class Histogram2D(HistogramND):
         self._style['label'] = label
 
     @staticmethod
-    def createFromTree(t,varname,cut,hdef=None,fraction=0.0,
+    def createFromTree(t,vars,axes,cut,fraction=0.0,
                        label = '__nolabel__'):
 
         from ROOT import gDirectory
 
-        draw = '%s>>hist'%(varname)
+        draw = '%s:%s>>hist'%(vars[1],vars[0])
 
-        if not hdef is None:
-            draw += '(%i,%f,%f,%i,%f,%f)'%(hdef[0][0],hdef[0][1],hdef[0][2],
-                                           hdef[1][0],hdef[1][1],hdef[1][2])
+        if not axes is None:
+            draw += '(%i,%f,%f,%i,%f,%f)'%(axes[0].nbins(),
+                                           axes[0].lo_edge(),axes[0].hi_edge(),
+                                           axes[1].nbins(),
+                                           axes[1].lo_edge(),axes[1].hi_edge())
 
         nevent = t.GetEntries()
         first_entry = int(nevent*fraction)
@@ -1553,7 +1576,7 @@ class Histogram2D(HistogramND):
 
 #        return hq
 
-    def unbiased_quantile(self,fraction=0.68,unbias_method=None):
+    def central_quantile(self,fraction=0.68,unbias_method=None):
         hmed = self.quantile(fraction=0.5)
         hmean = self.mean()
 
