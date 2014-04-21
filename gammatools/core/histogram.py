@@ -1659,8 +1659,7 @@ class Histogram2D(HistogramND):
         if style['logz']: norm = LogNorm()
         else: norm = Normalize()
 
-        xedge, yedge = np.meshgrid(self.axis(0).edges(),self.axis(1).edges(),
-                                   ordering='ij')
+        xedge, yedge = np.meshgrid(self.axis(0).edges(),self.axis(1).edges())
 
         clear_dict_by_keys(style,Histogram2D.default_pcolor_style.keys(),False)
 

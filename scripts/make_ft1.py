@@ -18,15 +18,12 @@ parser.add_option('--dict_file', default = None, type = "string",
                   help = 'Set the file that defines the mapping from Merit '
                   'to FT1 variables.')
 
-parser.add_option("--batch",action="store_true",
-                  help="Split this job into several batch jobs.")
-
 parser.add_option('--queue', default = None,
                   type='string',help='Set the batch queue.')
 
 (opts, args) = parser.parse_args()
 
-if opts.batch:
+if not opts.queue is None:
     
     for x in args:
         cmd = 'make_ft1.py %s '%(x)
