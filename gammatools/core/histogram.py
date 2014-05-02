@@ -515,8 +515,10 @@ class HistogramND(object):
 
                 vmin -= 1E-8*(vmax-vmin)
                 vmax += 1E-8*(vmax-vmin)
-                
-                axes[i] = Axis.create(vmin,vmax,a['nbin'])
+
+                axis_label = None
+                if 'label' in a: axis_label = a['label']
+                axes[i] = Axis.create(vmin,vmax,a['nbin'],label=axis_label)
         
         h = HistogramND(axes)
         h.fill(z)
@@ -1663,7 +1665,7 @@ class Histogram2D(HistogramND):
 
         clear_dict_by_keys(style,Histogram2D.default_pcolor_style.keys(),False)
 
-        p = plt.pcolormesh(xedge,yedge,self._counts.T,norm=norm,
+        p = ax.pcolormesh(xedge,yedge,self._counts.T,norm=norm,
                            **style)
 
         if not self._axes[0].label() is None:

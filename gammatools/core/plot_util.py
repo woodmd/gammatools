@@ -30,6 +30,7 @@ class FigureSubplot(object):
 
     style = { 'xlabel' : None,
               'ylabel' : None,
+              'zlabel' : None,
               'xlim'   : None,
               'ylim'   : None,
               'ylim_ratio' : None,
@@ -56,6 +57,7 @@ class FigureSubplot(object):
         update_dict(self._style,kwargs)
 
         self._ax = ax
+        self._cb = None
         self._data = []        
 
         self._style_counter = {
@@ -240,8 +242,13 @@ class FigureSubplot(object):
         for i in iargs:
             s = self._data[i]
             labels.append(s.label())
-            s.plot(ax=ax,logz=logz)
+            p = s.plot(ax=ax,logz=logz)
 
+            if isinstance(p,QuadMesh):
+                self._cb = plt.colorbar(p)
+                if not style['zlabel'] is None:
+                    self._cb.set_label(style['zlabel'])
+            
         for i, h in enumerate(self._hline):
             ax.axhline(self._hline[i],**self._hline_style[i])
 
@@ -314,12 +321,15 @@ class Figure(object):
 
     def add_subplot(self,n=1,**kwargs):
 
+        if n == 1: nx, ny = 1,1
+        elif n == 2: nx, ny = 2,1
+        elif n > 2 and n <= 4: nx, ny = 2,2
+        
         for i in range(n):        
             style = copy.deepcopy(self._style)
             update_dict(style,kwargs)
 
-            ax = self._fig.add_subplot(111)
-
+            ax = self._fig.add_subplot(ny,nx,i+1)
             self._subplots.append(FigureSubplot(ax,**style))
 
     def normalize(self,**kwargs):
@@ -446,7 +456,7 @@ class RatioFigure(Figure):
         style1 = copy.deepcopy(style)
 
         style0['xlabel'] = None
-        style1['ylabel'] = ''
+        style1['ylabel'] = 'Ratio'
         style1['yscale'] = 'lin'
         style1['ylim'] = style['ylim_ratio']
         style1['legend'] = False
