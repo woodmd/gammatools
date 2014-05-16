@@ -114,36 +114,16 @@ class BinnedChi2Fn(ParamFn):
             
     def eval(self,p):
 
-#        print 'eval'
-
         pset = self._model.param(True)
         pset.update(p)
 
         fv = self._model.histogram(self._h.edges(),pset)
-
-#        print pset
-#        print self._h.counts()
-#        print fv
-
         v = chi2(self._h.counts(),self._h.var(),fv)
-             
-#        plt.figure()
-#        plt.plot(self._h.axis().center(),fv)
-#        self._h.plot()
-
-#        plt.figure()
-#        plt.plot(self._h.axis().center(),
-#                 (fv-self._h.counts())**2/self._h.var())
-
-#        plt.show()
 
         if v.ndim == 2:
             s = np.sum(v,axis=1)
         else:
             s = np.sum(v)
-
-        print pset
-        print s
 
         return s
 
