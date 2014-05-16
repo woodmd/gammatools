@@ -2,18 +2,23 @@ import numpy as np
 import copy
 
 class Vector3D(object):
-
-    
     
     def __init__(self,x):
-        self._x = x
+        x = np.array(x,ndmin=1,copy=True)
+        if x.ndim == 1:
+            self._x = x.reshape(3,1)
+        else:
+            self._x = x
 
-    def separation(self,v):      
-        costh = np.sum((self._x.T*v._x.T).T,axis=0)        
+    def x(self):
+        return self._x
+
+    def separation(self,v):     
+        costh = np.sum(self._x*v._x,axis=0)        
         return np.arccos(costh)
     
     def norm(self):
-        return np.sqrt(np.sum(self._x*self._x,axis=0))
+        return np.sqrt(np.sum(self._x**2,axis=0))
 
     def theta(self):
         return np.arctan2(np.sqrt(self._x[0]*self._x[0] +
@@ -61,6 +66,10 @@ class Vector3D(object):
         self._x = par*eaxis._x + np.cos(angle)*paxis._x + np.sin(angle)*cp._x
 
         
+    def dot(self,v):
+
+        return np.sum(self._x*v.x(),axis=0)
+
     def cross(self,axis):
         x = np.zeros(self._x.shape)
         
@@ -70,6 +79,10 @@ class Vector3D(object):
         return Vector3D(x)
 
     def project(self,v):
+        
+        return self*v
+
+    def project2d(self,v):
 
         yaxis = Vector3D(np.array([0.,1.,0.]))
         zaxis = Vector3D(np.array([0.,0.,1.]))
@@ -107,9 +120,23 @@ class Vector3D(object):
     def __getitem__(self, i):
         return Vector3D(self._x[:,i])
 
-    def __mul__(self,x):
+    def __mul__(self,v):
 
-        self._x *= x
+        if isinstance(v,Vector3D):
+            self._x *= v.x()
+        else:
+            self._x *= v
+
+        return self
+
+    def __add__(self,v):
+
+        self._x += v.x()
+        return self
+
+    def __sub__(self,v):
+
+        self._x -= v.x()
         return self
     
     def __str__(self):

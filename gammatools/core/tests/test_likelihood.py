@@ -3,6 +3,7 @@ import numpy as np
 from numpy.testing import assert_array_equal, assert_almost_equal
 from gammatools.core.parameter_set import *
 from gammatools.core.likelihood import *
+from gammatools.core.nonlinear_fitting import *
 from gammatools.core.model_fn import *
 from gammatools.core.histogram import *
 
@@ -64,7 +65,7 @@ class TestLikelihood(unittest.TestCase):
                             fni(2.0,a2)-fni(0.0,a2))
 
 
-    def test_polyfn_fit(self):
+    def test_binned_polyfn_fit(self):
 
         np.random.seed(1)
 
@@ -76,15 +77,15 @@ class TestLikelihood(unittest.TestCase):
 
         h = Histogram(np.linspace(0,1,10))
         h.fill(y)
-        chi2_fn = Chi2HistFn(h,f)
-        print chi2_fn.eval(pset)
+#        chi2_fn = Chi2HistFn(h,f)
+        chi2_fn = BinnedChi2Fn(h,f)
+#        print chi2_fn.eval(pset)
 
         psetv = pset.makeParameterArray(1,pset[1].value()*np.linspace(0,2,10))
         chi2_fn.param()[1].set(chi2_fn._param[1].value()*1.5)
 
         fitter = MinuitFitter(chi2_fn)
-
-        print fitter.fit()
+#        print fitter.fit()
 
     def test_hist_model_fit(self):
 
@@ -117,3 +118,62 @@ class TestLikelihood(unittest.TestCase):
         
         assert_almost_equal(f[0].value(),0.9,4)
         assert_almost_equal(f[1].value(),0.8,4)
+
+
+    def setup_gauss_test(self):
+        pset = ParameterSet()        
+        fn = GaussFn.create(100.0,0.0,0.1,pset)
+        h = Histogram(Axis.create(-3.0,3.0,100))
+        h.fill(h.axis().center(),fn.histogram(h.axis().edges()))
+
+        msk = h.counts() < 1.0
+        h._counts[msk] = 0.0
+        h._var[msk] = 0.0
+
+        return h, fn
+
+    def test_binned_chi2_fn(self):
+                
+        hm0, fn0 = self.setup_gauss_test()
+        pset0 = fn0.param()
+
+        chi2_fn = BinnedChi2Fn(hm0,fn0)
+
+        print ''
+        print pset0
+
+        pset1 = copy.deepcopy(pset0)
+        pset1.set(90.0,0.5,0.2)
+
+        print pset1
+#        sys.exit(1)
+
+        pset1[2].setLoBound(0.001)
+
+        fitter = BFGSFitter(chi2_fn)
+
+        f = fitter.fit(pset1)
+        print f
+
+        assert_almost_equal(f[0].value(),pset0[0].value(),4)
+        assert_almost_equal(f[1].value(),pset0[1].value(),4)
+        assert_almost_equal(f[2].value(),pset0[2].value(),4)
+
+#        plt.figure()
+#        hm0.plot()
+#        plt.plot(hm0.axis().center(),
+#                 fn0.histogram(hm0.axis().edges(),pset0))
+#        plt.plot(hm0.axis().center(),
+#                 fn0.histogram(hm0.axis().edges(),pset1))
+#        plt.show()
+
+        
+        
+    def test_bfgs(self):
+        
+        hm0, fn0 = self.setup_gauss_test()
+        pset0 = fn0.param()
+        
+
+    
+        

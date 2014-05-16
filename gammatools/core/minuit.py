@@ -141,6 +141,8 @@ class Minuit(object):
 
     def minimize(self,method='MIGRAD'):
 
+        from ROOT import TMinuit,Long,Double
+
         self.minuit.mncomd('%s %i %f'%(method, self.maxcalls,self.tolerance),self.erflag)
         for i in xrange(self.npars):
             val,err = Double(),Double()

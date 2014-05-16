@@ -233,6 +233,11 @@ class ParameterSet(object):
         pid = self._par_names[name]
         self._pars_dict[pid]._value = np.array(val,ndmin=2)
 
+    def set(self,*args):
+
+        for i, v in enumerate(args):
+            self._pars[i].set(v)
+
     def npar(self):
         return len(self._pars)
 
@@ -250,6 +255,38 @@ class ParameterSet(object):
 
         os = ''
         for p in self._pars: os += '%s\n'%(p)
+
+        return os
+
+class FitResults(ParameterSet):
+
+    def __init__(self,pset,fval,cov=None):
+        ParameterSet.__init__(self,pset)
+
+        if cov is None: cov=np.zeros(shape=(pset.npar(),pset.npar()))
+        else: self._cov = cov
+        
+        self._err = np.sqrt(np.diag(cov))
+        self._fval = fval
+
+    def fval(self):
+        return self._fval
+
+    def getParError(self,pid):
+
+        if isinstance(pid,str):
+            pid = self.getParByName(pid).pid()
+
+        return self._err[pid]
+
+    def __str__(self):
+
+        os = ''
+        for i, p in enumerate(self._pars):
+            os += '%s %.6g\n'%(p,self._err[i])
+
+        os += 'fval: %.3f\n'%(self._fval)
+#        os += 'cov:\n %s'%(str(self._cov))
 
         return os
 
