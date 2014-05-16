@@ -1,6 +1,7 @@
 import os
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
+from matplotlib.collections import QuadMesh
 from scipy.interpolate import UnivariateSpline
 import itertools
 import copy
@@ -216,6 +217,8 @@ class FigureSubplot(object):
         style = copy.deepcopy(self._style)
         update_dict(style,kwargs)
 
+
+        
         ax = self._ax
 
         yscale = style['yscale']
@@ -280,27 +283,32 @@ class FigureSubplot(object):
         
 class RatioSubplot(FigureSubplot):
 
-    def __init__(self,src_subplot,ax,**kwargs):
+    def __init__(self,ax,src_subplot=None,**kwargs):
         super(RatioSubplot,self).__init__(ax,**kwargs)
         self._src_subplot = src_subplot
 
     def plot(self,**kwargs):
-
-        self._data = copy.deepcopy(self._src_subplot._data)
-        self.normalize()
-        super(RatioSubplot,self).plot(**kwargs)
+        
+        if not self._src_subplot is None:
+            self._data = copy.deepcopy(self._src_subplot._data)
+            self.normalize()            
+            super(RatioSubplot,self).plot(**kwargs)
+        else:
+            data = copy.deepcopy(self._data)
+            self.normalize()
+            super(RatioSubplot,self).plot(**kwargs)
+            self._data = data
         
 
 class Figure(object):
     
     style = { 'show_ratio_args' : None,
               'mask_ratio_args' : None,
-              'style' : 'normal',
-              'figure_style' : 'onepane',
+              'figstyle' : None,
               'format' : 'png',
               'fig_dir' : './',
               'figscale' : 1.0,
-              'figsize' : (8.0,6.0),
+              'figsize' : [8.0,6.0],
               'panes_per_fig' : 1 }
 
     def __init__(self,figlabel,nsubplot=0,**kwargs):
@@ -309,7 +317,11 @@ class Figure(object):
         update_dict(self._style,FigureSubplot.style,True)
         update_dict(self._style,kwargs)
 
-        self._fig = plt.figure(figsize=self._style['figsize'])
+        figsize = self._style['figsize']
+        figsize[0] *= self._style['figscale']
+        figsize[1] *= self._style['figscale']
+        
+        self._fig = plt.figure(figsize=figsize)
 
         self._figlabel = figlabel
         self._subplots = []        
@@ -320,7 +332,7 @@ class Figure(object):
         return self._subplots[key]
 
     def add_subplot(self,n=1,**kwargs):
-
+        
         if n == 1: nx, ny = 1,1
         elif n == 2: nx, ny = 2,1
         elif n > 2 and n <= 4: nx, ny = 2,2
@@ -330,7 +342,11 @@ class Figure(object):
             update_dict(style,kwargs)
 
             ax = self._fig.add_subplot(ny,nx,i+1)
-            self._subplots.append(FigureSubplot(ax,**style))
+
+            if self._style['figstyle'] == 'ratio':
+                self._subplots.append(RatioSubplot(ax,**style))
+            else:
+                self._subplots.append(FigureSubplot(ax,**style))
 
     def normalize(self,**kwargs):
 
@@ -364,6 +380,8 @@ class Figure(object):
     def plot(self,**kwargs):
 
         fig_name = '%s.%s'%(self._figlabel,self._style['format'])
+        fig_name = os.path.join(self._style['fig_dir'],fig_name)
+        
         for p in self._subplots: p.plot(**kwargs)
         self._fig.savefig(fig_name)
 
@@ -436,12 +454,12 @@ class Figure(object):
                                 right=0.95, top=0.95)
                 
             fig.savefig(fig_name)#,bbox_inches='tight')
-
-class RatioFigure(Figure):
+            
+class TwoPaneRatioFigure(Figure):
 
     def __init__(self,figlabel,**kwargs):
 
-        super(RatioFigure,self).__init__(figlabel,**kwargs)
+        super(TwoPaneRatioFigure,self).__init__(figlabel,**kwargs)
 
         style = copy.deepcopy(self._style)
         update_dict(style,kwargs)
@@ -465,7 +483,7 @@ class RatioFigure(Figure):
 #        ratio_subp.set_style('mask_args',style['mask_ratio_args'])
 
         fp0 = FigureSubplot(ax0,**style0)
-        fp1 = RatioSubplot(fp0,ax1,**style1)
+        fp1 = RatioSubplot(ax1,fp0,**style1)
 
         self._fig.subplots_adjust(hspace=0.1)
         plt.setp([ax0.get_xticklabels()],visible=False)
@@ -494,7 +512,7 @@ class FigTool(object):
                   'color' : ['b','g','r','m','c','grey','brown'],
                   'linestyle' : ['-','--','-.','-','--','-.','-'],
                   'markersize' : [6.0],
-                  'figsize' : None,
+                  'figsize' : [8.0,6.0],
                   'hist_style' : 'errorbar',
                   'norm_index'  : None,
                   'legend_loc' : 'lower right',
@@ -533,7 +551,10 @@ class FigTool(object):
         style.update(kwargs)
 
         if figstyle == 'ratio2':
-            return RatioFigure(figlabel,**style)
+            return TwoPaneRatioFigure(figlabel,**style)
+        elif figstyle == 'ratio':
+            style['figstyle'] = 'ratio'
+            return Figure(figlabel,nax,**style)
         else:
             return Figure(figlabel,nax,**style)
 

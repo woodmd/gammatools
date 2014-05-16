@@ -12,6 +12,7 @@ __date__     = "01/01/2014"
 import re
 import copy
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import pywcsgrid2
 import pywcsgrid2.allsky_axes
 import pywcs
@@ -57,9 +58,9 @@ class FITSAxis(Axis):
         
         if re.search('GLON',self._type) is None and \
                 re.search('GLAT',self._type) is None:
-            self._galcoord = False
+            self._coordsys = 'cel'
         else:
-            self._galcoord = True
+            self._coordsys = 'gal'
 
         super(FITSAxis, self).__init__(edges)
             
@@ -111,19 +112,70 @@ class FITSAxis(Axis):
         return axes
 
 
-class SkyCube(HistogramND):
+class FITSImage(HistogramND):
 
-    def __init__(self,wcs,axes,counts=None):
-        super(SkyCube, self).__init__(axes,counts=counts,var=counts)
+    def __init__(self,wcs,axes,counts=None,roi_radius_deg=180.,roi_msk=None):
+        super(FITSImage, self).__init__(axes,counts=counts,var=counts)
+        
         self._wcs = wcs
+        self._roi_radius_deg = roi_radius_deg
+        self._header = self._wcs.to_header(True)
+        
+        self._ra = self._header['CRVAL1']
+        self._dec = self._header['CRVAL2']
+        
+        self._roi_msk = np.empty(shape=self._counts.shape[:2],dtype=bool)
+        self._roi_msk.fill(False)
+        
+        if not roi_msk is None: self._roi_msk |= roi_msk
+        
+        xpix, ypix = np.meshgrid(self.axis(0).center(),self.axis(1).center())
+        xpix = np.ravel(xpix)
+        ypix = np.ravel(ypix)
+        
+        self._pix_lon, self._pix_lat = self._wcs.wcs_pix2sky(xpix,ypix, 0)
 
+        self.add_roi_msk(self._ra,self._dec,roi_radius_deg,True,
+                         self.axis(1)._coordsys)
+
+    def __getnewargs__(self):
+
+        self._wcs = pywcs.WCS(self._header)
+        return ()
+#        return (self._wcs,self._counts,self._ra,self._dec,self._roi_radius)
+        
+    def add_roi_msk(self,lon,lat,rad,invert=False,coordsys='cel'):
+        
+        v0 = Vector3D.createLatLon(np.radians(self._pix_lat),
+                                   np.radians(self._pix_lon))
+        
+        if self._axes[0]._coordsys == 'gal' and coordsys=='cel':
+            lon,lat = eq2gal(lon,lat)
+        elif self._axes[0]._coordsys == 'cel' and coordsys=='gal':
+            lon,lat = gal2eq(lon,lat)
+            
+        v1 = Vector3D.createLatLon(np.radians(lat),np.radians(lon))
+
+        dist = np.degrees(v0.separation(v1))
+        dist = dist.reshape(self._counts.shape[:2])
+        
+        if not invert: self._roi_msk[dist<rad] = True
+        else: self._roi_msk[dist>rad] = True
+    
+class SkyCube(FITSImage):
+
+    def __init__(self,wcs,axes,counts=None,roi_radius_deg=180.,roi_msk=None):
+        super(SkyCube, self).__init__(wcs,axes,counts,roi_radius_deg,roi_msk)
+        
     def slice(self,sdims,dim_index):
 
         h = HistogramND.slice(self,sdims,dim_index)
         if h.ndim() == 3:
-            return SkyCube(self._wcs,h.axes(),h.counts())
+            return SkyCube(self._wcs,h.axes(),h.counts(),
+                           self._roi_radius_deg,self._roi_msk)
         elif h.ndim() == 2:        
-            return SkyImage(self._wcs,h.axes(),h.counts())
+            return SkyImage(self._wcs,h.axes(),h.counts(),
+                            self._roi_radius_deg,self._roi_msk)
         else:
             return h
 
@@ -131,7 +183,8 @@ class SkyCube(HistogramND):
 
         h = HistogramND.project(self,pdims,bin_range)
         if h.ndim() == 2:
-            return SkyImage(self._wcs,h.axes(),h.counts())
+            return SkyImage(self._wcs,h.axes(),h.counts(),
+                            self._roi_radius_deg,self._roi_msk)
 
     def marginalize(self,mdims,bin_range=None):
 
@@ -240,7 +293,8 @@ class SkyCube(HistogramND):
     def createFromTree(tree,lon,lat,lon_var,lat_var,egy_var,roi_radius_deg,
                        energy_axis,cut='',bin_size_deg=0.2,coordsys='cel'):
 
-        im = SkyCube.createROI(lon,lat,roi_radius_deg,energy_axis,bin_size_deg,coordsys)        
+        im = SkyCube.createROI(lon,lat,roi_radius_deg,energy_axis,
+                               bin_size_deg,coordsys)        
         im.fill(get_vector(tree,lon_var,cut=cut),
                 get_vector(tree,lat_var,cut=cut),
                 get_vector(tree,egy_var,cut=cut))
@@ -258,27 +312,12 @@ class SkyCube(HistogramND):
         header['NAXIS2'] = nbin
         axes = FITSAxis.create_axes(header)
         axes.append(FITSAxis.create_from_axis('Energy',energy_axis))
-        return SkyCube(wcs,axes)
+        return SkyCube(wcs,axes,roi_radius_deg=roi_radius_deg)
     
-class SkyImage(Histogram2D):
+class SkyImage(FITSImage):
 
-    def __init__(self,wcs,axes,counts,roi_radius_deg=180.):
-
-        self._wcs = wcs
-        self._header = self._wcs.to_header(True)
-        
-        self._ra = self._header['CRVAL1']
-        self._dec = self._header['CRVAL2']
-                        
-        self._roi_radius = roi_radius_deg
-        
-        super(SkyImage, self).__init__(axes[0],axes[1],counts=counts,var=counts)
-
-    def __getnewargs__(self):
-
-        self._wcs = pywcs.WCS(self._header)
-        return ()
-#        return (self._wcs,self._counts,self._ra,self._dec,self._roi_radius)
+    def __init__(self,wcs,axes,counts,roi_radius_deg=180.,roi_msk=None):
+        super(SkyImage, self).__init__(wcs,axes,counts,roi_radius_deg,roi_msk)
 
     @staticmethod
     def createFromTree(tree,lon,lat,lon_var,lat_var,roi_radius_deg,cut='',
@@ -342,7 +381,9 @@ class SkyImage(Histogram2D):
 #        else:
 #            ymin = np.min(xy[1])
 #            ymax = np.max(xy[1])
-    
+
+
+        
     def fill(self,lon,lat):
 
         pixcrd = self._wcs.wcs_sky2pix(lon,lat, 0)
@@ -368,13 +409,13 @@ class SkyImage(Histogram2D):
     def plot_catalog(self,src_color='w',marker_threshold=10,
                      label_threshold=20., **kwargs):
         
-        if self._axes[0]._galcoord:
+        if self._axes[0]._coordsys == 'gal':
             ra, dec = gal2eq(self._ra,self._dec)
         else:
             ra, dec = self._ra, self._dec
             
         cat = Catalog()
-        srcs = cat.get_source_by_position(ra,dec,self._roi_radius)
+        srcs = cat.get_source_by_position(ra,dec,self._roi_radius_deg)
 
         src_lon = []
         src_lat = []
@@ -389,7 +430,7 @@ class SkyImage(Histogram2D):
             labels.append(s['Source_Name'])
             signif_avg.append(s['Signif_Avg'])
         
-        if self._axes[0]._galcoord:
+        if self._axes[0]._coordsys == 'gal':
             src_lon, src_lat = eq2gal(src_lon,src_lat)
             
             
@@ -427,6 +468,8 @@ class SkyImage(Histogram2D):
 
         if logz: norm = LogNorm()
         else: norm = Normalize()
+
+
         
         im = ax.imshow(self._counts.T,#np.power(self._counts.T,1./3.),
                        interpolation='nearest',origin='lower',norm=norm,
@@ -449,19 +492,41 @@ class SkyImage(Histogram2D):
 #                                          header=self._wcs.to_header(True),
 #                                          lon_center=0.)
 
+        colormap = mpl.cm.jet
+        colormap.set_under('white')
+        vmin = np.min(self._counts[~self._roi_msk.T])
 
-        im = ax.imshow(self._counts.T,#np.power(self._counts.T,1./3.),
+        
+        
+#        vmax = np.max(self._counts[~self._roi_msk])
+
+#        c = self._counts[~self._roi_msk]        
+#        if logz: vmin = np.min(c[c>0])
+
+
+        
+        counts = copy.copy(self._counts)
+        counts[self._roi_msk.T] = np.min(self._counts)-1.0
+
+        print 'vmin ', vmin, np.min(self._counts)-1.0, np.sum(self._roi_msk)
+        
+        im = ax.imshow(counts.T,#np.power(self._counts.T,1./3.),
                        interpolation='nearest',origin='lower',norm=norm,
                        extent=[self.axis(0).edges()[0],
                                self.axis(0).edges()[-1],
                                self.axis(1).edges()[0],
-                               self.axis(1).edges()[-1]],**kwargs)
-
+                               self.axis(1).edges()[-1]],
+                       vmin=vmin,#vmax=vmax,
+                       **kwargs)
+        im.set_cmap(colormap)
+        
+#        im.set_clim(vmin=np.min(self._counts[~self._roi_msk]),
+#                    vmax=np.max(self._counts[~self._roi_msk]))
 #        norm=LogNorm()
         
         ax.set_ticklabel_type("d", "d")
 
-        if self._axes[0]._galcoord:
+        if self._axes[0]._coordsys == 'gal':
             ax.set_xlabel('GLON')
             ax.set_ylabel('GLAT')
         else:        

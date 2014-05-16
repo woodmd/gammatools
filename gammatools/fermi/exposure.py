@@ -14,24 +14,42 @@ class LTCube(object):
 
     def __init__(self,ltfile):
 
+        self._ltmap = None
+
+        if isinstance(ltfile,list):
+            for f in ltfile: self.load_ltfile(f)
+        elif not re.search('\.txt?',ltfile) is None:
+            files=np.loadtxt(ltfile,unpack=True,dtype='str')
+            for f in files: self.load_ltfile(f)
+        else:
+            self.load_ltfile(ltfile)
+        
+
+    def load_ltfile(self,ltfile):
+
+        print 'Loading ', ltfile
+        
         import healpy
         import pyfits
-
         
         hdulist = pyfits.open(ltfile)
+                
+        if self._ltmap is None:
+            self._ltmap = hdulist[1].data.field(0)
+            self._tstart = hdulist[0].header['TSTART']
+            self._tstop = hdulist[0].header['TSTOP']
+        else:
+            self._ltmap += hdulist[1].data.field(0)
+            self._tstart = min(self._tstart,hdulist[0].header['TSTART'])
+            self._tstop = max(self._tstop,hdulist[0].header['TSTOP'])
 
-        self._ltmap = hdulist[1].data.field(0)
-
-        self._tstart = hdulist[0].header['TSTART']
-        self._tstop = hdulist[0].header['TSTOP']
         self._cth_edges = np.array(hdulist[3].data.field(0))
         self._cth_edges = np.concatenate(([1],self._cth_edges))
         self._cth_edges = self._cth_edges[::-1]
         self._cth_axis = Axis(self._cth_edges)
 
         self._domega = (self._cth_edges[1:]-self._cth_edges[:-1])*2*np.pi
-
-
+            
     def get_src_lthist(self,ra,dec):
         
         lthist = Histogram(self._cth_axis)

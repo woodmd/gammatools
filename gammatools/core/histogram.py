@@ -1481,16 +1481,6 @@ class Histogram2D(HistogramND):
         ixy = np.unravel_index(a,cv.shape)
         return (ixy[0]+ix_range[0],ixy[1]+iy_range[0])
 
-#    def slice(self,iaxis,ibin):
-#        """Return a cut of the 2D histogram at the given bin index."""
-#
-#        return self.marginalize(iaxis,bin_range=[ibin,ibin+1])
-
-#    def sliceByValue(self,iaxis,value):
-
-#        ibin = self._axes[iaxis].valToBinBounded(value)
-#        return self.slice(iaxis,ibin)
-
     def interpolate(self,x,y):
         from util import interpolate2d
         return interpolate2d(self._xaxis.center(),

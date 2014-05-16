@@ -166,6 +166,8 @@ if not opts.friends is None:
 x = '''
 from IRFdefault import *
 
+className = "source"
+
 Prune.fileName = 'skim.root'
 Prune.cuts = '%s'
 Prune.branchNames = """
@@ -205,16 +207,37 @@ f = open(os.path.join(opts.class_name,'setup.py'),'w')
 f.write(x)
 f.close()
 
-if not os.path.isfile(os.path.join(irf_dir,'skim.root')):
-    cmd = 'prune %s'%irf_dir
+os.chdir(irf_dir)
+
+if not os.path.isfile('skim.root'):
+    cmd = 'prune setup.py'
     print cmd
     os.system(cmd)
 
-cmd = 'makeirf %s'%irf_dir
+#
+    
+#cmd = 'makeirf %s'%irf_dir
+cmd = 'makeirf setup.py'
 print cmd
 os.system(cmd)
+
+sys.exit(0)
     
-os.chdir(irf_dir)
+#os.chdir(irf_dir)
+
+
+    
+
+#if not os.path.isfile(os.path.join(irf_dir,'skim.root')):
+#    cmd = 'prune %s'%irf_dir
+#    print cmd
+#    os.system(cmd)
+
+#cmd = 'makeirf %s'%irf_dir
+#print cmd
+#os.system(cmd)
+    
+#os.chdir(irf_dir)
 
 cmd = 'makefits %s %s'%('parameters.root',opts.class_name)
 print cmd
