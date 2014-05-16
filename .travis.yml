@@ -25,7 +25,8 @@ install:
  
 # Run test
 script:
-  - nosetests --with-cov --cov gammatools --cov-config .coveragerc --logging-level=INFO
+#  - nosetests --with-cov --cov gammatools --cov-config .coveragerc --logging-level=INFO
+  - nosetests --with-coverage --logging-level=INFO
  
 # Calculate coverage
 after_success:
