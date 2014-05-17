@@ -52,6 +52,10 @@ class IRFManager(object):
         parser.add_argument('--irf_dir', default = 'custom_irfs', 
                             help = 'Set the IRF directory.')
 
+        parser.add_argument('--expand_irf_name', default = False,
+                            action='store_true',
+                            help = 'Set the IRF directory.')
+        
     @staticmethod
     def create(irf_name,load_from_file=False,irf_dir=None):
         
@@ -59,7 +63,7 @@ class IRFManager(object):
         else: return IRFManager.createFromIRF(irf_name)
 
     @staticmethod
-    def createFromFile(irf_name,irf_dir=None):
+    def createFromFile(irf_name,irf_dir=None,expand_irf_name=False):
         
         if irf_dir is None: irf_dir = 'custom_irfs'
 
@@ -67,9 +71,10 @@ class IRFManager(object):
         aeff_files = []
         edisp_files = []
 
-        irf_names = expand_irf(irf_name)
+        if expand_irf_name: irf_names = expand_irf(irf_name)
+        else: irf_names = [irf_name]
+        
         for name in irf_names:     
-
             name = name.replace('::FRONT','_front')
             name = name.replace('::BACK','_back')
 
@@ -122,6 +127,23 @@ class IRFManager(object):
 
 #        return self._psf(*args,**kwargs)
 
+    def psf_quantile(self,egy,cth,frac=0.68):
+        x = np.logspace(-3.0,np.log10(45.0),300)        
+        x = np.concatenate(([0],x))
+        xc = 0.5*(x[:-1]+x[1:])
+        deltax = np.radians(x[1:] - x[:-1])
+        
+        y = np.zeros(len(xc))
+        for i in range(len(self._psf)):
+            y += self._psf[i](xc,egy,cth)
+        
+        cdf = 2*np.pi*np.sin(np.radians(xc))*y*deltax
+        cdf = np.cumsum(cdf)
+        cdf = np.concatenate(([0],cdf))
+        cdf /= cdf[-1]
+
+        return percentile(x,cdf,frac)
+    
     def aeff(self,*args,**kwargs):
 
         v = None
@@ -159,6 +181,18 @@ class IRFManager(object):
     
 class IRF(object):
 
+    def setup_axes(self,data):
+
+        elo = np.log10(np.array(data[0][0]))
+        ehi = np.log10(np.array(data[0][1]))
+        cthlo = np.array(data[0][2])
+        cthhi = np.array(data[0][3])
+        
+        edges = np.concatenate((elo,np.array(ehi[-1],ndmin=1)))
+        self._energy_axis = Axis(edges)
+        edges = np.concatenate((cthlo,np.array(cthhi[-1],ndmin=1)))
+        self._cth_axis = Axis(edges)
+    
     def get_index(self,x,center,width):
 
         x = np.asarray(x)
@@ -209,9 +243,11 @@ class AeffIRF(IRF):
 
     def __init__(self,fits_file):
         
-        self._hdulist = pyfits.open(fits_file)
-        #hdulist.info()
+        self._hdulist = pyfits.open(fits_file)        
         hdulist = self._hdulist
+        hdulist.info()
+
+        self.setup_axes(hdulist[1].data)
         
         self._elo = np.log10(np.array(hdulist[1].data[0][0]))
         self._ehi = np.log10(np.array(hdulist[1].data[0][1]))
@@ -232,27 +268,29 @@ class AeffIRF(IRF):
 
         self._aeff.resize((self._cthlo.shape[0],self._elo.shape[0]))
 
+        print self._energy_axis.edges()
+        print self._energy_axis.width()
+        
+        self._aeff_hist = Histogram2D(self._cth_axis,self._energy_axis,
+                                      counts=self._aeff,var=0)
 #        hdulist.close()
         
         return
 
-
-    def plot(self):
-        h = Histogram2D([self._cthlo[0],self._cthhi[-1]],
-                        [self._elo[0],self._ehi[-1]],
-                        self._aeff.shape[1],
-                        self._aeff.shape[0])
-
-        h._counts = self._aeff
-        h.plot()
-#        plt.colorbar()
-
     def __call__(self,egy,cth):
 
         egy = np.array(egy,ndmin=1)
-        cth = np.array(cth,ndmin=1)        
+        cth = np.array(cth,ndmin=1)
+
+#        aeff2 = self._aeff_hist.interpolate(cth,egy)
+
+
+        
         aeff = self.interpolate(cth,egy,self._aeff)
         aeff[(aeff<= 0.0) | (cth < self._cthlo[0])] = 0.0
+
+
+#        print egy, cth, aeff-aeff2
         return aeff
 
 #        if aeff <= 0.0 or cth < self._cthlo[0]: return 0.0
@@ -299,24 +337,27 @@ class EDispIRF(IRF):
     def __init__(self,fits_file):
         
         self._hdulist = pyfits.open(fits_file)
-
         hdulist = self._hdulist
+        hdulist.info()
+
         
         self._elo = np.log10(np.array(hdulist[1].data[0][0]))
         self._ehi = np.log10(np.array(hdulist[1].data[0][1]))
         self._cthlo = np.array(hdulist[1].data[0][2])
         self._cthhi = np.array(hdulist[1].data[0][3])
 
+        edges = np.concatenate((self._elo,np.array(self._ehi[-1],ndmin=1)))
+        self._energy_axis = Axis(edges)
+        edges = np.concatenate((self._cthlo,np.array(self._cthhi[-1],ndmin=1)))
+        self._cth_axis = Axis(edges)
+        
+        
         self._center = [0.5*(self._cthlo + self._cthhi),
                         0.5*(self._elo + self._ehi)]
         
         self._bin_width = [self._cthhi-self._cthlo,
                            self._ehi-self._elo]
-
-#        print self._center
-#        print self._bin_width
-        
-        
+ 
     def save(self,filename):
 
         self._hdulist[0].header['FILENAME'] = filename
@@ -344,8 +385,7 @@ class PSFIRF(IRF):
         elif re.search('back',fits_file) is not None:
             self._ct = 'back'
         else:
-            print 'Error: Could not identify conversion type.'
-            sys.exit(1)
+            self._ct = 'none'
         
         self._elo = np.log10(np.array(hdulist[1].data[0][0]))
         self._ehi = np.log10(np.array(hdulist[1].data[0][1]))
@@ -450,31 +490,25 @@ class PSFIRF(IRF):
             return self.eval(dtheta,egy,cth)
         
     def quantile(self,egy,cth,frac=0.68):
-        radii = np.logspace(-3.0,np.log10(45.0),300)
-        radii = np.concatenate(([0],radii))
+        x = np.logspace(-3.0,np.log10(45.0),300)
+        x = np.concatenate(([0],x))
+        xc = 0.5*(x[:-1]+x[1:])
+        y = self(xc,egy,cth)
 
-        y = self(radii,egy,cth)
-
-        f = UnivariateSpline(radii,y,s=0)
-
-        rcenters = 0.5*(radii[:-1]+radii[1:])
-        rwidth = np.radians(radii[1:] - radii[:-1])
+        deltax = np.radians(x[1:] - x[:-1])
         
-        cdf = 2*np.pi*np.sin(np.radians(rcenters))*f(rcenters)*rwidth
+        cdf = 2*np.pi*np.sin(np.radians(xc))*y*deltax
         cdf = np.cumsum(cdf)
         cdf = np.concatenate(([0],cdf))
-
         cdf /= cdf[-1]
-        
-        indx = bisect.bisect(cdf, frac) - 1
-        return ((frac - cdf[indx])/(cdf[indx+1] - cdf[indx])
-                *(radii[indx+1] - radii[indx]) + radii[indx])
+
+        return percentile(x,cdf,frac)
         
         
     def eval(self,dtheta,egy,cth):
         """Evaluate PSF by interpolating in PSF parameters."""
-        if self._ct == 'front': c = self._cfront
-        else: c = self._cback
+        if self._ct == 'back': c = self._cback
+        else: c = self._cfront
         
         spx = np.sqrt(np.power(c[0]*np.power(10,-self._beta*(2.0-egy)),2) +
                       np.power(c[1],2))
@@ -499,6 +533,12 @@ class PSFIRF(IRF):
                 (1-fcore)*self.king(x,stail,gtail))/(spx*spx)
 
     def eval2(self,dtheta,egy,cth):
+
+        egy = np.array(egy,ndmin=1)
+        cth = np.array(cth,ndmin=1)
+
+#        if cth.shape != egy.shape: cth = cth*np.ones(egy.shape)
+        
         """Evaluate PSF by interpolating in PSF density."""
         ix = self.get_index(cth,self._center[0],self._bin_width[0])
         iy = self.get_index(egy,self._center[1],self._bin_width[1])
@@ -522,6 +562,8 @@ class PSFIRF(IRF):
         
     def king2(self,dtheta,ix,iy):
 
+        print dtheta, ix , iy
+        
         egy = self._center[1][iy]
         
         if self._ct == 'front': c = self._cfront

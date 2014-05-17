@@ -151,7 +151,7 @@ if not opts.selection is None:
     cut_expr = expand_aliases(cut_defs,opts.selection)
 
 branch_names = get_branches(cut_expr)
-
+branch_names = list(set(branch_names))
 
 friends = ''
 if not opts.friends is None:
@@ -166,7 +166,8 @@ if not opts.friends is None:
 x = '''
 from IRFdefault import *
 
-className = "source"
+className="%s"
+selectionName="front"
 
 Prune.fileName = 'skim.root'
 Prune.cuts = '%s'
@@ -192,6 +193,7 @@ Data.var_xdir = 'WP8BestXDir'
 Data.var_ydir = 'WP8BestYDir'
 Data.var_zdir = 'WP8BestZDir'
 Data.var_energy = 'WP8BestEnergy'
+Data.front_only_psf_scaling = 'True'
 
 Bins.edisp_energy_overlap = 2
 Bins.edisp_angle_overlap = 2
@@ -200,7 +202,7 @@ Bins.psf_energy_overlap = 1
 Bins.psf_angle_overlap = 1
 
 parameterFile = 'parameters.root'
-'''%(cut_expr,' '.join(branch_names),input_file_path,
+'''%(opts.class_name,cut_expr,' '.join(branch_names),input_file_path,
      generated,friends)
 
 f = open(os.path.join(opts.class_name,'setup.py'),'w')
@@ -217,16 +219,10 @@ if not os.path.isfile('skim.root'):
 #
     
 #cmd = 'makeirf %s'%irf_dir
-cmd = 'makeirf setup.py'
-print cmd
-os.system(cmd)
-
-sys.exit(0)
-    
-#os.chdir(irf_dir)
-
-
-    
+if not os.path.isfile('parameters.root'):
+    cmd = 'makeirf setup.py'
+    print cmd
+    os.system(cmd)
 
 #if not os.path.isfile(os.path.join(irf_dir,'skim.root')):
 #    cmd = 'prune %s'%irf_dir

@@ -5,6 +5,7 @@ import scipy.special as spfn
 import re
 import cPickle as pickle
 import gzip
+import bisect
 
 class Units(object):
 
@@ -396,6 +397,14 @@ def interpolatend(x0,z,x):
         psum[j] *= z[idx]
 
     return np.sum(psum,axis=0)
+
+def percentile(x,cdf,frac=0.68):
+    """Given a cumulative distribution function C(x) find the value
+    of x for which C(x) = f."""
+    indx = bisect.bisect(cdf, frac) - 1
+    return ((frac - cdf[indx])/(cdf[indx+1] - cdf[indx])
+            *(x[indx+1] - x[indx]) + x[indx])
+
 
 def convolve2d_gauss(fn,r,sig,rmax,nstep=200):
     """Evaluate the convolution f'(r) = f(r) * g(r) where f(r) is
