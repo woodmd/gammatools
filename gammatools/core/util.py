@@ -84,6 +84,23 @@ def format_error(v, err, nsig=1, latex=False):
     else:
         return '%s +/- %s' % (v, err)
 
+def common_prefix(strings):
+    """ Find the longest string that is a prefix of all the strings.
+    """
+    if not strings:
+        return ''
+    prefix = strings[0]
+    for s in strings:
+        if len(s) < len(prefix):
+            prefix = prefix[:len(s)]
+        if not prefix:
+            return ''
+        for i in range(len(prefix)):
+            if prefix[i] != s[i]:
+                prefix = prefix[:i]
+                break
+    return prefix
+
 def update_dict(d0,d1,add_new_keys=False):
     """Recursively update the contents of python dictionary d1 with
     the contents of python dictionary d0."""

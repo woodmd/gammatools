@@ -416,7 +416,7 @@ class TestHistogram(unittest.TestCase):
     def test_histogram_quantile(self):
 
 
-        h = Histogram(np.linspace(-4,4,100))
+        h = Histogram(np.linspace(-4,4,1000))
 
         x = h.axis().center()
         
@@ -430,10 +430,4 @@ class TestHistogram(unittest.TestCase):
         assert_almost_equal(q,mu,3)
 
         q, qerr = h.central_quantile(fraction=0.68)
-
-        print q
-
-        
         q, qerr = h.central_quantile(fraction=0.95)
-
-        print q
