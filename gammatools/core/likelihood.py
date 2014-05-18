@@ -117,7 +117,7 @@ class BinnedChi2Fn(ParamFn):
         pset = self._model.param(True)
         pset.update(p)
 
-        fv = self._model.histogram(self._h.edges(),pset)
+        fv = self._model.histogram(self._h.axis().edges(),pset)
         v = chi2(self._h.counts(),self._h.var(),fv)
 
         if v.ndim == 2:

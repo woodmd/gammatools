@@ -92,6 +92,9 @@ class HistogramND(object):
         self._ndim = self._counts.ndim
         self._dims = np.array(range(self._ndim),dtype=int)
 
+    def shape(self):
+        return self._counts.shape
+
     def ndim(self):
         return len(self._axes)
 
@@ -108,17 +111,20 @@ class HistogramND(object):
         """Return the center coordinate of each bin in this histogram
         as an NxM array."""
         
-        c = []
-        for i in self._dims:
-            c.append(self._axes[i].center())
+        if self._ndim == 1:
+            return np.array(self._axes[0].center(),ndmin=2)
 
-        c = np.meshgrid(*c,indexing='ij')
+        else:
+            c = []
+            for i in self._dims:
+                c.append(self._axes[i].center())
 
-        cv = []
-        for i in range(len(c)):
-            cv.append(np.ravel(c[i]))
+            c = np.meshgrid(*c,indexing='ij')
 
-        return np.array(cv)
+            cv = []
+            for i in range(len(c)): cv.append(np.ravel(c[i]))
+
+            return np.array(cv)
 
     def counts(self):
         return self._counts
@@ -377,12 +383,28 @@ class HistogramND(object):
 
         return self.slice(sdims,dim_index)
 
-    def interpolate(self,x):
+    def interpolate(self,*x):
+        """Note: All input arrays must have the same dimension."""
 
         center = []
         for i in range(self._ndim): center.append(self._axes[i].center())
 
-        return interpolatend(center,self._counts,x)
+        if len(x) == 1: xv = x[0]
+        else:            
+            shape = None
+            for i in range(len(x)): 
+                
+                z = np.array(x[i])
+
+                if shape is None: shape = z.shape
+                shape = np.maximum(shape,z.shape)
+            
+            xv = np.zeros((self._ndim,np.product(shape)))
+
+            for i in range(len(x)):
+                xv[i] = np.ravel(np.array(x[i])*np.ones(shape))
+
+        return interpolatend(center,self._counts,xv)
 
     def interpolateSlice(self,sdims,dim_coord):
 
@@ -928,18 +950,6 @@ class Histogram(HistogramND):
     def counts(self,ibin=None):
         if ibin is None: return self._counts
         else: return self._counts[ibin]
-
-    def center(self):
-        """Return array of bin centers."""
-        return self._axis.center()
-
-    def edges(self):
-        """Return array of bin edges."""
-        return self._axis.edges()
-
-    def width(self):
-        """Return array of bin edges."""
-        return self._axis.width()
 
     def underflow(self):
         return self._underflow

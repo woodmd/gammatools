@@ -10,7 +10,9 @@ class TestConfigurable(unittest.TestCase):
 
         class BaseClass(Configurable):
 
-            defaults = {'a' : 0, 'b' : 'x', 'c' : None }
+            defaults = {'a' : 0,
+                        'b' : 'x',
+                        'c' : None }
 
             def __init__(self,config=None):
                 super(BaseClass,self).__init__()
@@ -43,3 +45,32 @@ class TestConfigurable(unittest.TestCase):
         self.assertEqual(base_class1.config()['c'],'y')
         self.assertEqual(base_class1.config().keys(),
                          BaseClass.defaults.keys())
+
+
+        base_class0.update_config(base_class1.config())
+        derived_class0.update_config(derived_class1.config())
+
+        self.assertEqual(base_class0.config(),base_class1.config())
+        self.assertEqual(derived_class0.config(),derived_class1.config())
+
+
+        base_class0.print_config()
+        base_class1.print_config()
+
+    def test_configurable_docstring(self):
+
+        class BaseClass(Configurable):
+
+            defaults = {'a' : (0,'Doc for Option a'), 
+                        'b' : ('x','Doc for Option b'), 
+                        'c' : (None,'Doc for Option c')}
+
+            def __init__(self,config=None):
+                super(BaseClass,self).__init__()
+                self.configure(config,default_config=BaseClass.defaults)
+
+        base_class0 = BaseClass()
+
+
+        self.assertEqual(base_class0.config_docstring('a'),
+                         BaseClass.defaults['a'][1])

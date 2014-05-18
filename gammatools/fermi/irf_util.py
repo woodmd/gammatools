@@ -133,16 +133,29 @@ class IRFManager(object):
         xc = 0.5*(x[:-1]+x[1:])
         deltax = np.radians(x[1:] - x[:-1])
         
-        y = np.zeros(len(xc))
-        for i in range(len(self._psf)):
-            y += self._psf[i](xc,egy,cth)
-        
-        cdf = 2*np.pi*np.sin(np.radians(xc))*y*deltax
-        cdf = np.cumsum(cdf)
-        cdf = np.concatenate(([0],cdf))
-        cdf /= cdf[-1]
+        xc = xc.reshape((1,300))
+        deltax = deltax.reshape((1,300))
+        egy = np.ravel(np.array(egy,ndmin=1))
+        cth = np.ravel(np.array(cth,ndmin=1))
+        egy = egy.reshape((egy.shape[0],) + (1,))
+        cth = cth.reshape((cth.shape[0],) + (1,))
 
-        return percentile(x,cdf,frac)
+        y = np.zeros((egy.shape[0],300))
+        for i in range(len(self._psf)):
+            y += self._psf[i](xc,egy,cth).reshape(y.shape)
+
+
+        cdf = 2*np.pi*np.sin(np.radians(xc))*y*deltax
+        cdf = np.cumsum(cdf,axis=1)
+#        cdf = np.concatenate(([0],cdf))
+#        cdf = np.vstack((np.zeros(cdf.shape[0]),cdf))
+        cdf /= cdf[:,-1][:,np.newaxis]
+
+        p = np.zeros(cdf.shape[0])
+        for i in range(len(p)): 
+            p[i] = percentile(x[1:],cdf[i],frac)
+        return p
+#        return percentile(x,cdf,frac)
     
     def aeff(self,*args,**kwargs):
 
@@ -192,53 +205,7 @@ class IRF(object):
         self._energy_axis = Axis(edges)
         edges = np.concatenate((cthlo,np.array(cthhi[-1],ndmin=1)))
         self._cth_axis = Axis(edges)
-    
-    def get_index(self,x,center,width):
-
-        x = np.asarray(x)
-        if x.ndim == 0: x.resize((1))
-
-        dx = np.zeros(shape=(center.shape[0],x.shape[0]))
-        dx[:] = x
-        dx = np.abs(dx.T-center-0.5*width)
-
-        ix = np.argmin(dx,axis=1)
-        ix[ix > center.shape[0]-2] = center.shape[0]-2
-
-        return ix
-        
-    def interpolate(self,x,y,z):
-
-        x = np.asarray(x)
-        y = np.asarray(y)
-
-        if x.ndim == 0: x.resize((1))
-        if y.ndim == 0: y.resize((1))
-        
-        dx = np.zeros(shape=(self._center[0].shape[0],x.shape[0]))
-        dx[:] = x
-        dx = np.abs(dx.T-self._center[0]-0.5*self._bin_width[0])
-
-        dy = np.zeros(shape=(self._center[1].shape[0],y.shape[0]))
-        dy[:] = y
-        dy = np.abs(dy.T-self._center[1]-0.5*self._bin_width[1])
-        
-        ix = np.argmin(dx,axis=1)
-        iy = np.argmin(dy,axis=1)
-
-        ix[ix > self._center[0].shape[0]-2] = self._center[0].shape[0]-2
-        iy[iy > self._center[1].shape[0]-2] = self._center[1].shape[0]-2        
-
-        xs = (x - self._center[0][ix])/self._bin_width[0][ix]
-        ys = (y - self._center[1][iy])/self._bin_width[1][iy]
-
-        # Do not interpolate beyond the edge of the lowest bin in cos-theta
-        xs[(ix == 0) & (xs <= 0)] = 0
-        
-        return (z[ix,iy]*(1-xs)*(1-ys) + z[ix+1,iy]*xs*(1-ys) +
-                z[ix,iy+1]*(1-xs)*ys + z[ix+1,iy+1]*xs*ys)
-
-    
+                
 class AeffIRF(IRF):
 
     def __init__(self,fits_file):
@@ -248,29 +215,12 @@ class AeffIRF(IRF):
         hdulist.info()
 
         self.setup_axes(hdulist[1].data)
-        
-        self._elo = np.log10(np.array(hdulist[1].data[0][0]))
-        self._ehi = np.log10(np.array(hdulist[1].data[0][1]))
-        self._egy_edge = np.append(self._elo,[self._ehi[-1]])
-
-        
-        self._cthlo = np.array(hdulist[1].data[0][2])
-        self._cthhi = np.array(hdulist[1].data[0][3])
-        self._cth_edge = np.append(self._cthlo,[self._cthhi[-1]])
-        
-        self._center = [0.5*(self._cthlo + self._cthhi),
-                        0.5*(self._elo + self._ehi)]
-        
-        self._bin_width = [self._cthhi-self._cthlo,
-                           self._ehi-self._elo]
-
         self._aeff = np.array(hdulist[1].data[0][4])
 
-        self._aeff.resize((self._cthlo.shape[0],self._elo.shape[0]))
+        nx = self._cth_axis.nbins()
+        ny = self._energy_axis.nbins()
 
-        print self._energy_axis.edges()
-        print self._energy_axis.width()
-        
+        self._aeff.resize((nx,ny))
         self._aeff_hist = Histogram2D(self._cth_axis,self._energy_axis,
                                       counts=self._aeff,var=0)
 #        hdulist.close()
@@ -281,21 +231,9 @@ class AeffIRF(IRF):
 
         egy = np.array(egy,ndmin=1)
         cth = np.array(cth,ndmin=1)
-
-#        aeff2 = self._aeff_hist.interpolate(cth,egy)
-
-
-        
-        aeff = self.interpolate(cth,egy,self._aeff)
-        aeff[(aeff<= 0.0) | (cth < self._cthlo[0])] = 0.0
-
-
-#        print egy, cth, aeff-aeff2
+        aeff = self._aeff_hist.interpolate(cth,egy)
+        aeff[(aeff<= 0.0) | (cth < self._cth_axis.lo_edge())] = 0.0
         return aeff
-
-#        if aeff <= 0.0 or cth < self._cthlo[0]: return 0.0
-#        else: return aeff
-#        return np.max(0.0,self.interpolate(cth,egy,self._aeff))
 
     def save(self,filename):
 
@@ -380,61 +318,103 @@ class PSFIRF(IRF):
         hdulist = self._hdulist
 #        hdulist.info()
 
-        if re.search('front',fits_file) is not None:
-            self._ct = 'front'
-        elif re.search('back',fits_file) is not None:
-            self._ct = 'back'
-        else:
-            self._ct = 'none'
+        if re.search('front',fits_file) is not None: self._ct = 'front'
+        elif re.search('back',fits_file) is not None: self._ct = 'back'
+        else: self._ct = 'none'
         
-        self._elo = np.log10(np.array(hdulist[1].data[0][0]))
-        self._ehi = np.log10(np.array(hdulist[1].data[0][1]))
-        self._cthlo = np.array(hdulist[1].data[0][2])
-        self._cthhi = np.array(hdulist[1].data[0][3])
+        self.setup_axes(hdulist[1].data)
+        nx = self._cth_axis.nbins()
+        ny = self._energy_axis.nbins()
 
-        self._ncore = np.array(hdulist[1].data[0][4])
-        self._ntail = np.array(hdulist[1].data[0][5])
-        self._score = np.array(hdulist[1].data[0][6])
-        self._stail = np.array(hdulist[1].data[0][7])
-        self._gcore = np.array(hdulist[1].data[0][8])
-        self._gtail = np.array(hdulist[1].data[0][9])
-        
-        self._ncore.resize((self._cthlo.shape[0],self._elo.shape[0]))
-        self._ntail.resize((self._cthlo.shape[0],self._elo.shape[0]))
-        self._score.resize((self._cthlo.shape[0],self._elo.shape[0]))
-        self._stail.resize((self._cthlo.shape[0],self._elo.shape[0]))
-        self._gcore.resize((self._cthlo.shape[0],self._elo.shape[0]))
-        self._gtail.resize((self._cthlo.shape[0],self._elo.shape[0]))
-        self._fcore = 1./(1.+self._ntail*
-                          np.power(self._stail/self._score,2))
+        ncore = np.array(hdulist[1].data[0][4]).reshape(nx,ny)
+        ntail = np.array(hdulist[1].data[0][5]).reshape(nx,ny)
+        score = np.array(hdulist[1].data[0][6]).reshape(nx,ny)
+        stail = np.array(hdulist[1].data[0][7]).reshape(nx,ny)
+        gcore = np.array(hdulist[1].data[0][8]).reshape(nx,ny)
+        gtail = np.array(hdulist[1].data[0][9]).reshape(nx,ny)        
+        fcore = 1./(1.+ntail*np.power(stail/score,2))
+
+        self._ncore_hist = Histogram2D(self._cth_axis,self._energy_axis,
+                                       counts=ncore,var=0)
+        self._ntail_hist = Histogram2D(self._cth_axis,self._energy_axis,
+                                       counts=ntail,var=0)
+        self._score_hist = Histogram2D(self._cth_axis,self._energy_axis,
+                                       counts=score,var=0)
+        self._stail_hist = Histogram2D(self._cth_axis,self._energy_axis,
+                                       counts=stail,var=0)
+        self._gcore_hist = Histogram2D(self._cth_axis,self._energy_axis,
+                                       counts=gcore,var=0)
+        self._gtail_hist = Histogram2D(self._cth_axis,self._energy_axis,
+                                       counts=gtail,var=0)
+        self._fcore_hist = Histogram2D(self._cth_axis,self._energy_axis,
+                                       counts=fcore,var=0)
         
         self._cfront = hdulist[2].data[0][0][0:2]
         self._cback = hdulist[2].data[0][0][2:4]
         self._beta = hdulist[2].data[0][0][4]
 
-        self._center = [0.5*(self._cthlo + self._cthhi),
-                        0.5*(self._elo + self._ehi)]
+        self._theta_axis = Axis(np.linspace(-3.0,np.log10(90.0),101))
+        self._psf_hist = HistogramND([self._cth_axis,
+                                      self._energy_axis,
+                                      self._theta_axis])
+                                     
+        th = self._theta_axis.center()
 
-        self._bin_width = [self._cthhi-self._cthlo,
-                           self._ehi-self._elo]
-        
-        
+        for i in range(nx):
+            for j in range(ny):
+                x = self._cth_axis.center()[i]
+                y = self._energy_axis.center()[j]                
+                z = self.eval(10**th,y,x)
+                self._psf_hist._counts[i,j] = self.eval(10**th,y,x)
+
+
         return
-        
-        x0 = np.linspace(1,6,200)        
-        
         plt.figure()
 
-        plt.plot(x0,self.interpolate(self._center[0][0],x0,self._gcore))
-        plt.plot(x0,self.interpolate(0.5*(self._center[0][0]+self._center[0][1]),x0,self._gcore))
-        plt.plot(x0,self.interpolate(self._center[0][1],x0,self._gcore))
-        plt.plot(self._center[1],self._gcore[0],marker='o')
-        plt.plot(self._center[1],self._gcore[1],marker='o')
-        plt.show()
-        
-#        self.interpolate(np.array([0.15,0.4,1.0,0.5]),3.,self._gcore)
-        return
+        egy0 = self._energy_axis.center()[10]
+        cth0 = self._cth_axis.center()[5]
 
+        y0 = self.eval2(10**th,egy0,cth0)
+        y1 = self.eval(10**th,egy0,cth0)
+
+        self._psf_hist.slice([0,1],[5,10]).plot(hist_style='line')
+        plt.plot(th,y0)
+        plt.plot(th,y1)
+        plt.gca().set_yscale('log')
+
+        plt.figure()
+        self._psf_hist.interpolateSlice([0,1],[cth0,egy0]).plot(hist_style='line')
+        self._psf_hist.slice([0,1],[5,10]).plot(hist_style='line')
+        plt.gca().set_yscale('log')
+
+        plt.figure()
+        sh = self._psf_hist.interpolateSlice([0,1],[cth0+0.01,egy0+0.03])
+        y0 = self.eval2(10**th,egy0+0.03,cth0+0.01)
+        y1 = self.eval(10**th,egy0+0.03,cth0+0.01)
+        y2 = sh.counts()
+        y3 = self._psf_hist.interpolate(np.vstack(((cth0+0.01)*np.ones(100),
+                                                   (egy0+0.03)*np.ones(100),
+                                                   th)))
+
+        sh.plot(hist_style='line')
+        plt.plot(th,y0)
+        plt.plot(th,y1)
+        plt.plot(th,y3)
+        plt.gca().set_yscale('log')
+
+        plt.figure()
+        plt.plot(th,y0/y2)
+        plt.plot(th,y0/y3)
+        plt.plot(th,y0/y1)
+#        plt.plot(th,y2/y1)
+
+        plt.figure()
+        self._psf_hist.slice([0],[5]).plot(logz=True)
+
+        plt.show()
+
+        return
+        
     def plot(self):
     
         hists = []
@@ -507,6 +487,7 @@ class PSFIRF(IRF):
         
     def eval(self,dtheta,egy,cth):
         """Evaluate PSF by interpolating in PSF parameters."""
+        
         if self._ct == 'back': c = self._cback
         else: c = self._cfront
         
@@ -516,13 +497,13 @@ class PSFIRF(IRF):
         spx = np.degrees(spx)
         
         x = dtheta/spx
+                
+        gcore = self._gcore_hist.interpolate(cth,egy)
+        score = self._score_hist.interpolate(cth,egy)
+        gtail = self._gtail_hist.interpolate(cth,egy)
+        stail = self._stail_hist.interpolate(cth,egy)
+        fcore = self._fcore_hist.interpolate(cth,egy)
 
-        gcore = self.interpolate(cth,egy,self._gcore)
-        score = self.interpolate(cth,egy,self._score)
-        gtail = self.interpolate(cth,egy,self._gtail)
-        stail = self.interpolate(cth,egy,self._stail)
-        fcore = self.interpolate(cth,egy,self._fcore)
-        
         fcore[fcore < 0.0] = 0.0  # = max(0.0,fcore)
         fcore[fcore > 1.0] = 1.0  # min(1.0,fcore)
 
@@ -533,54 +514,11 @@ class PSFIRF(IRF):
                 (1-fcore)*self.king(x,stail,gtail))/(spx*spx)
 
     def eval2(self,dtheta,egy,cth):
-
+        """Evaluate PSF by interpolating in PSF density."""
+        dtheta = np.array(dtheta,ndmin=1)
         egy = np.array(egy,ndmin=1)
         cth = np.array(cth,ndmin=1)
-
-#        if cth.shape != egy.shape: cth = cth*np.ones(egy.shape)
-        
-        """Evaluate PSF by interpolating in PSF density."""
-        ix = self.get_index(cth,self._center[0],self._bin_width[0])
-        iy = self.get_index(egy,self._center[1],self._bin_width[1])
-
-        if ix.ndim > 0 and ix.shape[0] > 1:
-            dtheta = dtheta.reshape(dtheta.shape + (1,))
-        
-        z00 = self.king2(dtheta,ix,iy)
-        z10 = self.king2(dtheta,ix+1,iy)
-        z01 = self.king2(dtheta,ix,iy+1)
-        z11 = self.king2(dtheta,ix+1,iy+1)
-
-        xs = (cth - self._center[0][ix])/self._bin_width[0][ix]
-        ys = (egy - self._center[1][iy])/self._bin_width[1][iy]
-
-        z = (z00*(1-xs)*(1-ys) + z10*xs*(1-ys) +
-             z01*(1-xs)*ys + z11*xs*ys)
-        
-#        z[z<0] = 0
-        return z
-        
-    def king2(self,dtheta,ix,iy):
-
-        print dtheta, ix , iy
-        
-        egy = self._center[1][iy]
-        
-        if self._ct == 'front': c = self._cfront
-        else: c = self._cback
-        
-        spx = np.sqrt(np.power(c[0]*np.power(10,-self._beta*(2.0-egy)),2) +
-                      np.power(c[1],2))
-
-        spx = np.degrees(spx)
-        
-        x = dtheta/spx
-
-        king0 = self.king(x,self._score[ix,iy],self._gcore[ix,iy])
-        king1 = self.king(x,self._stail[ix,iy],self._gtail[ix,iy])
-        
-        return (self._fcore[ix,iy]*king0 +
-                (1-self._fcore[ix,iy])*king1)/(spx*spx)
+        return self._psf_hist.interpolate(cth,egy,np.log10(dtheta))
 
     def king(self,dtheta,sig,g):
 

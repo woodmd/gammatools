@@ -59,12 +59,13 @@ for arg in args.files:
                                         args.irf_dir))
 
 
-x = np.linspace(2.0,3.0,10)
-    
-print irf_models[0].psf_quantile(x,0.5)
-print irf_models[0]._psf[0].quantile(2.0,0.5)
+#x = np.linspace(2.0,3.0,100)
+#y = 0.5*np.ones(100)    
 
-sys.exit(0)
+#print irf_models[0].psf_quantile(x,y)
+#print irf_models[0]._psf[0].quantile(2.0,0.5)
+
+#sys.exit(0)
     
 acc_hists = []
 effarea_hists = []
@@ -81,18 +82,10 @@ cth_axis = Axis.create(0.2,1.0,32,label=costh_label)
 for k, irf in enumerate(irf_models):
     hpsf = Histogram2D(energy_axis,cth_axis)
     hacc = Histogram2D(energy_axis,cth_axis)
-    heffarea = Histogram2D(energy_axis,cth_axis)
-    
-    for i in range(hacc.xaxis().nbins()):
-        for j in range(hacc.yaxis().nbins()):
+    heffarea = Histogram2D(energy_axis,cth_axis)         
+    heffarea._counts = irf.aeff(*heffarea.center()).reshape(heffarea.shape())
+    hpsf._counts = irf.psf_quantile(*hpsf.center()).reshape(hpsf.shape())
 
-            x = hacc.xaxis().center()[i]
-            y = hacc.yaxis().center()[j]
-
-#        heffarea._counts[:]
-            heffarea.set(i,j,irf.aeff(x,y))
-            hpsf.set(i,j,irf._psf[0].quantile(x,y))
-            
     hacc = heffarea*2.*np.pi*hacc.yaxis().width()[np.newaxis,:]
     acc_hists.append(hacc)
     psf_hists.append(hpsf)

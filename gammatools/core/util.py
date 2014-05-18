@@ -191,29 +191,66 @@ def load_object(infile):
     fp.close()
     return o
 
+class Option(object):
+
+    def __init__(self,value,docstring=''):
+        self._value = value
+        self._docstring = docstring
+
+    def value(self):
+        return self._value
+
+    def docstring(self):
+        return self._docstring
+
+    @staticmethod
+    def create(x):
+        if isinstance(x,list): return Option(x[0],x[1])
+        elif isinstance(x,tuple): return Option(x[0],x[1])
+        else: return Option(x)
 
 class Configurable(object):
 
     def __init__(self):
 
         self._config = {}
+        self._default_config = {}
+
+    def update_config(self,config):
+        update_dict(self._config,config)
 
     def update_default_config(self,config):
         """Update configuration for the object adding keys for
         elements that are not present. """
-        update_dict(self._config,config,True)
+        if config is None: return
+        update_dict(self._default_config,config,True)
+        for k in config.keys():
+            if not isinstance(self._default_config[k],Option):
+                self._default_config[k] = Option.create(config[k])
+                
+            self._config[k] = self._default_config[k].value()
+       
+    def print_config(self):
         
+        print 'CONFIG'
+        for k, v in self._default_config.iteritems():
+            print '%20s %10s %10s %s'%(k,self._config[k],v.value(),v.docstring())
+
     def config(self,key=None):
         if key is None: return self._config
         else: return self._config[key]
+
+    def config_docstring(self,key):
+        return self._default_config[key].docstring()
 
     def set_config(self,key,value):
         self._config[key] = value
         
     def configure(self,config,subsection=None,default_config=None,**kwargs):
+        """Update the configuration of this object with the contents
+        of 'config'."""
+        self.update_default_config(default_config)
 
-        update_dict(self._config,default_config,True)
-        
         if not config is None:
 
             update_dict(self._config,config)
