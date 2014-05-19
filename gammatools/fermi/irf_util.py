@@ -415,53 +415,22 @@ class PSFIRF(IRF):
 
         return
         
-    def plot(self):
+    def plot(self,ft):
     
-        hists = []
+        fig = ft.create('psf_table',nax=(3,2),figscale=1.5)
+        fig[0].set_title('score')
+        fig[0].add_hist(self._score_hist)
+        fig[1].set_title('stail')
+        fig[1].add_hist(self._stail_hist)
+        fig[2].set_title('gcore')
+        fig[2].add_hist(self._gcore_hist)
+        fig[3].set_title('gtail')
+        fig[3].add_hist(self._gtail_hist)
+        fig[4].set_title('fcore')
+        fig[4].add_hist(self._fcore_hist)
 
-        for i in range(6):
-        
-            h = Histogram2D([self._cthlo[0],self._cthhi[-1]],
-                            self._score.shape[1],
-                            [self._elo[0],self._ehi[-1]],
-                            self._score.shape[0])
-
-            hists.append(h)
-
-
-        fig = plt.figure()
-
-        
-        
-        hists[0]._counts = self._score
-        hists[1]._counts = self._gcore
-        hists[2]._counts = self._stail
-        hists[3]._counts = self._gtail
-        hists[4]._counts = self._ncore
-        hists[5]._counts = self._ntail
-        
-        ax = fig.add_subplot(2,3,1)
-        hists[0].plot(vmax=2.0)
-        plt.colorbar()
-        ax = fig.add_subplot(2,3,2)
-        hists[1].plot(vmax=4)        
-        plt.colorbar()
-        ax = fig.add_subplot(2,3,3)
-        hists[2].plot(vmax=2.0)
-        plt.colorbar()
-        ax = fig.add_subplot(2,3,4)
-        hists[3].plot()        
-        plt.colorbar()
-        ax = fig.add_subplot(2,3,5)
-        hists[4].plot()        
-        plt.colorbar()
-
-        ax = fig.add_subplot(2,3,6)
-        hists[5].plot()        
-        plt.colorbar()
-        
-        plt.show()
-        
+        fig.plot()
+                
     def __call__(self,dtheta,egy,cth):        
 
         if self._interpolate_density:

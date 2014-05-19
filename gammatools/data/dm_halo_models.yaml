@@ -56,6 +56,55 @@ gc_nfw:
   rhor : [0.4, 8.5]
   type : nfw
 
+gc_gnfw10:
+  rs : 20.0
+  dist : 8.5
+  rmax : 100.0
+  rmin : '10.0 pc'
+  gamma : 1.0
+  rhos : null
+  rhor : [0.3, 8.5]
+  type : gnfw
+
+gc_gnfw11:
+  rs : 20.0
+  dist : 8.5
+  rmax : 100.0
+  rmin : '10.0 pc'
+  gamma : 1.1
+  rhos : null
+  rhor : [0.3, 8.5]
+  type : gnfw
+
+gc_gnfw12:
+  rs : 20.0
+  dist : 8.5
+  rmax : 100.0
+  rmin : '10.0 pc'
+  gamma : 1.2
+  rhos : null
+  rhor : [0.3, 8.5]
+  type : gnfw
+
+gc_gnfw13:
+  rs : 20.0
+  dist : 8.5
+  rmax : 100.0
+  rmin : '10.0 pc'
+  gamma : 1.3
+  rhos : null
+  rhor : [0.3, 8.5]
+  type : gnfw
+
+gc_gnfw14:
+  rs : 20.0
+  dist : 8.5
+  rmax : 100.0
+  gamma : 1.4
+  rhos : null
+  rhor : [0.3, 8.5]
+  type : gnfw
+
 gc_einasto:
   rs : 20.0
   alpha : 0.17
