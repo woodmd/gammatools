@@ -59,6 +59,17 @@ for arg in args.files:
                                         args.irf_dir))
 
 
+
+    
+for irfm in irf_models:
+    for irf in irfm._irfs:
+        fig = ft.create('psf_table',nax=(2,3))
+        fig[0].add_hist(irf._psf._score_hist)
+        fig.plot()
+    
+plt.show()
+    
+    
 #x = np.linspace(2.0,3.0,100)
 #y = 0.5*np.ones(100)    
 
@@ -76,7 +87,7 @@ psf_hists = []
 acc_fig = ft.create('acc')
 psf_fig = ft.create('psf')
 
-energy_axis = Axis.create(1.25,5.75,36,label=energy_label)
+energy_axis = Axis.create(1.00,6.00,36,label=energy_label)
 cth_axis = Axis.create(0.2,1.0,32,label=costh_label)
 
 for k, irf in enumerate(irf_models):
@@ -202,11 +213,12 @@ def make_projection_plots(hists,cut_label,cut_dim,cuts,figname,**kwargs):
 
 make_projection_plots(psf_hists,'Cos $\\theta$',1,[1.0,0.8,0.6,0.4],
                       'psf68_egy',
-                      xlabel=energy_label,ylabel=psf_label,figscale=1.3)
+                      xlabel=energy_label,ylabel=psf_label,figscale=1.4,
+                      yscale='log',legend_loc='upper right')
 
 make_projection_plots(psf_hists,'log$_{10}$(E/MeV)',0,[2.0,3.0,4.0,5.0],
                       'psf68_costh',xlabel=costh_label,ylabel=psf_label,
-                      figscale=1.3)
+                      figscale=1.4,legend_loc='upper right')
 
 #make_projection_plots(psf_hists,'Cos $\\theta$',1,[1.0,0.8,0.6,0.4],
 #                      'psf68_ratio_egy',xlabel=energy_label,ylabel=psf_ratio_label)

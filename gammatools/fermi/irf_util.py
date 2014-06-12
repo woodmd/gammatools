@@ -26,26 +26,25 @@ class IRFManager(object):
 
     load_irf = False
 
-    def __init__(self,psf_file=None,aeff_file=None,edisp_file=None):
+    def __init__(self,irfs=None):
 
-        self._psf = []
-        self._aeff = []
-        self._edisp = []
+        self._irfs = []
+        if not irfs is None: self._irfs = irfs
 
-        if not psf_file is None and not isinstance(psf_file,list): 
-            self._psf.append(PSFIRF(psf_file))
-        elif not psf_file is None and isinstance(psf_file,list): 
-            for f in psf_file: self._psf.append(PSFIRF(f))
+#        if not psf_file is None and not isinstance(psf_file,list): 
+#            self._psf.append(PSFIRF(psf_file))
+#        elif not psf_file is None and isinstance(psf_file,list): 
+#            for f in psf_file: self._psf.append(PSFIRF(f))
 
-        if not aeff_file is None and not isinstance(aeff_file,list): 
-            self._aeff.append(AeffIRF(aeff_file))
-        elif not aeff_file is None and isinstance(aeff_file,list): 
-            for f in aeff_file: self._aeff.append(AeffIRF(f))
+#        if not aeff_file is None and not isinstance(aeff_file,list): 
+#            self._aeff.append(AeffIRF(aeff_file))
+#        elif not aeff_file is None and isinstance(aeff_file,list): 
+#            for f in aeff_file: self._aeff.append(AeffIRF(f))
 
-        if not edisp_file is None and not isinstance(edisp_file,list): 
-            self._edisp.append(EDispIRF(edisp_file))
-        elif not edisp_file is None and isinstance(edisp_file,list): 
-            for f in edisp_file: self._edisp.append(EDispIRF(f))
+#        if not edisp_file is None and not isinstance(edisp_file,list): 
+#            self._edisp.append(EDispIRF(edisp_file))
+#        elif not edisp_file is None and isinstance(edisp_file,list): 
+#            for f in edisp_file: self._edisp.append(EDispIRF(f))
 
     @staticmethod
     def configure(parser):
@@ -65,67 +64,40 @@ class IRFManager(object):
     @staticmethod
     def createFromFile(irf_name,irf_dir=None,expand_irf_name=False):
         
-        if irf_dir is None: irf_dir = 'custom_irfs'
-
-        psf_files = []
-        aeff_files = []
-        edisp_files = []
-
         if expand_irf_name: irf_names = expand_irf(irf_name)
         else: irf_names = [irf_name]
+
+        irfset = IRFManager()
         
         for name in irf_names:     
-            name = name.replace('::FRONT','_front')
-            name = name.replace('::BACK','_back')
-
-            psf_file = os.path.join(irf_dir,'psf_%s.fits'%(name))
-            aeff_file = os.path.join(irf_dir,'aeff_%s.fits'%(name))
-            edisp_file = os.path.join(irf_dir,'edisp_%s.fits'%(name))
-            
-            psf_files.append(psf_file)
-            aeff_files.append(aeff_file)
-            edisp_files.append(edisp_file)
-
-        irf = IRFManager(psf_files,aeff_files,edisp_files)
+            irf = IRF.createFromFile(name,irf_dir)
+            irfset.add_irf(irf)
 #        irf.loadPyIRF(irf_name)
-        return irf
+        return irfset
 
     @staticmethod
-    def createFromIRF(irf_name):
+    def createFromPyIRF(irf_name):
         irf = IRFManager()
         irf.loadPyIRF(irf_name)
         return irf
-        
-    def loadPyIRF(self,irf_name):
-        """Create IRF object using pyIrf modules in Science Tools."""
-        print 'loadPyIRF: ', irf_name
 
-        import pyIrfLoader
-        if not IRFManager.load_irf:
-            pyIrfLoader.Loader_go()
-            IRFManager.load_irf = True
-
-        irf_factory=pyIrfLoader.IrfsFactory.instance()
-        irfs = irf_factory.create(irf_name)
-
-        self._psf = [PSFPyIRF(irfs.psf())]
-        self._aeff = [AeffPyIRF(irfs.aeff())]
-        self._edisp = [EDispPyIRF(irfs.edisp())]
-        
-
+    def add_irf(self,irf):
+        self._irfs.append(irf)
+    
     def psf(self,dtheta,egy,cth,**kwargs):
-
-        aeff = self.aeff(egy,cth,**kwargs)
-
+        
+        aeff_tot = self.aeff(egy,cth,**kwargs)
+        
         v = None
         for i in range(len(self._psf)):
-            psf= self._psf[i](dtheta,egy,cth,**kwargs)*self._aeff[i](egy,cth,**kwargs)
+
+            aeff = self._irfs[i].aeff(egy,cth,**kwargs)
+            
+            psf= self._irfs[i].psf(dtheta,egy,cth,**kwargs)*aeff
             if i == 0: v  = psf
             else: v += psf
 
-        return v/aeff
-
-#        return self._psf(*args,**kwargs)
+        return v/aeff_tot
 
     def psf_quantile(self,egy,cth,frac=0.68):
         x = np.logspace(-3.0,np.log10(45.0),300)        
@@ -141,8 +113,8 @@ class IRFManager(object):
         cth = cth.reshape((cth.shape[0],) + (1,))
 
         y = np.zeros((egy.shape[0],300))
-        for i in range(len(self._psf)):
-            y += self._psf[i](xc,egy,cth).reshape(y.shape)
+        for i in range(len(self._irfs)):
+            y += self._irfs[i].psf(xc,egy,cth).reshape(y.shape)
 
 
         cdf = 2*np.pi*np.sin(np.radians(xc))*y*deltax
@@ -160,39 +132,88 @@ class IRFManager(object):
     def aeff(self,*args,**kwargs):
 
         v = None
-        for i in range(len(self._aeff)):
-            if i == 0: v = self._aeff[i](*args,**kwargs)
-            else: v += self._aeff[i](*args,**kwargs)
+        for i in range(len(self._irfs)):
+            if i == 0: v = self._irfs[i].aeff(*args,**kwargs)
+            else: v += self._irfs[i].aeff(*args,**kwargs)
 
         return v
-
-#        return self._aeff(*args,**kwargs)
 
     def edisp(self,*args,**kwargs):
 
         v = None
-        for i in range(len(self._edisp)):
-            if i == 0: v = self._edisp[i](*args,**kwargs)
-            else: v += self._edisp[i](*args,**kwargs)
+        for i in range(len(self._irfs)):
+            if i == 0: v = self._irfs[i].edisp(*args,**kwargs)
+            else: v += self._irfs[i].edisp(*args,**kwargs)
 
         return v
 
-#        return self._edisp(*args,**kwargs)
-
     def save(self,irf_name):
 
+        for irf in self._irfs: irf.save(irf_name)
 
-        for i in range(len(self._aeff)):
-            aeff_file = 'aeff_' + irf_name + '.fits'
-            psf_file = 'psf_' + irf_name + '.fits'
-            edisp_file = 'edisp_' + irf_name + '.fits'
-
-            self._psf[i].save(psf_file)
-            self._aeff[i].save(aeff_file)
-            self._edisp[i].save(edisp_file)
-        
-    
 class IRF(object):
+
+    def __init__(self,psf_file=None,aeff_file=None,edisp_file=None):
+        self._psf = PSFIRF(psf_file)
+        self._aeff = AeffIRF(aeff_file)
+        self._edisp = EDispIRF(edisp_file)
+
+    @staticmethod
+    def create(irf_name,load_from_file=False,irf_dir=None):
+        
+        if load_from_file:  return IRF.createFromFile(irf_name,irf_dir)
+        else: return IRF.createFromIRF(irf_name)
+
+    @staticmethod
+    def createFromFile(irf_name,irf_dir=None):
+        
+        if irf_dir is None: irf_dir = 'custom_irfs'
+
+        irf_name = irf_name.replace('::FRONT','_front')
+        irf_name = irf_name.replace('::BACK','_back')
+
+        psf_file = os.path.join(irf_dir,'psf_%s.fits'%(irf_name))
+        aeff_file = os.path.join(irf_dir,'aeff_%s.fits'%(irf_name))
+        edisp_file = os.path.join(irf_dir,'edisp_%s.fits'%(irf_name))
+            
+        return IRF(psf_file,aeff_file,edisp_file)
+
+    @staticmethod
+    def createFromPyIRF(irf_name):
+        """Create IRF object using pyIrf modules in Science Tools."""
+        
+        import pyIrfLoader
+        if not IRFManager.load_irf:
+            pyIrfLoader.Loader_go()
+            IRFManager.load_irf = True
+
+        irf_factory=pyIrfLoader.IrfsFactory.instance()
+        irfs = irf_factory.create(irf_name)
+
+        self._psf = PSFPyIRF(irfs.psf())
+        self._aeff = AeffPyIRF(irfs.aeff())
+        self._edisp = EDispPyIRF(irfs.edisp())
+    
+    def aeff(self,*args,**kwargs):
+        return self._aeff(*args,**kwargs)
+
+    def psf(self,*args,**kwargs):
+        return self._psf(*args,**kwargs)
+
+    def edisp(self,*args,**kwargs):
+        return self._edisp(*args,**kwargs)
+    
+    def save(self,irf_name):
+
+        aeff_file = 'aeff_' + irf_name + '.fits'
+        psf_file = 'psf_' + irf_name + '.fits'
+        edisp_file = 'edisp_' + irf_name + '.fits'
+
+        self._psf.save(psf_file)
+        self._aeff.save(aeff_file)
+        self._edisp.save(edisp_file)
+            
+class IRFComponent(object):
 
     def setup_axes(self,data):
 
@@ -206,14 +227,14 @@ class IRF(object):
         edges = np.concatenate((cthlo,np.array(cthhi[-1],ndmin=1)))
         self._cth_axis = Axis(edges)
                 
-class AeffIRF(IRF):
+class AeffIRF(IRFComponent):
 
     def __init__(self,fits_file):
         
         self._hdulist = pyfits.open(fits_file)        
         hdulist = self._hdulist
-        hdulist.info()
-
+        
+        
         self.setup_axes(hdulist[1].data)
         self._aeff = np.array(hdulist[1].data[0][4])
 
@@ -224,15 +245,20 @@ class AeffIRF(IRF):
         self._aeff_hist = Histogram2D(self._cth_axis,self._energy_axis,
                                       counts=self._aeff,var=0)
 #        hdulist.close()
-        
-        return
 
+    def dump(self):
+        hdulist.info()
+
+        for k, v in hdulist[0].header.iteritems():
+            print '%30s %s'%(k, v)
+        
+        
     def __call__(self,egy,cth):
 
         egy = np.array(egy,ndmin=1)
         cth = np.array(cth,ndmin=1)
         aeff = self._aeff_hist.interpolate(cth,egy)
-        aeff[(aeff<= 0.0) | (cth < self._cth_axis.lo_edge())] = 0.0
+        aeff[aeff<= 0.0] = 0.0
         return aeff
 
     def save(self,filename):
@@ -243,7 +269,7 @@ class AeffIRF(IRF):
         self._hdulist.writeto(filename,clobber=True)
         
         
-class AeffPyIRF(IRF):
+class AeffPyIRF(IRFComponent):
 
     def __init__(self,irf):
         self._irf = irf
@@ -270,7 +296,7 @@ class AeffPyIRF(IRF):
         z *= 1E-4
         return z
             
-class EDispIRF(IRF):
+class EDispIRF(IRFComponent):
 
     def __init__(self,fits_file):
         
@@ -295,7 +321,13 @@ class EDispIRF(IRF):
         
         self._bin_width = [self._cthhi-self._cthlo,
                            self._ehi-self._elo]
- 
+
+    def dump(self):
+        hdulist.info()
+
+        for k, v in hdulist[0].header.iteritems():
+            print '%30s %s'%(k, v)
+        
     def save(self,filename):
 
         self._hdulist[0].header['FILENAME'] = filename
@@ -304,12 +336,12 @@ class EDispIRF(IRF):
         self._hdulist.writeto(filename,clobber=True)
         
 
-class EDispPyIRF(IRF):
+class EDispPyIRF(IRFComponent):
 
     def __init__(self,irf):
         self._irf = irf
     
-class PSFIRF(IRF):
+class PSFIRF(IRFComponent):
 
     def __init__(self,fits_file,interpolate_density=True):
 
@@ -353,6 +385,9 @@ class PSFIRF(IRF):
         self._cback = hdulist[2].data[0][0][2:4]
         self._beta = hdulist[2].data[0][0][4]
 
+
+        print 'Scaling Functions ', self._cfront, self._cback
+        
         self._theta_axis = Axis(np.linspace(-3.0,np.log10(90.0),101))
         self._psf_hist = HistogramND([self._cth_axis,
                                       self._energy_axis,
@@ -414,7 +449,13 @@ class PSFIRF(IRF):
         plt.show()
 
         return
-        
+
+    def dump(self):
+        hdulist.info()
+
+        for k, v in hdulist[0].header.iteritems():
+            print '%30s %s'%(k, v)
+    
     def plot(self):
     
         hists = []
@@ -459,8 +500,7 @@ class PSFIRF(IRF):
         ax = fig.add_subplot(2,3,6)
         hists[5].plot()        
         plt.colorbar()
-        
-        plt.show()
+
         
     def __call__(self,dtheta,egy,cth):        
 

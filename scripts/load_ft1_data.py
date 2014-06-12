@@ -13,11 +13,14 @@ import numpy as np
 from gammatools.core.algebra import Vector3D
 from gammatools.fermi.catalog import Catalog
 from gammatools.core.util import separation_angle, dispatch_jobs
+from gammatools.core.util import bitarray_to_int
+from gammatools.core.util import save_object
 from gammatools.fermi.data import PhotonData
 
 class FT1Loader(object):
 
-    def __init__(self, zenith_cut, conversion_type, event_class_id,
+    def __init__(self, zenith_cut, conversion_type,
+                 event_class_id, event_type_id,
                  max_events, max_dist_deg, phase_selection,erange):
         self.zenith_cut = zenith_cut
         self.max_events = max_events
@@ -26,6 +29,7 @@ class FT1Loader(object):
         self.phase_selection = phase_selection
         self.conversion_type = conversion_type
         self.event_class_id = event_class_id
+        self.event_type_id = event_type_id
         self.erange = erange
 
         self._photon_data = PhotonData()
@@ -57,9 +61,13 @@ class FT1Loader(object):
         msk = table.field('ZENITH_ANGLE')<self.zenith_cut
 
         if not self.event_class_id is None:
-            msk &= (table.field('EVENT_CLASS').astype('int')&
-                    ((0x1)<<int(self.event_class_id))>0)
+            event_class = bitarray_to_int(table.field('EVENT_CLASS'),True)
+            msk &= (event_class&((0x1)<<int(self.event_class_id))>0)
 
+        if not self.event_type_id is None:
+            event_type = bitarray_to_int(table.field('EVENT_TYPE'),True)
+            msk &= (event_type&((0x1)<<int(self.event_type_id))>0)
+            
         table = table[msk]
         
         if self.erange is not None:
@@ -122,10 +130,10 @@ class FT1Loader(object):
             veq = Vector3D.createLatLon(np.radians(vdec),
                                         np.radians(vra))
 
-            vp = veq.project(vsrc)
-
+            vp = veq.project2d(vsrc)
             vx = np.degrees(vp.theta()*np.sin(vp.phi()))
             vy = -np.degrees(vp.theta()*np.cos(vp.phi()))            
+
             
             src_index = np.zeros(len(table_src),dtype=int)
             src_index[:] = isrc
@@ -142,6 +150,12 @@ class FT1Loader(object):
             if 'CTBCORE' in hdulist[1].columns.names:
                 psf_core = list(table_src.field('CTBCORE'))
 
+            event_type = np.zeros(len(table_src),dtype='int')
+            if 'EVENT_TYPE' in hdulist[1].columns.names:
+                event_type = bitarray_to_int(table_src.field('EVENT_TYPE'),True)
+            
+            event_class = bitarray_to_int(table_src.field('EVENT_CLASS'),True)
+                
             pd.append('psfcore',psf_core)
             pd.append('time',list(table_src.field('TIME')))
             pd.append('ra',list(table_src.field('RA')))
@@ -150,8 +164,8 @@ class FT1Loader(object):
             pd.append('delta_dec',list(vy))
             pd.append('energy',list(np.log10(table_src.field('ENERGY'))))
             pd.append('dtheta',list(dth[msk]))
-            pd.append('event_class',
-                      list(table_src.field('EVENT_CLASS').astype('int')))
+            pd.append('event_class',list(event_class))
+            pd.append('event_type',list(event_type))
             pd.append('conversion_type',
                       list(table_src.field('CONVERSION_TYPE').astype('int')))
             pd.append('src_index',list(src_index))            
@@ -221,10 +235,11 @@ class FT1Loader(object):
             self.src_redshifts.append(0.)
             
     def save(self,fname):
-        self._photon_data.save(fname)
+        save_object(self._photon_data,fname,compress=True)
+        #        self._photon_data.save(fname)
 
-usage = "usage: %prog [options] [FT1 file ...]"
-description = """Generate a numpy file containing a list of all photons within
+usage = "usage: %(prog)s [options] [FT1 file ...]"
+description = """Generate a pickle file containing a list of all photons within
 max_dist_deg of a source defined in src_list.  The script accepts as input
 a list of FT1 files."""
 
@@ -241,6 +256,9 @@ parser.add_argument('--conversion_type', default = None,
 parser.add_argument('--event_class_id', default = None, 
                   help = 'Set the event class bit.')
 
+parser.add_argument('--event_type_id', default = None, 
+                  help = 'Set the event type bit.')
+
 parser.add_argument('--output', default = None, 
                   help = 'Set the output filename.')
 
@@ -254,7 +272,7 @@ parser.add_argument('--srcs',
 parser.add_argument('--sc_file', default = None, 
                   help = 'Set the spacecraft (FT2) file.')
 
-parser.add_argument('--max_events', default = None, type='int',
+parser.add_argument('--max_events', default = None, type=int,
                   help = 'Set the maximum number of events that will be '
                   'read from each file.')
 
@@ -265,24 +283,19 @@ parser.add_argument('--max_dist_deg', default = 25.0, type=float,
                   help = 'Set the maximum distance.')
 
 parser.add_argument('--phase', default = None, 
-                  help = 'Select the pulsar phase selection (on/off).')
+                    help = 'Select the pulsar phase selection (on/off).')
 
-parser.add_argument("--batch",action="store_true",
-                  help="Split this job into several batch jobs.")
+parser.add_argument("--queue",default=None,
+                    help='Set the batch queue on which to run this job.')
 
 args = parser.parse_args()
 
-if args.batch:
-    dispatch_jobs(os.path.abspath(__file__),args.files,args)
+if not args.queue is None:
+    dispatch_jobs(os.path.abspath(__file__),args.files,args,args.queue)
     sys.exit(0)
 
 if args.output is None:
-    args.output = os.path.basename(os.path.splitext(args[0])[0] + '.P')
-
-
-if os.path.isfile(args.output):
-    print 'Output file exists: ', args.output
-    sys.exit(0)
+    args.output = os.path.basename(os.path.splitext(args.files[0])[0] + '.P')
     
 ft1_files = args.files
 ft2_file = args.sc_file
@@ -290,6 +303,7 @@ ft2_file = args.sc_file
 pl = FT1Loader(args.zenith_cut,
                args.conversion_type,
                args.event_class_id,
+               args.event_type_id,
                args.max_events,args.max_dist_deg,
                args.phase,args.erange)
 

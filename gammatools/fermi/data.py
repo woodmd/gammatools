@@ -21,9 +21,6 @@ from gammatools.core.histogram import *
 import yaml
 from gammatools.core.util import expand_aliases, eq2gal, interpolate2d
 
-from pywcsgrid2.allsky_axes import make_allsky_axes_from_header
-
-
 
 class Data(object):
 
@@ -56,19 +53,20 @@ class Data(object):
 class PhotonData(object):
 
     def __init__(self):
-        self._data = { 'ra'           : np.array([]),
-                       'dec'          : np.array([]),
-                       'delta_ra'     : np.array([]),
-                       'delta_dec'    : np.array([]),
-                       'energy'       : np.array([]),
-                       'time'         : np.array([]),
-                       'psfcore'         : np.array([]),
-                       'event_class'    : np.array([],dtype='int'),
+        self._data = { 'ra'            : np.array([]),
+                       'dec'           : np.array([]),
+                       'delta_ra'      : np.array([]),
+                       'delta_dec'     : np.array([]),
+                       'energy'        : np.array([]),
+                       'time'          : np.array([]),
+                       'psfcore'       : np.array([]),
+                       'event_class'   : np.array([],dtype='int'),
+                       'event_type'    : np.array([],dtype='int'),
                        'conversion_type'    : np.array([],dtype='int'),
-                       'src_index'    : np.array([],dtype='int'),
-                       'dtheta' : np.array([]),
-                       'phase'  : np.array([]),
-                       'cth'    : np.array([]) }
+                       'src_index'     : np.array([],dtype='int'),
+                       'dtheta'        : np.array([]),
+                       'phase'         : np.array([]),
+                       'cth'           : np.array([]) }
 
         self._srcs = []
 

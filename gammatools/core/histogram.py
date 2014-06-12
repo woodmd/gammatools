@@ -389,22 +389,15 @@ class HistogramND(object):
         center = []
         for i in range(self._ndim): center.append(self._axes[i].center())
 
-        if len(x) == 1: xv = x[0]
+
+        if len(x) == 1:
+            xv = x[0]
+            shape = x[0].shape
         else:            
-            shape = None
-            for i in range(len(x)): 
-                
-                z = np.array(x[i])
+            xv, shape = expand_array(*x)
 
-                if shape is None: shape = z.shape
-                shape = np.maximum(shape,z.shape)
-            
-            xv = np.zeros((self._ndim,np.product(shape)))
-
-            for i in range(len(x)):
-                xv[i] = np.ravel(np.array(x[i])*np.ones(shape))
-
-        return interpolatend(center,self._counts,xv)
+        v = interpolatend(center,self._counts,xv)
+        return v.reshape(shape)
 
     def interpolateSlice(self,sdims,dim_coord):
 
@@ -695,8 +688,8 @@ class Histogram(HistogramND):
                            'label' : None }
 
     default_style = { 'hist_style' : 'errorbar',
-                      'hist_xerr' : True,
-                      'hist_yerr' : True,
+                      'hist_xerr' : None,
+                      'hist_yerr' : None,
                       'msk'   : None,
                       'max_frac_error' : None }
 
@@ -790,7 +783,7 @@ class Histogram(HistogramND):
         h = h.rebin_mincount(min_count)
 
         ncum = np.concatenate(([0],np.cumsum(h._counts)))
-        fn = UnivariateSpline(h.edges(),ncum,s=0,k=1)
+        fn = UnivariateSpline(h.axis().edges(),ncum,s=0,k=1)
         mu_count = fn(xedge[1:])-fn(xedge[:-1])
         mu_count[mu_count<0] = 0
 
@@ -843,8 +836,10 @@ class Histogram(HistogramND):
         xerr = None
         yerr = None
 
-        if style['hist_xerr']: xerr = self._axis.width()[msk]/2.
-        if style['hist_yerr']: yerr = np.sqrt(self._var[msk])
+        if style['hist_xerr'] or style['hist_xerr'] is None:
+            xerr = self._axis.width()[msk]/2.
+        if style['hist_yerr'] or style['hist_yerr'] is None:
+            yerr = np.sqrt(self._var[msk])
         if not style.has_key('fmt'): style['fmt'] = '.'
 
         clear_dict_by_keys(style,Histogram.default_draw_style.keys(),False)
@@ -1493,9 +1488,16 @@ class Histogram2D(HistogramND):
 
     def interpolate(self,x,y):
         from util import interpolate2d
-        return interpolate2d(self._xaxis.center(),
-                             self._yaxis.center(),self._counts,x,y)
 
+        x = np.array(x,ndmin=1)
+        y = np.array(y,ndmin=1)
+        
+        xv, shape = expand_array(x,y)
+        v = interpolate2d(self._xaxis.center(),
+                          self._yaxis.center(),self._counts,xv[0],xv[1])
+
+        return v.reshape(shape)
+        
     def integrate(self,iaxis=1,bin_range=None):
         if iaxis == 1:
 

@@ -2,51 +2,41 @@
 
 import os
 import sys
-from optparse import OptionParser
+import argparse
 import tempfile
 import re
 import shutil
+from gammatools.core.util import dispatch_jobs
 
-usage = "usage: %prog [options] "
+usage = "usage: %(prog)s [options] [files]"
 description = "Run the makeft1 application on a Merit file."
-parser = OptionParser(usage=usage,description=description)
+parser = argparse.ArgumentParser(usage=usage,description=description)
 
-parser.add_option('--xml_classifier', default = None, type = "string", 
-                  help = 'FT2 file')
+parser.add_argument('files', nargs='+')
 
-parser.add_option('--dict_file', default = None, type = "string", 
-                  help = 'Set the file that defines the mapping from Merit '
-                  'to FT1 variables.')
+parser.add_argument('--xml_classifier', default = None,
+                    required=True,
+                    help = 'Set the XML cut definition file.')
 
-parser.add_option('--queue', default = None,
-                  type='string',help='Set the batch queue.')
+parser.add_argument('--dict_file', default = None,
+                    required=True,
+                    help = 'Set the file that defines the mapping from Merit '
+                    'to FT1 variables.')
 
-(opts, args) = parser.parse_args()
+parser.add_argument('--queue', default = None,
+                    help='Set the batch queue name.')
 
-if not opts.queue is None:
-    
-    for x in args:
-        cmd = 'make_ft1.py %s '%(x)
+args = parser.parse_args()
 
-        fitsFile = os.path.splitext(x)[0] + '_ft1.fits'
-
-        if os.path.isfile(fitsFile):
-            print 'Skipping ', fitsFile
-            continue
-            
-        for k, v in opts.__dict__.iteritems():
-            if not v is None and k != 'batch': cmd += ' --%s=%s '%(k,v)
-
-        print 'bsub -q %s -R rhel60 %s'%(opts.queue,cmd)
-        os.system('bsub -q %s -R rhel60 %s'%(opts.queue,cmd))
-
+if not args.queue is None:
+    dispatch_jobs(os.path.abspath(__file__),args.files,args,args.queue)
     sys.exit(0)
 
-xml_classifier = os.path.abspath(opts.xml_classifier)
-dict_file = os.path.abspath(opts.dict_file)
+xml_classifier = os.path.abspath(args.xml_classifier)
+dict_file = os.path.abspath(args.dict_file)
     
 input_files = []
-for x in args: input_files.append(os.path.abspath(x))
+for x in args.files: input_files.append(os.path.abspath(x))
 
 cwd = os.getcwd()
 user = os.environ['USER']

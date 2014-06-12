@@ -247,7 +247,7 @@ FigTool.configure(parser)
 
 args = parser.parse_args()
 
-config = { 'data_labels' : ['Vela','AGN'], 'model_labels' : [] }
+config = { 'data_labels' : ['Vela','AGN'], 'model_labels' : ['test'] }
 
 if not args.config is None:
     config.update(yaml.load(open(args.config,'r')))
@@ -262,26 +262,29 @@ data_colors = ['k','b']
 
 model_colors = ['g','m','k','b']
 
-data_fig68 = ft.create(1,'psf_quantile_r68',style='residual2',yscale='log',
-                       xlabel='Energy [log$_{10}$(E/MeV)]',
-                       ylabel='Containment Radius [deg]',
-                       colors=data_colors)
-data_fig95 = ft.create(1,'psf_quantile_r95',style='residual2',yscale='log',
-                       xlabel='Energy [log$_{10}$(E/MeV)]',
-                       ylabel='Containment Radius [deg]',
-                       colors=data_colors)
 
-mdl_fig68 = ft.create(1,'psf_quantile_r68',style='residual2',yscale='log',
+
+
+data_fig68 = ft.create('psf_quantile_r68',figstyle='residual2',yscale='log',
                        xlabel='Energy [log$_{10}$(E/MeV)]',
                        ylabel='Containment Radius [deg]',
-                       colors=model_colors)
-
-mdl_fig95 = ft.create(1,'psf_quantile_r95',style='residual2',yscale='log',
+                       color=data_colors,norm_index=1)
+data_fig95 = ft.create('psf_quantile_r95',figstyle='residual2',yscale='log',
                        xlabel='Energy [log$_{10}$(E/MeV)]',
                        ylabel='Containment Radius [deg]',
-                       colors=model_colors)
+                       color=data_colors,norm_index=1)
 
-norm_index = 0
+mdl_fig68 = ft.create('psf_quantile_r68',figstyle='residual2',yscale='log',
+                       xlabel='Energy [log$_{10}$(E/MeV)]',
+                       ylabel='Containment Radius [deg]',
+                       color=model_colors)
+
+mdl_fig95 = ft.create('psf_quantile_r95',figstyle='residual2',yscale='log',
+                       xlabel='Energy [log$_{10}$(E/MeV)]',
+                       ylabel='Containment Radius [deg]',
+                       color=model_colors)
+
+norm_index = 1
 
 for i, arg in enumerate(args.files):
     
@@ -298,9 +301,11 @@ for i, arg in enumerate(args.files):
 
         j = len(data_fig68[0]._data)
         
-        data_fig68[0].add_hist(d.qdata[1].slice(1,0),linestyle='None',msk=msk,
-                          label=config['data_labels'][j])
-        data_fig95[0].add_hist(d.qdata[3].slice(1,0),linestyle='None',msk=msk,
+        data_fig68[0].add_hist(d.qdata[1].slice(1,0),
+                               linestyle='None',msk=msk,
+                               label=config['data_labels'][j])
+        data_fig95[0].add_hist(d.qdata[3].slice(1,0),
+                               linestyle='None',msk=msk,
                                label=config['data_labels'][j])
         
     else:
@@ -323,8 +328,8 @@ data_fig68.merge(mdl_fig68)
 data_fig95.merge(mdl_fig95)
         
         
-data_fig68.plot(style='residual2',norm_index=norm_index)
-data_fig95.plot(style='residual2',norm_index=norm_index)
+data_fig68.plot(norm_index=norm_index)
+data_fig95.plot(norm_index=norm_index)
 
 if args.show: plt.show()
 

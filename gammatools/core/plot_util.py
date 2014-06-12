@@ -50,7 +50,9 @@ class FigureSubplot(object):
               'legend_loc' : 'upper right',
               'legend_fontsize' : 10,
               'legend'   : True,
-              'norm_index' : None }
+              'norm_style' : 'ratio',
+              'norm_index' : None,
+              'norm_interpolation' : 'log' }
 
     def __init__(self,ax,**kwargs):
         
@@ -85,12 +87,12 @@ class FigureSubplot(object):
         self.set_style('title',title)
         
     def get_style(self,h,**kwargs):
-             
+        """Generate style dictionary for a subplot element."""
+        
         style = copy.deepcopy(h.style())       
         style.update(kwargs)
         
         for k in self._style_counter.keys():  
-
             if not k in style: continue
             if not style[k] is None: continue
 
@@ -151,23 +153,7 @@ class FigureSubplot(object):
     def merge(self,sp):
 
         for d in sp._data: self._data.append(d)
-        
-    def create_ratio_subplot(self,residual=False,**kwargs):
-
-        style = copy.deepcopy(self._style)
-        update_dict(style,kwargs)
-        
-        subp = copy.deepcopy(self)
-        subp.set_style('yscale','lin')
-        subp.set_style('ylim',style['ylim_ratio'])
-
-        if residual: subp.set_style('ylabel','Fractional Residual')
-        else: subp.set_style('ylabel','Ratio')
-
-        subp.normalize(residual,**kwargs)
-
-        return subp
-
+ 
     def cumulative(self,**kwargs):
 
         for i, d in enumerate(self._data):            
@@ -190,26 +176,34 @@ class FigureSubplot(object):
             x = copy.deepcopy(self._data[norm_index].x())
             y = copy.deepcopy(self._data[norm_index].y())
 
-        fn = UnivariateSpline(x,np.log10(y),k=1,s=0)
-        
+
+        if style['norm_interpolation'] == 'log':
+            fn = UnivariateSpline(x,np.log10(y),k=1,s=0)
+        else:
+            fn = UnivariateSpline(x,y,k=1,s=0)
+            
 #        msk = y>0
         for i, d in enumerate(self._data):
 
             if isinstance(d,Series):
                 msk = (d.x() >= x[0]*0.95) & (d.x() <= x[-1]*1.05)
-                ynorm = 10**fn(d.x())
+                if style['norm_interpolation'] == 'log':
+                    ynorm = 10**fn(d.x())
+                else: ynorm = fn(d.x())
                 self._data[i]._msk &= msk
                 self._data[i] /= ynorm
 
-                if residual:
+                if style['norm_style'] == 'residual':
                     self._data[i] -= 1.0
                                     
             elif isinstance(d,Histogram):                    
-                ynorm = 10**fn(d.center())            
+                if style['norm_interpolation'] == 'log':
+                    ynorm = 10**fn(d.axis().center())
+                else: ynorm = fn(d.axis().center())
                 self._data[i]._counts /= ynorm
                 self._data[i]._var /= ynorm**2
                 
-                if residual:
+                if style['norm_style'] == 'residual':
                     self._data[i]._counts -= 1.0
 
     def plot(self,**kwargs):
@@ -308,6 +302,8 @@ class Figure(object):
               'format' : 'png',
               'fig_dir' : './',
               'figscale' : 1.0,
+              'subplot_margins' : {'left' : 0.12, 'bottom' : 0.12,
+                                   'right' : 0.95, 'top': 0.95 },
               'figsize' : [8.0,6.0],
               'panes_per_fig' : 1 }
 
@@ -321,7 +317,8 @@ class Figure(object):
         figsize[0] *= self._style['figscale']
         figsize[1] *= self._style['figscale']
         
-        self._fig = plt.figure(figsize=figsize)
+#        self._fig = plt.figure(figsize=figsize)
+        self._fig = plt.figure()
 
         self._figlabel = figlabel
         self._subplots = []        
@@ -332,12 +329,13 @@ class Figure(object):
         return self._subplots[key]
 
     def add_subplot(self,n=1,**kwargs):
-        
-        if n == 1: nx, ny = 1,1
+
+        if isinstance(n,tuple): nx, ny = n        
+        elif n == 1: nx, ny = 1,1
         elif n == 2: nx, ny = 2,1
         elif n > 2 and n <= 4: nx, ny = 2,2
         
-        for i in range(n):        
+        for i in range(nx*ny):        
             style = copy.deepcopy(self._style)
             update_dict(style,kwargs)
 
@@ -383,29 +381,12 @@ class Figure(object):
         fig_name = os.path.join(self._style['fig_dir'],fig_name)
         
         for p in self._subplots: p.plot(**kwargs)
-        self._fig.savefig(fig_name)
 
-        return
-
+        subplot_margins = {'left' : 0.12, 'bottom' : 0.12,
+                           'right' : 0.95, 'top': 0.95 }
         
-        if style['style'] == 'ratio2' or style['style'] == 'residual2': 
-            style['figure_style'] = 'twopane'
-            
-        residual = False
-        if style['style'] == 'residual2' or style['style'] == 'residual':
-            residual = True
-
-        if style['style'] == 'ratio2' or style['style'] == 'residual2':
-            ratio_subp = self._subplots[0].create_ratio_subplot(residual,
-                                                                **kwargs)
-            
-            self._subplots[0].set_style('xlabel',None)
-            self._subplots.append(ratio_subp)
-            
-        if style['figure_style'] == 'twopane':
-            self._plot_twopane(**kwargs)
-        else:
-            self._plot(**kwargs)        
+        self._fig.subplots_adjust(**self._style['subplot_margins'])
+        self._fig.savefig(fig_name)
         
     def _plot(self,**kwargs):
 
@@ -454,6 +435,37 @@ class Figure(object):
                                 right=0.95, top=0.95)
                 
             fig.savefig(fig_name)#,bbox_inches='tight')
+
+class TwoPaneFigure(Figure):
+
+    def __init__(self,figlabel,**kwargs):
+
+        super(TwoPaneFigure,self).__init__(figlabel,**kwargs)
+
+        style = copy.deepcopy(self._style)
+        update_dict(style,kwargs)
+
+        height_ratio=1.6
+
+        gs1 = gridspec.GridSpec(2, 1, height_ratios = [height_ratio,1])
+        ax0 = self._fig.add_subplot(gs1[0,0])
+        ax1 = self._fig.add_subplot(gs1[1,0],sharex=ax0)
+
+        style0 = copy.deepcopy(style)
+        style1 = copy.deepcopy(style)
+
+        style0['xlabel'] = None
+        style1['legend'] = False
+        style1['title'] = None
+
+        fp0 = FigureSubplot(ax0,**style0)
+        fp1 = FigureSubplot(ax1,**style1)
+
+        self._fig.subplots_adjust(hspace=0.1)
+        plt.setp([ax0.get_xticklabels()],visible=False)
+
+        self._subplots.append(fp0)
+        self._subplots.append(fp1)
             
 class TwoPaneRatioFigure(Figure):
 
@@ -474,7 +486,12 @@ class TwoPaneRatioFigure(Figure):
         style1 = copy.deepcopy(style)
 
         style0['xlabel'] = None
-        style1['ylabel'] = 'Ratio'
+
+        if style['norm_style'] == 'ratio':        
+            style1['ylabel'] = 'Ratio'
+        elif style['norm_style'] == 'residual':        
+            style1['ylabel'] = 'Fractional Residual'
+            
         style1['yscale'] = 'lin'
         style1['ylim'] = style['ylim_ratio']
         style1['legend'] = False
@@ -550,7 +567,12 @@ class FigTool(object):
         style = copy.deepcopy(self._style)
         style.update(kwargs)
 
-        if figstyle == 'ratio2':
+        if figstyle == 'twopane':
+            return TwoPaneFigure(figlabel,**style)
+        elif figstyle == 'ratio2':
+            return TwoPaneRatioFigure(figlabel,**style)
+        elif figstyle == 'residual2':
+            style['norm_style'] = 'residual'
             return TwoPaneRatioFigure(figlabel,**style)
         elif figstyle == 'ratio':
             style['figstyle'] = 'ratio'

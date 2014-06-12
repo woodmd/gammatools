@@ -22,11 +22,14 @@ parser.add_argument('--output', default = None,
                     help = 'Set the output filename.')
 parser.add_argument('--queue', default = None, 
                     help = 'Set queue name.')
-parser.add_argument('--filter',
-                    default = 'IN_SAA!=T&&DATA_QUAL==1&&LAT_CONFIG==1&&ABS(ROCK_ANGLE)<52', 
+parser.add_argument('--filter', default = 'default', 
                     help = 'Set the mktime filter.')
 
 args = parser.parse_args()
+
+filters = {'default' : 'IN_SAA!=T&&DATA_QUAL==1&&LAT_CONFIG==1&&ABS(ROCK_ANGLE)<52' }
+
+mktime_filter = filters[args.filter]
 
 if not args.queue is None:
     dispatch_jobs(os.path.abspath(__file__),args.files,args,args.queue)
@@ -44,7 +47,7 @@ for f in args.files:
     else:
         outfile = args.output
 
-    gt_task = MkTimeTask(f,outfile,filter=args.filter,scfile=args.scfile)
+    gt_task = MkTimeTask(f,outfile,filter=mktime_filter,scfile=args.scfile)
     gt_task.run()
 
 

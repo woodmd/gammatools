@@ -18,10 +18,11 @@ from matplotlib import font_manager
 
 from gammatools.fermi.psf_model import *
 import gammatools.core.stats as stats
+from gammatools.core.stats import *
 from gammatools.fermi.catalog import Catalog
 from gammatools.core.plot_util import *
 
-from data import SkyImage
+from gammatools.core.fits_util import SkyImage
 from analysis_util import *
 
 #from psf_lnl import BinnedPulsarLnLFn
@@ -34,7 +35,8 @@ from matplotlib import scale as mscale
 mscale.register_scale(SqrtScale)
 
 
-vela_phase_selection = {'on_phase' : '0.0/0.15,0.6/0.7', 'off_phase' : '0.2/0.5' }
+vela_phase_selection = {'on_phase' : '0.0/0.15,0.6/0.7',
+                        'off_phase' : '0.2/0.5' }
 
 class PSFData(Data):
 
@@ -171,8 +173,11 @@ class PSFValidate(object):
 
         self.output_prefix = opts.output_prefix
         if self.output_prefix is None:
-            prefix = os.path.splitext(opts.files[0])[0]
-
+#            prefix = os.path.splitext(opts.files[0])[0]
+            m = re.search('(.+).P.gz',opts.files[0])
+            if m is None: prefix = os.path.splitext(opts.files[0])[0] 
+            else: prefix = m.group(1) 
+            
             cth_label = '%03.f%03.f' % (self.cth_bin_edge[0] * 100,
                                         self.cth_bin_edge[1] * 100)
 
@@ -367,7 +372,8 @@ class PSFValidate(object):
 
         for f in opts.files:
             print 'Loading ', f
-            d = PhotonData.load(f)
+#            d = PhotonData.load(f)
+            d = load_object(f)
             d.mask(event_class_id=opts.event_class_id,
                    conversion_type=opts.conversion_type)
 
@@ -388,20 +394,14 @@ class PSFValidate(object):
 
         for f in self.opts.files:
             print 'Loading ', f
-            d = PhotonData.load(f)
+#            d = PhotonData.load(f)
+            d = load_object(f)            
             d.mask(event_class_id=self.opts.event_class_id,
                    conversion_type=self.opts.conversion_type)
             d['dtheta'] = np.degrees(d['dtheta'])
 
             self.fill(d)
             
-#        for iegy in range(self.psf_data.egy_axis.nbins()):
-#            for icth in range(self.psf_data.cth_axis.nbins()):
-#                if self.data_type == 'pulsar':
-#                    self.fill_pulsar(self.data, iegy, icth)
-#                else:
-#                    self.fill_agn(self.data, iegy, icth)
-
         for iegy in range(self.psf_data.egy_axis.nbins()):
             for icth in range(self.psf_data.cth_axis.nbins()):
                 self.fill_models(iegy,icth)
@@ -440,15 +440,15 @@ class PSFValidate(object):
     def plot_theta_residual(self, hsignal, hbkg, hmodel, label):
 
 
-        fig = self._ft.create(1,label,xscale='sqrt')
-
-        
+        fig = self._ft.create(label,figstyle='ratio2',xscale='sqrt',
+                              norm_interpolation='lin')
 
         hsignal_rebin = hsignal.rebin_mincount(10)
         hbkg_rebin = Histogram(hsignal_rebin.axis().edges())
         hbkg_rebin.fill(hbkg.axis().center(),hbkg.counts(),
                         hbkg.var())
 
+        
         fig[0].add_hist(hsignal_rebin,
                         marker='o', linestyle='None',label='signal')
         fig[0].add_hist(hbkg_rebin,hist_style='line',
@@ -462,9 +462,9 @@ class PSFValidate(object):
                             linewidth=1.5)
 
         fig[0].set_style('ylabel','Counts Density [deg$^{-2}$]')
-
-        fig.plot(style='residual2',norm_index=2,mask_ratio_args=[1])
-
+        
+#        fig.plot(norm_index=2,mask_ratio_args=[1])
+        fig.plot()
 
         return
 
@@ -531,13 +531,14 @@ class PSFValidate(object):
         print 'Printing ', pngfile
         plt.savefig(pngfile)
 
-    def plot_theta_cumulative(self, hsignal, hbkg, hmodel, label,
+    def plot_psf_cumulative(self, hsignal, hbkg, hmodel, label,title,
                               theta_max=None, text=None):
 
         hexcess = hsignal - hbkg
 
 
-        fig = self._ft.create(2,label,xscale='sqrt')
+        fig = self._ft.create(label,figstyle='twopane',xscale='sqrt',
+                              title=title)
 
         fig[0].add_hist(hsignal,label='Data',linestyle='None')
         fig[0].add_hist(hbkg,hist_style='line',
@@ -580,7 +581,7 @@ class PSFValidate(object):
 
         fig[1].set_style('xlabel','$\\theta$ [deg]')
 
-        fig.plot(figure_style='twopane')
+        fig.plot()
         
 
 #        axes[1].legend(prop=self.font, loc='lower right', ncol=2)
@@ -658,7 +659,15 @@ class PSFValidate(object):
             qdata.sig_hist[iegy, icth].scale_density(lambda x: x * x * np.pi)
         qdata.bkg_density_hist[iegy, icth]._counts = bkg_density
 
-        
+        xedge = np.linspace(-theta_max, theta_max, 301)
+
+        print qdata.sky_image[iegy,icth]
+
+        if qdata.sky_image[iegy,icth] is None:
+            qdata.sky_image[iegy,icth] = Histogram2D(xedge,xedge)        
+        qdata.sky_image[iegy,icth].fill(data['delta_ra'][mask],
+                                        data['delta_dec'][mask])
+
 
 
 
@@ -688,9 +697,9 @@ class PSFValidate(object):
 
         print 'Computing Quantiles'
         bkg_fn = lambda x: x**2 * np.pi * bkg_density
-        hq = stats.HistQuantileBkgFn(on_hist, 
-                                     lambda x: x**2 * np.pi / bkg_domega,
-                                     bkg_counts)
+        hq = HistQuantileBkgFn(on_hist, 
+                               lambda x: x**2 * np.pi / bkg_domega,
+                               bkg_counts)
 
         if excess_sum > 25:
             self.compute_quantiles(hq, psf_data, iegy, icth, theta_max)
@@ -711,9 +720,9 @@ class PSFValidate(object):
                                                    cth_range[0] * 100,
                                                    cth_range[1] * 100)
 
-#        self.plot_theta_residual(psf_data.tot_density_hist[iegy, icth],
-#                                 psf_data.bkg_density_hist[iegy, icth],
-#                                 hmodel_density, fig_label)
+        self.plot_theta_residual(psf_data.tot_density_hist[iegy, icth],
+                                 psf_data.bkg_density_hist[iegy, icth],
+                                 hmodel_density, fig_label)
 
         fig_label = self.output_prefix + 'theta_counts_'
         fig_label += '%04.0f_%04.0f_%03.f%03.f' % (egy_range[0] * 100,
@@ -721,32 +730,31 @@ class PSFValidate(object):
                                                    cth_range[0] * 100,
                                                    cth_range[1] * 100)
 
-        self.plot_theta_cumulative(psf_data.tot_hist[iegy, icth],
-                                   psf_data.bkg_hist[iegy, icth],
-                                   hmodel_counts, fig_label,None,text)
+        fig_title = 'E = [%.3f, %.3f] '%(egy_range[0],egy_range[1])
+        fig_title += 'Cos$\\theta$ = [%.3f, %.3f]'%(cth_range[0],cth_range[1])
+        
+        self.plot_psf_cumulative(psf_data.tot_hist[iegy, icth],
+                                 psf_data.bkg_hist[iegy, icth],
+                                 hmodel_counts, fig_label,fig_title,
+                                 None,text)
 #                                   bkg_edge[0], text)
 
-
-        return
 
         r68 = hq.quantile(0.68)
         r95 = hq.quantile(0.95)
 
         rs = min(r68 / 4., theta_max / 10.)
-
-        xedge = np.linspace(-3.0, 3.0, 601)
-
         bin_size = 6.0 / 600.
 
-        stacked_image = Histogram2D(xedge, xedge)
+        stacked_image = psf_data.sky_image[iegy,icth]
 
-        stacked_image.fill(data['delta_ra'][mask], data['delta_dec'][mask])
+#        stacked_image.fill(psf_data['delta_ra'][mask],
+#                           psf_data['delta_dec'][mask])
 
         plt.figure()
 
-        stacked_image.smooth(rs)
-
-        stacked_image.plot()
+        stacked_image = stacked_image.smooth(rs)
+        
 
         plt.plot(r68 * np.cos(np.linspace(0, 2 * np.pi, 100)),
                  r68 * np.sin(np.linspace(0, 2 * np.pi, 100)), color='k')
@@ -755,13 +763,17 @@ class PSFValidate(object):
                  r95 * np.sin(np.linspace(0, 2 * np.pi, 100)), color='k',
                  linestyle='--')
 
-        plt.plot(bkg_edge[0] * np.cos(np.linspace(0, 2 * np.pi, 100)),
-                 bkg_edge[0] * np.sin(np.linspace(0, 2 * np.pi, 100)), color='k',
-                 linestyle='-', linewidth=2)
+        stacked_image.plot(logz=True)
+        
+#        plt.plot(bkg_edge[0] * np.cos(np.linspace(0, 2 * np.pi, 100)),
+#                 bkg_edge[0] * np.sin(np.linspace(0, 2 * np.pi, 100)),
+#                 color='k',
+#                 linestyle='-', linewidth=2)
 
-        plt.plot(bkg_edge[1] * np.cos(np.linspace(0, 2 * np.pi, 100)),
-                 bkg_edge[1] * np.sin(np.linspace(0, 2 * np.pi, 100)), color='k',
-                 linestyle='-', linewidth=2)
+#        plt.plot(bkg_edge[1] * np.cos(np.linspace(0, 2 * np.pi, 100)),
+#                 bkg_edge[1] * np.sin(np.linspace(0, 2 * np.pi, 100)),
+#                 color='k',
+#                 linestyle='-', linewidth=2)
 
         #        c68 = plt.Circle((0, 0), radius=r68, color='k',facecolor='None')
         #        c95 = plt.Circle((0, 0), radius=r95, color='k',facecolor='None')
@@ -777,6 +789,8 @@ class PSFValidate(object):
 
         plt.savefig(fig_label)
 
+        return
+        
         for i in range(len(data._srcs)):
 
             if not self.opts.make_sky_image: continue
@@ -997,9 +1011,9 @@ class PSFValidate(object):
                                                    cth_range[0] * 100,
                                                    cth_range[1] * 100)
 
-        self.plot_theta_cumulative(on_hist, bkg_hist, hmodel_counts,
-                                   fig_label,
-                                   theta_max=None, text=text)
+        self.plot_psf_cumulative(on_hist, bkg_hist, hmodel_counts,
+                                 fig_label,
+                                 theta_max=None, text=text)
 
 
         if excess_sum < 10: return

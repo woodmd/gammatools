@@ -184,8 +184,8 @@ class PSFModelLT(PSFModel):
         self._gx, self._gy = \
             np.meshgrid(np.log10(self._energy),self._ctheta_center) 
 
-        self._gx = self._gx.T
-        self._gy = self._gy.T
+        self._gx = np.ravel(self._gx.T)
+        self._gy = np.ravel(self._gy.T)
 
         if build_model: self.buildModel()
 
@@ -201,10 +201,14 @@ class PSFModelLT(PSFModel):
         aeff = aeff.reshape(shape)
         aeff[aeff < 0] = 0
         aeff[np.isnan(aeff)] = 0
+
+        dtheta = self._dtheta.reshape(self._dtheta.shape + (1,))
+        gx = self._gx.reshape((1,) + self._gx.shape)
+        gy = self._gy.reshape((1,) + self._gy.shape)
         
         self._exp = self._tau*aeff
         self._atau = np.sum(self._exp,axis=1)        
-        psf = self._irf.psf(self._dtheta,self._gx.flat,self._gy.flat)
+        psf = self._irf.psf(dtheta,gx,gy)
         psf[psf<0] = 0
         psf[np.isnan(psf)] = 0
         psf = psf.reshape((self._nbin_dtheta,) + shape)
@@ -265,6 +269,8 @@ class PSFModelLT(PSFModel):
                       (float(i)/float(self._nbin_dtheta))**2 
                       for i in range(self._nbin_dtheta)])
 
+
+        self._dtheta_axis = Axis(self._dtheta)
         self._ctheta_center = \
             np.array([1-(0.5*(np.sqrt(1-self._ctheta[i]) + 
                               np.sqrt(1-self._ctheta[i+1])))**2 

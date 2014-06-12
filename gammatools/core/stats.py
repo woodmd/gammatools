@@ -12,6 +12,7 @@ import copy
 from scipy.interpolate import UnivariateSpline
 import scipy.optimize as opt
 import matplotlib.pyplot as plt
+from gammatools.core.histogram import Histogram
 
 class HistBootstrap(object):
     def __init__(self,hist,fn):
@@ -66,7 +67,7 @@ class HistQuantileBkgFn(object):
     """
     def __init__(self,hcounts,bkg_fn,nbkg):
 
-        self._xedge = np.array(hcounts.edges())
+        self._xedge = np.array(hcounts.axis().edges())
         self._ncounts = copy.copy(hcounts.counts())
         self._ncounts = np.concatenate(([0],self._ncounts))
         self._bkg_fn = bkg_fn
@@ -105,38 +106,12 @@ class HistQuantileBkgFn(object):
 
         nedge = len(self._ncounts[self._xedge<=xmax])
         xedge = self._xedge[:nedge]
-
         
-        
-        h = createHistModel(xedge,self._ncounts[1:nedge],5)
-
-
-
+        h = Histogram.createHistModel(xedge,self._ncounts[1:nedge],5)
         nbkg = np.random.poisson(self._nbkg,niter)
-#        ncounts = np.random.poisson(self._ncounts[:nedge],
-#                                    (niter,nedge))
-        
         ncounts = np.random.poisson(np.concatenate(([0],h._counts)),
                                     (niter,nedge))
         
-
-#        h0 = Histogram(xedge)
-#        h1 = Histogram(xedge)
-#        h2 = Histogram(xedge)
-
-#        h0._counts = self._ncounts[1:nedge]
-#        h0._var = self._ncounts[1:nedge]
-#        h1._counts = mu_count
-#        h2._counts = ncounts[0][1:nedge]
-#        h2._var = ncounts[0][1:nedge]
-
-#        plt.figure()
-
-#        h0.plot()
-#        h1.plot()
-#        h2.plot()
-#        h.plot()
-
         xq = []
 
         for i in range(niter):
@@ -317,7 +292,7 @@ class HistQuantile(object):
     @staticmethod
     def quantile(h,fraction=0.68):
         counts = np.concatenate(([0],h._counts))
-        return HistQuantile.array_quantile(h.edges(),counts,fraction)
+        return HistQuantile.array_quantile(h.axis().edges(),counts,fraction)
         
     @staticmethod
     def array_quantile(edges,ncounts,fraction=0.68):
@@ -339,10 +314,8 @@ class HistQuantile(object):
         
         counts = np.concatenate(([0],h._counts))
         counts_cum = np.cumsum(counts)
-        fn_ncdf = UnivariateSpline(h.edges(),counts_cum,s=0,k=1)
+        fn_ncdf = UnivariateSpline(h.axis().edges(),counts_cum,s=0,k=1)
         return fn_ncdf(x)
-
-        
         
     def binomial(self,ncounts,fraction=0.68):
 

@@ -50,9 +50,7 @@ class Vector3D(object):
 
         if np.abs(angle) == 0: return
         
-        tmp = np.zeros(self._x.shape)
-        tmp = np.transpose(tmp.T[:] + axis._x)
-
+        tmp = np.zeros(self._x.shape) + axis._x
         eaxis = Vector3D(tmp)
         eaxis._x *= 1./angle
         par = np.sum(self._x*eaxis._x,axis=0)
@@ -84,16 +82,15 @@ class Vector3D(object):
 
     def project2d(self,v):
 
-        yaxis = Vector3D(np.array([0.,1.,0.]))
-        zaxis = Vector3D(np.array([0.,0.,1.]))
-
-        yaxis *= -v.theta()
-        zaxis *= -v.phi()
+#        yaxis = Vector3D(np.array([0.,1.,0.]))
+#        zaxis = Vector3D(np.array([0.,0.,1.]))
+#        yaxis *= -v.theta()
+#        zaxis *= -v.phi()
         
         vp = Vector3D(copy.copy(self._x))
 
-        vp.rotate(zaxis)
-        vp.rotate(yaxis)
+        vp.rotatez(-v.phi())
+        vp.rotatey(-v.theta())
         
         return vp
 

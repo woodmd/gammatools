@@ -191,6 +191,39 @@ def load_object(infile):
     fp.close()
     return o
 
+def expand_array(*x):
+    """Reshape a list of arrays of dimension N such that size of each
+    dimension is set to the largest size of any array in the list.
+    Every output array has dimension NxM where M = Prod_i =
+    max(N_i)."""
+
+    ndim = len(x)
+    
+    shape = None
+    for i in range(len(x)): 
+        z = np.array(x[i])
+        if shape is None: shape = z.shape
+        shape = np.maximum(shape,z.shape)
+    
+    xv = np.zeros((ndim,np.product(shape)))
+    for i in range(len(x)):
+        xv[i] = np.ravel(np.array(x[i])*np.ones(shape))
+
+    return xv, shape
+
+def bitarray_to_int(x,big_endian=False):
+
+    if x.dtype == 'int': return x
+    elif x.dtype == 'float': return x.astype('int')
+    
+    o = np.zeros(x.shape[0],dtype=int)
+
+    for i in range(x.shape[1]):
+        if big_endian: o += (1<<i)*x[:,::-1][:,i]
+        else: o += (1<<i)*x[:,i]
+
+    return o
+
 class Option(object):
 
     def __init__(self,value,docstring=''):
