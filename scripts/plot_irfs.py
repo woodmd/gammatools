@@ -44,6 +44,9 @@ args = parser.parse_args()
 
 ft = FigTool(marker=['None'],hist_style='line')
 
+
+
+
 labels = args.files
 
 energy_label = 'Energy [log$_{10}$(E/MeV)]'
@@ -58,6 +61,11 @@ for arg in args.files:
     irf_models.append(IRFManager.create(arg,args.load_from_file,
                                         args.irf_dir))
 
+
+for m in irf_models:
+    m._psf[0].plot(ft)
+
+plt.show()
 
 #x = np.linspace(2.0,3.0,100)
 #y = 0.5*np.ones(100)    
@@ -202,11 +210,12 @@ def make_projection_plots(hists,cut_label,cut_dim,cuts,figname,**kwargs):
 
 make_projection_plots(psf_hists,'Cos $\\theta$',1,[1.0,0.8,0.6,0.4],
                       'psf68_egy',
-                      xlabel=energy_label,ylabel=psf_label,figscale=1.3)
+                      xlabel=energy_label,ylabel=psf_label,figscale=1.4,
+                      yscale='log',legend_loc='upper right')
 
 make_projection_plots(psf_hists,'log$_{10}$(E/MeV)',0,[2.0,3.0,4.0,5.0],
                       'psf68_costh',xlabel=costh_label,ylabel=psf_label,
-                      figscale=1.3)
+                      figscale=1.4)
 
 #make_projection_plots(psf_hists,'Cos $\\theta$',1,[1.0,0.8,0.6,0.4],
 #                      'psf68_ratio_egy',xlabel=energy_label,ylabel=psf_ratio_label)
