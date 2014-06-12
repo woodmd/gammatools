@@ -7,6 +7,7 @@ import yaml
 
 import numpy as np
 import matplotlib.pyplot as plt
+import gammatools
 import gammatools.dm.jcalc as jcalc
 from gammatools.core.util import Units
 import scipy.special as spfn
@@ -145,9 +146,8 @@ class DMChanSpectrum(object):
     from DarkSUSY."""
     def __init__(self,chan,mass = 100*Units.gev):
 
-        dirname = os.path.dirname(__file__)
-
-        d = np.loadtxt(os.path.join(dirname,'gammamc_dif.dat'),unpack=True)
+        d = np.loadtxt(os.path.join(gammatools.PACKAGE_ROOT,
+                                    'data/gammamc_dif.dat'),unpack=True)
 
         xedge = np.linspace(0,1.0,251)
         self._x = 0.5*(xedge[1:]+xedge[:-1])

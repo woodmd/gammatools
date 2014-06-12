@@ -391,6 +391,129 @@ class JProfile(object):
         dcos = -np.cos(psi[1:])+np.cos(psi[:-1])
         return np.cumsum(self._jspline(x)*dcos)
 
+class JIntegrator(object):
+
+    def __init__(self,jspline,lat_cut,lon_cut,source_list=None):
+
+        self._lat_cut = lat_cut
+        self._lon_cut = lon_cut
+
+        nbin_thetagc = 720
+        thetagc_max = 180.
+
+        self._phi_edges = np.linspace(0.,360.,721)
+        self._theta_edges = np.linspace(0.,thetagc_max,nbin_thetagc+1)
+
+        self._sources = None
+
+        if not opts.source_list is None:
+            source_list = np.loadtxt(opts.source_list,unpack=True,usecols=(1,2))
+            self._sources = Vector3D.createLatLon(np.radians(source_list[0]),
+                                                  np.radians(source_list[1]))
+
+        self.compute()
+
+    def compute(self):
+        
+        yaxis = Vector3D(np.pi/2.*np.array([0.,1.,0.]))
+
+        costh_edges = np.cos(np.radians(self._theta_edges))
+        costh_width = costh_edges[:-1]-costh_edges[1:]
+    
+        phi = 0.5*(self._phi_edges[:-1] + self._phi_edges[1:])
+        self._theta = 0.5*(self._theta_edges[:-1] + self._theta_edges[1:])
+
+        self._jv = []
+        self._domega = []
+
+        for i0, th in enumerate(self._theta):
+
+            jtot = integrate(lambda t: jspline(t)*np.sin(t),
+                             np.radians(self._theta_edges[i0]),
+                             np.radians(self._theta_edges[i0+1]),100)
+
+#    jval = jspline(np.radians(th))*costh_width[i0]
+            v = Vector3D.createThetaPhi(np.radians(th),np.radians(phi))
+            v.rotate(yaxis)
+
+            lat = np.degrees(v.lat())
+            lon = np.degrees(v.phi())
+
+            src_msk = len(lat)*[True]
+
+            if not self._sources is None:
+
+                for k in range(len(v.lat())):
+                    p = Vector3D(v._x[:,k])
+
+                    sep = np.degrees(p.separation(self._sources))
+                    imin = np.argmin(sep)
+                    minsep = sep[imin]
+
+                    if minsep < 0.62: src_msk[k] = False
+
+            msk = ((np.abs(lat)>=self._lat_cut) |
+                   ((np.abs(lat)<=self._lat_cut)&(np.abs(lon)<self._lon_cut)))
+
+            msk &= src_msk
+            dphi = 2.*np.pi*float(len(lat[msk]))/float(len(phi))
+
+#    hc._counts[i0,msk] = 1
+
+            jtot *= dphi
+#            jsum += jtot
+#            domegasum += costh_width[i0]*dphi
+
+            self._jv.append(jtot)
+            self._domega.append(costh_width[i0]*dphi)
+    
+        self._jv = np.array(self._jv)
+        self._jv_cum = np.cumsum(self._jv)
+
+        self._jv_cum_spline = UnivariateSpline(self._theta_edges[1:],
+                                               self._jv_cum,
+                                               s=0,k=1)
+
+        self._domega = np.array(self._domega)
+        self._domega_cum = np.cumsum(self._domega)
+    
+    def eval(self,rgc,decay=False):
+        
+        if decay:
+            units0 = Units.gev_cm2
+            units1 = (8.5*Units.kpc*0.4*Units.gev_cm3)
+        else:
+            units0 = Units.gev2_cm5
+            units1 = (8.5*Units.kpc*np.power(0.4*Units.gev_cm3,2))
+
+        jv = self._jv_cum_spline(rgc)
+    
+        i = np.argmin(np.abs(rgc-self._theta))
+
+        print '%10.2f %20.6g %20.6g %20.6g %20.6g'%(rgc, jv, 
+                                                    jv/units0, 
+                                                    jv/units1,
+                                                    self._domega_cum[i])
+
+
+    def print_profile(self,decay=False):
+
+        if decay:
+            units0 = Units.gev_cm2
+            units1 = (8.5*Units.kpc*0.4*Units.gev_cm3)
+        else:
+            units0 = Units.gev2_cm5
+            units1 = (8.5*Units.kpc*np.power(0.4*Units.gev_cm3,2))
+
+
+        for i, th in enumerate(self._theta_edges[1:]):
+
+            jv = self._jv_cum[i]
+
+            print '%10.2f %20.6g %20.6g %20.6g %20.6g'%(th, jv, 
+                                                        jv/units0, 
+                                                        jv/units1,
+                                                        self._domega_cum[i])
 
 class DensityProfile(object):
     """ DM density profile that truncates at a maximum DM density.
@@ -549,24 +672,16 @@ class NFWProfile(DensityProfile):
         self._rhos = rhos
 
     def set_jval(self,jval,rs,dist):
-        print 'jval ', jval
-        print 'rs ', rs
-        print 'dist ', dist
-
         rhos = np.sqrt(3./(4.*np.pi)*jval*dist**2/rs**3)
         self._rs = rs
         self._rhos = rhos
-
-        print 'rs ', self._rs/Units.kpc
-        print 'rhos ', np.log10(self._rhos/Units.msun_kpc3)
-
 
     def mass(self,r):
         x = r/self._rs
         return 4*np.pi*self._rhos*np.power(self._rs,3)*(np.log(1+x)-x/(1+x))
 
     def jval(self,r=None,rhos=None,rs=None):
-
+        """Small angle approximation to halo Jvalue. """
         if rhos is None: rhos = self._rhos
         if rs is None: rs = self._rs
 

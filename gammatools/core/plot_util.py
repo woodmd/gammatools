@@ -242,7 +242,7 @@ class FigureSubplot(object):
             p = s.plot(ax=ax,logz=logz)
 
             if isinstance(p,QuadMesh):
-                self._cb = plt.colorbar(p)
+                self._cb = plt.colorbar(p,ax=ax)
                 if not style['zlabel'] is None:
                     self._cb.set_label(style['zlabel'])
             

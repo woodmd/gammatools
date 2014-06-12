@@ -44,6 +44,9 @@ args = parser.parse_args()
 
 ft = FigTool(marker=['None'],hist_style='line')
 
+
+
+
 labels = args.files
 
 energy_label = 'Energy [log$_{10}$(E/MeV)]'
@@ -58,8 +61,6 @@ for arg in args.files:
     irf_models.append(IRFManager.create(arg,args.load_from_file,
                                         args.irf_dir))
 
-
-
     
 for irfm in irf_models:
     for irf in irfm._irfs:
@@ -69,7 +70,7 @@ for irfm in irf_models:
     
 plt.show()
     
-    
+
 #x = np.linspace(2.0,3.0,100)
 #y = 0.5*np.ones(100)    
 
