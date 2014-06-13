@@ -144,10 +144,10 @@ class HistQuantileBkgHist(object):
 
     def __init__(self,hon,hoff,alpha):
 
-        self._xedges = np.array(hon.edges())
+        self._xedges = np.array(hon.axis().edges())
 
-        self._non = copy.copy(hon._counts)
-        self._noff = copy.copy(hoff._counts)
+        self._non = copy.copy(hon.counts())
+        self._noff = copy.copy(hoff.counts())
         self._alpha = alpha
         self._non = np.concatenate(([0],self._non))
         self._noff = np.concatenate(([0],self._noff))
@@ -161,10 +161,8 @@ class HistQuantileBkgHist(object):
     def bootstrap(self,fraction=0.68,niter=1000,xmax=None):
 
         nedge = len(self._non)
-
-
-        hon = createHistModel(self._xedges,self._non[1:],5)
-        hoff = createHistModel(self._xedges,self._noff[1:],5)
+        hon = Histogram.createHistModel(self._xedges,self._non[1:],5)
+        hoff = Histogram.createHistModel(self._xedges,self._noff[1:],5)
 
         non = np.random.poisson(np.concatenate(([0],hon._counts)),
                                 (niter,nedge))

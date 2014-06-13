@@ -101,6 +101,9 @@ def common_prefix(strings):
                 break
     return prefix
 
+def string_to_array(x,delimiter=',',dtype=float):
+    return np.array([t for t in x.split(delimiter)],dtype=dtype)
+
 def update_dict(d0,d1,add_new_keys=False):
     """Recursively update the contents of python dictionary d1 with
     the contents of python dictionary d0."""
@@ -267,7 +270,8 @@ class Configurable(object):
         
         print 'CONFIG'
         for k, v in self._default_config.iteritems():
-            print '%20s %10s %10s %s'%(k,self._config[k],v.value(),v.docstring())
+            print '%20s %10s %10s %s'%(k,self._config[k],v.value(),
+                                       v.docstring())
 
     def config(self,key=None):
         if key is None: return self._config
@@ -279,18 +283,25 @@ class Configurable(object):
     def set_config(self,key,value):
         self._config[key] = value
         
-    def configure(self,config,subsection=None,default_config=None,**kwargs):
+    def configure(self,config,opts=None,subsection=None,
+                  default_config=None,**kwargs):
         """Update the configuration of this object with the contents
         of 'config'."""
         self.update_default_config(default_config)
-
+        
         if not config is None:
-
-            update_dict(self._config,config)
+            
             if not subsection is None and subsection in config and not \
                     config[subsection] is None:                
                 update_dict(self._config,config[subsection])
+            else:
+                update_dict(self._config,config)
 
+        if not opts is None:
+            for k,v in opts.__dict__.iteritems():
+                if k in self._config and not v is None:
+                    self.set_config(k,v)
+                
         update_dict(self._config,kwargs)
 
         for k, v in self._config.iteritems():

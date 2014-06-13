@@ -317,8 +317,7 @@ class Figure(object):
         figsize[0] *= self._style['figscale']
         figsize[1] *= self._style['figscale']
         
-#        self._fig = plt.figure(figsize=figsize)
-        self._fig = plt.figure()
+        self._fig = plt.figure(figsize=figsize)
 
         self._figlabel = figlabel
         self._subplots = []        
@@ -330,6 +329,8 @@ class Figure(object):
 
     def add_subplot(self,n=1,**kwargs):
 
+        if n == 0: return
+        
         if isinstance(n,tuple): nx, ny = n        
         elif n == 1: nx, ny = 1,1
         elif n == 2: nx, ny = 2,1
@@ -546,7 +547,7 @@ class FigTool(object):
         self._style = style
 
     @staticmethod
-    def configure(parser):
+    def add_arguments(parser):
         
         for k, v in FigTool.opts.iteritems():
 
