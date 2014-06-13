@@ -183,7 +183,7 @@ class ParameterSet(object):
 
     def addParameter(self,p):        
 
-        if p.pid() in self._pars:
+        if p.pid() in self._pars_dict.keys():
             raise Exception('Parameter with ID %i already exists.'%p.pid())
         elif p.pid() in self._pars and p.name() != self._pars[p.pid()].name():
             raise Exception('Parameter with name %s already exists.'%p.name())
