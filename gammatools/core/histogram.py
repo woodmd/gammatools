@@ -175,7 +175,7 @@ class HistogramND(object):
         if v is None: v = w
         else: v = np.array(v,ndmin=1)
 
-        if z.shape[1] == self._ndim:
+        if z.shape[0] != self._ndim:
 
             print z.shape, self._ndim
             raise Exception('Coordinate dimension of input array must be '
@@ -1093,6 +1093,7 @@ class Histogram(HistogramND):
         """
         x = np.array(x,ndmin=1,copy=True)
         w = np.array(w,ndmin=1,copy=True)
+        if len(x) == 0: return
         if len(w) < len(x): w = np.ones(len(x))*w
         
         if var is None: var = w
