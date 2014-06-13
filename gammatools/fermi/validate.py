@@ -21,6 +21,7 @@ import gammatools.core.stats as stats
 from gammatools.core.stats import *
 from gammatools.fermi.catalog import Catalog
 from gammatools.core.plot_util import *
+from gammatools.core.util import Configurable
 
 from gammatools.core.fits_util import SkyImage
 from analysis_util import *
@@ -40,6 +41,7 @@ vela_phase_selection = {'on_phase' : '0.0/0.15,0.6/0.7',
 
 class PSFData(Data):
 
+    
     def __init__(self,egy_bin_edge,cth_bin_edge,dtype):
 
         egy_bin_edge = np.array(egy_bin_edge,ndmin=1)
@@ -142,36 +144,57 @@ class PSFData(Data):
 
 
 
-class PSFValidate(object):
-    def __init__(self, opts):
+class PSFValidate(Configurable):
+
+    defaults = { 'egy_bin' : '2.0/4.0/0.25',
+                 'egy_bin_edge'   : None,
+                 'cth_bin'        : None,
+                 'cth_bin_edge'   : None,
+                 'event_class_id' : None,
+                 'data_type'      : 'agn',
+                 'output_prefix'  : None,
+                 'output_dir'     : None,
+                 'conversion_type' : None,
+                 'phase_selection' : None,
+                 'on_phase'       : None,
+                 'off_phase'      : None,
+                 'ltfile'         : None,
+                 'src'            : 'iso' }
+    
+    def __init__(self, config, opts):
         """
         @type self: object
         """
+        super(PSFValidate,self).__init__()
+
+        default_config = dict(PSFValidate.defaults.items() +
+                              IRFManager.defaults.items())
+        
+        self.configure(config,opts,default_config=default_config)
+        cfg = self.config()
+
         self.irf_colors = ['green', 'red', 'magenta', 'gray', 'orange']
         self.on_phases = []
         self.off_phases = []
         self.data = PhotonData()
-#        self.load(opts)
 
         self._ft = FigTool(opts)
 
         self.font = font_manager.FontProperties(size=10)
 
-        if opts.egy_bin_edge is not None:
-            self.egy_bin_edge = [float(t) for t in opts.egy_bin_edge.split(',')]
-        elif opts.egy_bin is not None:
-            [elo, ehi, ebin] = [float(t) for t in opts.egy_bin.split('/')]
+        if cfg['egy_bin_edge'] is not None:
+            self.egy_bin_edge = string_to_array(cfg['egy_bin_edge'])
+        elif cfg['egy_bin'] is not None:
+            [elo, ehi, ebin] = string_to_array(cfg['egy_bin'],'/')
             self.egy_bin_edge = \
                 np.linspace(elo, ehi, 1 + int((ehi - elo) / ebin))
-        elif self.data_type == 'agn':
+        elif cfg['data_type'] == 'agn':
             self.egy_bin_edge = np.linspace(3.5, 5, 7)
         else:
             self.egy_bin_edge = np.linspace(1.5, 5.0, 15)
-
-        self.cth_bin_edge = \
-            np.array([float(t) for t in opts.cth_bin_edge.split(',')])
-
-        self.output_prefix = opts.output_prefix
+            
+        self.cth_bin_edge = string_to_array(cfg['cth_bin_edge'])
+        self.output_prefix = cfg['output_prefix']
         if self.output_prefix is None:
 #            prefix = os.path.splitext(opts.files[0])[0]
             m = re.search('(.+).P.gz',opts.files[0])
@@ -181,20 +204,20 @@ class PSFValidate(object):
             cth_label = '%03.f%03.f' % (self.cth_bin_edge[0] * 100,
                                         self.cth_bin_edge[1] * 100)
 
-            if not opts.event_class_id is None:
-                cth_label += '_%02i'%(opts.event_class_id)
+            if not self.config('event_class_id') is None:
+                cth_label += '_%02i'%(self.config('event_class_id'))
 
             self.output_prefix = '%s_' % (prefix)
 
-            if not opts.conversion_type is None:
-                self.output_prefix += '%s_' % (opts.conversion_type)
+            if not cfg['conversion_type'] is None:
+                self.output_prefix += '%s_' % (cfg['conversion_type'])
             
             self.output_prefix += '%s_' % (cth_label)
 
-        if opts.output_dir is None:
+        if cfg['output_dir'] is None:
             self.output_dir = os.getcwd()
         else:
-            self.output_dir = opts.output_dir
+            self.output_dir = cfg['output_dir']
 
         self.show = opts.show
 
@@ -203,9 +226,9 @@ class PSFValidate(object):
             self.models = opts.irf.split(',')
 
             for i in range(len(self.models)):
-                if opts.conversion_type == 'front':
+                if cfg['conversion_type'] == 'front':
                     self.models[i] += '::FRONT'
-                elif opts.conversion_type == 'back':
+                elif cfg['conversion_type'] == 'back':
                     self.models[i] += '::BACK'
 
         if opts.irf_labels is not None:
@@ -216,19 +239,20 @@ class PSFValidate(object):
         self.mask_srcs = opts.mask_srcs
 
         self.data_type = 'agn'
-        if opts.phase_selection == 'vela':
-            self.data_type = 'pulsar'
-            opts.on_phase = vela_phase_selection['on_phase']
-            opts.off_phase = vela_phase_selection['off_phase']
+        if cfg['phase_selection'] == 'vela':
+            cfg['on_phase'] = vela_phase_selection['on_phase']
+            cfg['off_phase'] = vela_phase_selection['off_phase']
 
-        self.conversion_type = opts.conversion_type
+        self.conversion_type = cfg['conversion_type']
         self.opts = opts
 
+        if not cfg['on_phase'] is None: self.data_type = 'pulsar'
+        
 #        self.quantiles = [float(t) for t in opts.quantiles.split(',')]
 #        self.quantile_labels = ['r%2.f' % (q * 100) for q in self.quantiles]
 
         if self.data_type == 'pulsar':
-            self.phases = parse_phases(self.opts.on_phase, self.opts.off_phase)
+            self.phases = parse_phases(cfg['on_phase'],cfg['off_phase'])
             self.on_phases = self.phases[0]
             self.off_phases = self.phases[1]
             self.alpha = self.phases[2]
@@ -241,8 +265,7 @@ class PSFValidate(object):
         theta_max_c1 = -0.8
         theta_max_c2 = 1.0
 
-        if self.opts.conversion_type == 'back' or \
-                self.opts.conversion_type is None:
+        if cfg['conversion_type'] == 'back' or cfg['conversion_type'] is None:
             theta_max_c0 = 35
             theta_max_c2 = 1.5
 
@@ -258,10 +281,10 @@ class PSFValidate(object):
 
 
     @staticmethod
-    def configure(parser):
+    def add_arguments(parser):
 
-        IRFManager.configure(parser)
-        FigTool.configure(parser)
+        IRFManager.add_arguments(parser)
+        FigTool.add_arguments(parser)
 
         parser.add_argument('--ltfile', default=None,
                             help='Set the livetime cube which will be used '
@@ -341,20 +364,15 @@ class PSFValidate(object):
 
             for icth in range(self.psf_data.cth_axis.nbins()):
 
+                print self.config('irf_dir')
+                
                 cth_range = self.psf_data.cth_axis.edges()[icth:icth+2]
                 irfm = IRFManager.create(self.models[imodel], True,
-                                         irf_dir=self.opts.irf_dir)
+                                         irf_dir=self.config('irf_dir'))
 
-                lonlat = (0, 0)
-                if self.opts.src != 'iso' and self.opts.src != 'iso2':
-                    cat = Catalog()
-                    src = cat.get_source_by_name(self.opts.src)
-                    lonlat = (src['RAJ2000'], src['DEJ2000'])
-
-                m = PSFModelLT(self.opts.ltfile, irfm,
+                m = PSFModelLT(self.config('ltfile'), irfm,
                                nbin=300,cth_range=cth_range,
-                               psf_type=self.opts.src,
-                               lonlat=lonlat)
+                               src_type=self.config('src'))
 
                 #                m.set_spectrum('powerlaw_exp',(1.607,3508.6))
                 #                m.set_spectrum('powerlaw',(2.0))
@@ -374,8 +392,8 @@ class PSFValidate(object):
             print 'Loading ', f
 #            d = PhotonData.load(f)
             d = load_object(f)
-            d.mask(event_class_id=opts.event_class_id,
-                   conversion_type=opts.conversion_type)
+            d.mask(event_class_id=self.config('event_class_id'),
+                   conversion_type=self.config('conversion_type'))
 
             self.data.merge(d)
 
@@ -396,8 +414,8 @@ class PSFValidate(object):
             print 'Loading ', f
 #            d = PhotonData.load(f)
             d = load_object(f)            
-            d.mask(event_class_id=self.opts.event_class_id,
-                   conversion_type=self.opts.conversion_type)
+            d.mask(event_class_id=self.config('event_class_id'),
+                   conversion_type=self.config('conversion_type'))
             d['dtheta'] = np.degrees(d['dtheta'])
 
             self.fill(d)
@@ -440,14 +458,28 @@ class PSFValidate(object):
     def plot_theta_residual(self, hsignal, hbkg, hmodel, label):
 
 
-        fig = self._ft.create(label,figstyle='ratio2',xscale='sqrt',
-                              norm_interpolation='lin')
+        fig = self._ft.create(label,figstyle='residual2',xscale='sqrt',
+                              norm_interpolation='lin',
+                              legend_loc='upper right')
 
         hsignal_rebin = hsignal.rebin_mincount(10)
         hbkg_rebin = Histogram(hsignal_rebin.axis().edges())
         hbkg_rebin.fill(hbkg.axis().center(),hbkg.counts(),
                         hbkg.var())
 
+        hsignal_rebin = hsignal_rebin.scale_density(lambda x: x**2*np.pi)
+        hbkg_rebin = hbkg_rebin.scale_density(lambda x: x**2*np.pi)
+        
+        for i, h in enumerate(hmodel):
+
+            h_rebin = Histogram(hsignal_rebin.axis().edges())
+            h_rebin.fill(h.axis().center(),h.counts(),h.var())
+            h_rebin = h_rebin.scale_density(lambda x: x**2*np.pi)
+            
+            fig[0].add_hist(h_rebin,hist_style='line',linestyle='-',
+                            label=self.model_labels[i],
+                            color=self.irf_colors[i],
+                            linewidth=1.5)
         
         fig[0].add_hist(hsignal_rebin,
                         marker='o', linestyle='None',label='signal')
@@ -455,11 +487,7 @@ class PSFValidate(object):
                         linestyle='--',label='bkg',color='k')
 
         
-        for i, h in enumerate(hmodel):
-            fig[0].add_hist(h,hist_style='line',linestyle='-',
-                            label=self.model_labels[i],
-                            color=self.irf_colors[i],
-                            linewidth=1.5)
+        
 
         fig[0].set_style('ylabel','Counts Density [deg$^{-2}$]')
         
@@ -656,17 +684,18 @@ class PSFValidate(object):
         qdata.excess.set(iegy, icth, *qdata.sig_hist[iegy, icth].sum())
         
         qdata.tot_density_hist[iegy, icth] = \
-            qdata.sig_hist[iegy, icth].scale_density(lambda x: x * x * np.pi)
+            qdata.sig_hist[iegy, icth].scale_density(lambda x: x**2*np.pi)
         qdata.bkg_density_hist[iegy, icth]._counts = bkg_density
 
         xedge = np.linspace(-theta_max, theta_max, 301)
 
-        print qdata.sky_image[iegy,icth]
-
         if qdata.sky_image[iegy,icth] is None:
-            qdata.sky_image[iegy,icth] = Histogram2D(xedge,xedge)        
-        qdata.sky_image[iegy,icth].fill(data['delta_ra'][mask],
-                                        data['delta_dec'][mask])
+            qdata.sky_image[iegy,icth] = Histogram2D(xedge,xedge)
+
+
+        if np.sum(mask):
+            qdata.sky_image[iegy,icth].fill(data['delta_ra'][mask],
+                                            data['delta_dec'][mask])
 
 
 
@@ -763,7 +792,10 @@ class PSFValidate(object):
                  r95 * np.sin(np.linspace(0, 2 * np.pi, 100)), color='k',
                  linestyle='--')
 
-        stacked_image.plot(logz=True)
+        stacked_image.plot()
+        plt.gca().set_xlim(-theta_max,theta_max)
+        plt.gca().set_ylim(-theta_max,theta_max)
+        
         
 #        plt.plot(bkg_edge[0] * np.cos(np.linspace(0, 2 * np.pi, 100)),
 #                 bkg_edge[0] * np.sin(np.linspace(0, 2 * np.pi, 100)),
@@ -852,11 +884,10 @@ class PSFValidate(object):
                                       cuts=self.opts.cuts,
                                       phases=self.on_phases)
 
-
-
         (hon, hoff, hoffs) = getOnOffHist(data, 'dtheta', phases=self.phases,
                                           edges=theta_edges, mask=mask)
 
+        
         hexcess = copy.deepcopy(hon)
         hexcess -= hoffs
 
@@ -882,16 +913,24 @@ class PSFValidate(object):
         
         src = data._srcs[0]
 
-        if not isinstance(qdata.sky_image[iegy,icth],SkyImage):        
-            im = SkyImage.createROI(src['RAJ2000'], src['DEJ2000'],
-                                    theta_max, theta_max / 200.)
-            qdata.sky_image[iegy,icth] = im
-        else:
-            im = qdata.sky_image[iegy,icth]
+        xedge = np.linspace(-theta_max, theta_max, 301)
+
+        if qdata.sky_image[iegy,icth] is None:
+            qdata.sky_image[iegy,icth] = Histogram2D(xedge,xedge)        
+        qdata.sky_image[iegy,icth].fill(data['delta_ra'][mask],
+                                        data['delta_dec'][mask])
 
         
-        if len(data['ra'][on_mask]) > 0:
-            im.fill(data['ra'][on_mask], data['dec'][on_mask])
+#        if not isinstance(qdata.sky_image[iegy,icth],SkyImage):        
+#            im = SkyImage.createROI(src['RAJ2000'], src['DEJ2000'],
+#                                    theta_max, theta_max / 200.)
+#            qdata.sky_image[iegy,icth] = im
+#        else:
+#            im = qdata.sky_image[iegy,icth]
+
+        
+#        if len(data['ra'][on_mask]) > 0:
+#            im.fill(data['ra'][on_mask], data['dec'][on_mask])
 
 
     def fill_models(self, iegy, icth):
@@ -980,7 +1019,7 @@ class PSFValidate(object):
         text += 'Background = %.3f' % (bkg_hist.sum()[0])
 
         print 'Computing Quantiles'
-        hq = stats.HistQuantileBkgHist(on_hist, off_hist, self.alpha)
+        hq = HistQuantileBkgHist(on_hist, off_hist, self.alpha)
 
 
         
@@ -1000,9 +1039,10 @@ class PSFValidate(object):
                                                    cth_range[0] * 100,
                                                    cth_range[1] * 100)
 
-        self.plot_theta_residual(psf_data.tot_density_hist[iegy, icth],
-                                 psf_data.bkg_density_hist[iegy, icth],
-                                 hmodel_density,
+        self.plot_theta_residual(on_hist, bkg_hist, hmodel_counts,
+            #psf_data.tot_density_hist[iegy, icth],
+                                 #psf_data.bkg_density_hist[iegy, icth],
+                                 #hmodel_density,
                                  fig_label)
 
         fig_label = self.output_prefix + 'theta_counts_'
@@ -1011,11 +1051,16 @@ class PSFValidate(object):
                                                    cth_range[0] * 100,
                                                    cth_range[1] * 100)
 
+        fig_title = 'E = [%.3f, %.3f] '%(egy_range[0],egy_range[1])
+        fig_title += 'Cos$\\theta$ = [%.3f, %.3f]'%(cth_range[0],cth_range[1])
+        
         self.plot_psf_cumulative(on_hist, bkg_hist, hmodel_counts,
-                                 fig_label,
+                                 fig_label,fig_title,
                                  theta_max=None, text=text)
 
 
+        return
+        
         if excess_sum < 10: return
 
         

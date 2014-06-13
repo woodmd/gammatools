@@ -10,6 +10,7 @@ from scipy.interpolate import UnivariateSpline
 from scipy.integrate import quad
 from gammatools.core.histogram import Histogram
 from gammatools.fermi.irf_util import *
+from gammatools.fermi.catalog import Catalog
 
 def find_nearest(array,value):
     idx=(np.abs(array-value)).argmin()
@@ -18,7 +19,7 @@ def find_nearest(array,value):
 class PSFModel(object):
     def __init__(self,psf_file=None,model='powerlaw',sp_param=(2,1000)):
 
-        self._dtheta_max_deg = 45.0
+        self._dtheta_max_deg = 90.0
         
         if psf_file is not None:
             self.load_file(psf_file)
@@ -82,7 +83,7 @@ class PSFModel(object):
 
         return np.array(y_thsq)
 
-    def quantile(self,emin,emax,frac=0.68,xmax=0):
+    def quantile(self,emin,emax,frac=0.68,xmax=None):
         
         radii = np.logspace(-3.0,np.log10(self._dtheta_max_deg),300)
         radii = np.concatenate(([0],radii))
@@ -100,7 +101,7 @@ class PSFModel(object):
         cdf = np.concatenate(([0],cdf))
         stot = cdf[-1]
 
-        if xmax > 0:
+        if not xmax is None:
             fcdf = UnivariateSpline(radii,cdf,s=0)        
             stot = fcdf(xmax)
 
@@ -150,23 +151,27 @@ class PSFModel(object):
             return self._dtheta, psf
 
 class PSFModelLT(PSFModel):
-
-    load_irf = False
     
     def __init__(self,ltfile,irf,nbin=600,
                  ebins_per_decade=16,
                  cth_range=(0.4,1.0), build_model=True,
-                 psf_type='src',lonlat=(0,0),
+                 src_type='src',
                  edisp_table=None):
 
         PSFModel.__init__(self,model='powerlaw',sp_param=(2,1000))
 
-        self._psf_type = psf_type
-        self._lonlat = lonlat
+        self._src_type = src_type
         self._cth_range = cth_range
         self._nbin_dtheta = nbin
         self._irf = copy.deepcopy(irf)
         self._edisp_table = edisp_table
+
+        self._lonlat = (0, 0)
+        if src_type != 'iso' and src_type != 'iso2':
+            cat = Catalog()
+            src = cat.get_source_by_name(src_type)
+            self._lonlat = (src['RAJ2000'], src['DEJ2000'])
+
         
         loge_step = 1./float(ebins_per_decade)
         emin = 1.0+loge_step/2.
@@ -190,7 +195,7 @@ class PSFModelLT(PSFModel):
         if build_model: self.buildModel()
 
     def buildModel(self):
-        """Build a model for the livetime-weighted PSF averaged over
+        """Build a model for the exposure-weighted PSF averaged over
         instrument inclination angle."""
         
         self._psf = np.zeros((self._log_energy.shape[0],self._nbin_dtheta))
@@ -293,9 +298,9 @@ class PSFModelLT(PSFModel):
             if cth < self._cth_range[0] or cth > self._cth_range[1]:
                 continue
 
-            if self._psf_type == 'iso':
+            if self._src_type == 'iso':
                 self._tau[i] = dcostheta
-            elif self._psf_type == 'iso2':
+            elif self._src_type == 'iso2':
                 sinlat = np.linspace(-1,1,48)
 
                 m = hdulist[1].data.field(0)[:,i]
@@ -356,7 +361,7 @@ if __name__ == '__main__':
     m = PSFModelLT(opts.ltfile, opts.irf,
                    nbin=300,
                    ctheta_range=ctheta_range,
-                   psf_type='src',
+                   src_type='src',
                    lonlat=SourceCatalog['vela'])#,irf=irf)
 
     print '34% ', m.quantile(emin,emax,0.34)

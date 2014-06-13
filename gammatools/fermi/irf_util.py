@@ -26,29 +26,18 @@ class IRFManager(object):
 
     load_irf = False
 
+    defaults = {'irf_dir'         : 'custom_irfs',
+                'expand_irf_name' : False,
+                'load_from_file'  : True }
+    
     def __init__(self,irfs=None):
 
         self._irfs = []
         if not irfs is None: self._irfs = irfs
 
-#        if not psf_file is None and not isinstance(psf_file,list): 
-#            self._psf.append(PSFIRF(psf_file))
-#        elif not psf_file is None and isinstance(psf_file,list): 
-#            for f in psf_file: self._psf.append(PSFIRF(f))
-
-#        if not aeff_file is None and not isinstance(aeff_file,list): 
-#            self._aeff.append(AeffIRF(aeff_file))
-#        elif not aeff_file is None and isinstance(aeff_file,list): 
-#            for f in aeff_file: self._aeff.append(AeffIRF(f))
-
-#        if not edisp_file is None and not isinstance(edisp_file,list): 
-#            self._edisp.append(EDispIRF(edisp_file))
-#        elif not edisp_file is None and isinstance(edisp_file,list): 
-#            for f in edisp_file: self._edisp.append(EDispIRF(f))
-
     @staticmethod
-    def configure(parser):
-        parser.add_argument('--irf_dir', default = 'custom_irfs', 
+    def add_arguments(parser):
+        parser.add_argument('--irf_dir', default = None, 
                             help = 'Set the IRF directory.')
 
         parser.add_argument('--expand_irf_name', default = False,
@@ -89,18 +78,17 @@ class IRFManager(object):
         aeff_tot = self.aeff(egy,cth,**kwargs)
         
         v = None
-        for i in range(len(self._psf)):
+        for i, irf in enumerate(self._irfs):
 
-            aeff = self._irfs[i].aeff(egy,cth,**kwargs)
-            
-            psf= self._irfs[i].psf(dtheta,egy,cth,**kwargs)*aeff
+            aeff = irf.aeff(egy,cth,**kwargs)            
+            psf = irf.psf(dtheta,egy,cth,**kwargs)*aeff
             if i == 0: v  = psf
             else: v += psf
 
         return v/aeff_tot
 
     def psf_quantile(self,egy,cth,frac=0.68):
-        x = np.logspace(-3.0,np.log10(45.0),300)        
+        x = np.logspace(-3.0,np.log10(90.0),300)        
         x = np.concatenate(([0],x))
         xc = 0.5*(x[:-1]+x[1:])
         deltax = np.radians(x[1:] - x[:-1])
@@ -147,8 +135,10 @@ class IRFManager(object):
 
         return v
 
+    def dump(self):
+        for irf in self._irfs: irf.dump()
+    
     def save(self,irf_name):
-
         for irf in self._irfs: irf.save(irf_name)
 
 class IRF(object):
@@ -202,6 +192,12 @@ class IRF(object):
 
     def edisp(self,*args,**kwargs):
         return self._edisp(*args,**kwargs)
+
+    def dump(self):
+
+        self._aeff.dump()
+        self._psf.dump()
+        self._edisp.dump()
     
     def save(self,irf_name):
 
@@ -247,10 +243,13 @@ class AeffIRF(IRFComponent):
 #        hdulist.close()
 
     def dump(self):
-        hdulist.info()
+        self._hdulist.info()
 
-        for k, v in hdulist[0].header.iteritems():
-            print '%30s %s'%(k, v)
+        print 'Energy Axis: ', self._energy_axis.edges()
+        print 'Angle Axis: ', self._cth_axis.edges()
+        
+        for k, v in self._hdulist[0].header.iteritems():
+            print '%-30s %s'%(k, v)
         
         
     def __call__(self,egy,cth):
@@ -323,10 +322,13 @@ class EDispIRF(IRFComponent):
                            self._ehi-self._elo]
 
     def dump(self):
-        hdulist.info()
+        self._hdulist.info()
 
-        for k, v in hdulist[0].header.iteritems():
-            print '%30s %s'%(k, v)
+        print 'Energy Axis: ', self._energy_axis.edges()
+        print 'Angle Axis: ', self._cth_axis.edges()
+        
+        for k, v in self._hdulist[0].header.iteritems():
+            print '%-30s %s'%(k, v)
         
     def save(self,filename):
 
@@ -350,8 +352,8 @@ class PSFIRF(IRFComponent):
         hdulist = self._hdulist
 #        hdulist.info()
 
-        if re.search('front',fits_file) is not None: self._ct = 'front'
-        elif re.search('back',fits_file) is not None: self._ct = 'back'
+        if re.search('front',fits_file.lower()) is not None: self._ct = 'front'
+        elif re.search('back',fits_file.lower()) is not None: self._ct = 'back'
         else: self._ct = 'none'
         
         self.setup_axes(hdulist[1].data)
@@ -451,10 +453,13 @@ class PSFIRF(IRFComponent):
         return
 
     def dump(self):
-        hdulist.info()
+        self._hdulist.info()
 
-        for k, v in hdulist[0].header.iteritems():
-            print '%30s %s'%(k, v)
+        print 'Energy Axis: ', self._energy_axis.edges()
+        print 'Angle Axis: ', self._cth_axis.edges()
+        
+        for k, v in self._hdulist[0].header.iteritems():
+            print '%-30s %s'%(k, v)
     
     def plot(self,ft):
     
