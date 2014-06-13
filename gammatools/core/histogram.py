@@ -1007,6 +1007,16 @@ class Histogram(HistogramND):
             if len(x)==1: return np.array([c[0],np.sqrt(v)[0]])
             else: return np.vstack((c,np.sqrt(v)))
 
+    def merge(self,h):
+        edges = np.concatenate((h.axis().edges(),
+                                self.axis().edges()))
+        edges = np.unique(edges)
+        print edges
+        o = Histogram(edges)
+        o.fill(h.axis().center(),h.counts())
+        o.fill(self.axis().center(),self.counts())
+        return o
+
     def normalize(self):
 
         s = np.sum(self._counts)
