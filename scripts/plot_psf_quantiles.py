@@ -241,7 +241,7 @@ parser.add_argument('--config', default = None,
 parser.add_argument('--show', default = False, action='store_true', 
                     help = '')
 
-parser.add_argument('files', nargs='+')
+#parser.add_argument('files', nargs='+')
 
 FigTool.add_arguments(parser)
 
@@ -262,78 +262,110 @@ data_colors = ['k','b']
 
 model_colors = ['g','m','k','b']
 
+common_kwargs = { 'xlabel' : 'Energy [log$_{10}$(E/MeV)]',
+                  'ylabel' : 'Containment Radius [deg]',
+                  'yscale' : 'log',
+                  'figstyle' : 'residual2', 'xlim': [1.5,5.5] }
 
+for k,v in config['plots'].iteritems():
 
-
-data_fig68 = ft.create('psf_quantile_r68',figstyle='residual2',yscale='log',
-                       xlabel='Energy [log$_{10}$(E/MeV)]',
-                       ylabel='Containment Radius [deg]',
-                       color=data_colors,norm_index=1)
-data_fig95 = ft.create('psf_quantile_r95',figstyle='residual2',yscale='log',
-                       xlabel='Energy [log$_{10}$(E/MeV)]',
-                       ylabel='Containment Radius [deg]',
-                       color=data_colors,norm_index=1)
-
-mdl_fig68 = ft.create('psf_quantile_r68',figstyle='residual2',yscale='log',
-                       xlabel='Energy [log$_{10}$(E/MeV)]',
-                       ylabel='Containment Radius [deg]',
-                       color=model_colors)
-
-mdl_fig95 = ft.create('psf_quantile_r95',figstyle='residual2',yscale='log',
-                       xlabel='Energy [log$_{10}$(E/MeV)]',
-                       ylabel='Containment Radius [deg]',
-                       color=model_colors)
-
-norm_index = 1
-
-mdl_hists68 = []
-mdl_hists95 = []
-
-for i, arg in enumerate(args.files):
     
-    d = PSFData.load(arg)
 
-    if d.dtype == 'data':
+    data_fig34 = ft.create(k + '_psf_quantile_r34',color=data_colors,
+                           **common_kwargs)
+
+    data_fig68 = ft.create(k + '_psf_quantile_r68',color=data_colors,
+                           **common_kwargs)
+
+    data_fig95 = ft.create(k + '_psf_quantile_r95',color=data_colors,
+                           **common_kwargs)
+                           
+    mdl_fig34 = ft.create(k + '_psf_quantile_r34',color=model_colors,
+                           **common_kwargs)
+    
+    mdl_fig68 = ft.create(k + '_psf_quantile_r68',color=model_colors,
+                           **common_kwargs)
+
+    mdl_fig95 = ft.create(k + '_psf_quantile_r95',color=model_colors,
+                           **common_kwargs)
+                          
+    norm_index = 1
+
+
+    for i, arg in enumerate(v):
+    
 
         msk = None
 
-        if 'range' in config:
-            xlim = config['range'][i]
-            x = d.excess.xaxis().center()        
-            msk = (x > xlim[0]) & (x < xlim[1])
+#        if 'range' in config:
+#            xlim = config['range'][i]
+#            x = d.excess.xaxis().center()        
+#            msk = (x > xlim[0]) & (x < xlim[1])
 
-        j = len(data_fig68[0]._data)
-        
-        data_fig68[0].add_hist(d.qdata[1].slice(1,0),
-                               linestyle='None',msk=msk,
-                               label=config['data_labels'][j])
-        data_fig95[0].add_hist(d.qdata[3].slice(1,0),
-                               linestyle='None',msk=msk,
-                               label=config['data_labels'][j])
-        
-    else:
-        norm_index = i
+#        j = len(data_fig68[0]._data)
+ 
+        mh34 = None
+        mh68 = None
+        mh95 = None
+        for j, f in enumerate(arg['files']):
+            d = PSFData.load(f)
 
-        j = len(mdl_fig68[0]._data)
-        
-        if j >= len(config['model_labels']):
-            label = arg
+            h34 = d.qdata[0].slice(1,0)
+            h68 = d.qdata[1].slice(1,0)
+            h95 = d.qdata[3].slice(1,0)
+
+            if j == 0: 
+                mh34 = h34
+                mh68 = h68
+                mh95 = h95
+            else:
+                mh34 = mh34.merge(h34)
+                mh68 = mh68.merge(h68)
+                mh95 = mh95.merge(h95)
+
+        if arg['type'] == 'model':
+            mdl_fig34[0].add_hist(mh34,hist_style='line',
+                                  label=arg['label'])
+            mdl_fig68[0].add_hist(mh68,hist_style='line',
+                                  label=arg['label'])
+            mdl_fig95[0].add_hist(mh95,hist_style='line',
+                                  label=arg['label'])
         else:
-            label = config['model_labels'][j]
+            data_fig34[0].add_hist(mh34,
+                                   linestyle='None',#msk=msk,
+                                   label=arg['label'])
+            data_fig68[0].add_hist(mh68,
+                                   linestyle='None',#msk=msk,
+                                   label=arg['label'])
+            data_fig95[0].add_hist(mh95,
+                                   linestyle='None',#msk=msk,
+                                   label=arg['label'])
+#                              label=label)
+
+#        norm_index = i
+#        j = len(mdl_fig68[0]._data)
+        
+#        if j >= len(config['model_labels']):
+#            label = arg
+#        else:
+#            label = config['model_labels'][j]
 
             
-        mdl_fig68[0].add_hist(d.qdata[1].slice(1,0),hist_style='line',
-                              label=label)
-        mdl_fig95[0].add_hist(d.qdata[3].slice(1,0),hist_style='line',
-                              label=label)
+#        mdl_fig68[0].add_hist(d.qdata[1].slice(1,0),hist_style='line',
+#                              label=label)
+#        mdl_fig95[0].add_hist(d.qdata[3].slice(1,0),hist_style='line',
+#                              label=label)
 
 
-data_fig68.merge(mdl_fig68)
-data_fig95.merge(mdl_fig95)
+    mdl_fig34.merge(data_fig34)
+    mdl_fig68.merge(data_fig68)
+    mdl_fig95.merge(data_fig95)
         
-        
-data_fig68.plot(norm_index=norm_index)
-data_fig95.plot(norm_index=norm_index)
+    norm_index=0
+
+    mdl_fig68.plot()#norm_index=norm_index)
+    mdl_fig95.plot()#norm_index=norm_index)
+    mdl_fig34.plot()#norm_index=norm_index)
 
 if args.show: plt.show()
 
