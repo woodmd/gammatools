@@ -206,7 +206,7 @@ class FT1Loader(object):
         if not fname is None:
             src_names = np.genfromtxt(fname,unpack=True,dtype=None)
         else:
-            src_names = np.array(opts.srcs.split(','))
+            src_names = np.array(srcs.split(','))
             
         if src_names.ndim == 0: src_names = src_names.reshape(1)
 

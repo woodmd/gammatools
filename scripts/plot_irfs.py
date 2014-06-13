@@ -53,22 +53,53 @@ energy_label = 'Energy [log$_{10}$(E/MeV)]'
 costh_label = 'Cos $\\theta$'
 acceptance_label = 'Acceptance [m$^2$ sr]'
 effarea_label = 'Effective Area [m$^2$]'
-psf_label = '68% PSF Containment [deg]'
-psf_ratio_label = '68% PSF Containment Ratio'
+psf68_label = '68% PSF Containment [deg]'
+psf68_ratio_label = '68% PSF Containment Ratio'
+
+psf95_label = '95% PSF Containment [deg]'
+psf95_ratio_label = '95% PSF Containment Ratio'
 
 irf_models = []
 for arg in args.files:
-    irf_models.append(IRFManager.create(arg,args.load_from_file,
-                                        args.irf_dir))
+
+    m = IRFManager.create(arg,args.load_from_file,args.irf_dir)
+    m.dump()
+    irf_models.append(m)
 
     
-for irfm in irf_models:
-    for irf in irfm._irfs:
-        fig = ft.create('psf_table',nax=(2,3))
+for i, irfm in enumerate(irf_models):
+    for j, irf in enumerate(irfm._irfs):
+
+        irf0 = irf_models[0]._irfs[j]
+        
+        fig = ft.create('psf_table_%02i'%(i),nax=(3,2),figscale=1.4)
+        fig[0].set_title('score')
         fig[0].add_hist(irf._psf._score_hist)
+        fig[1].set_title('stail')
+        fig[1].add_hist(irf._psf._stail_hist)
+        fig[2].set_title('gcore')
+        fig[2].add_hist(irf._psf._gcore_hist)
+        fig[3].set_title('gtail')
+        fig[3].add_hist(irf._psf._gtail_hist)
+        fig[4].set_title('fcore')
+        fig[4].add_hist(irf._psf._fcore_hist)
         fig.plot()
-    
-plt.show()
+
+        if i == 0: continue
+        
+        fig = ft.create('psf_table_ratio_%02i'%(i),nax=(3,2),figscale=1.4)
+        fig[0].set_title('score')
+        fig[0].add_hist(irf._psf._score_hist/irf0._psf._score_hist)
+        fig[1].set_title('stail')
+        fig[1].add_hist(irf._psf._stail_hist/irf0._psf._stail_hist)
+        fig[2].set_title('gcore')
+        fig[2].add_hist(irf._psf._gcore_hist/irf0._psf._gcore_hist)
+        fig[3].set_title('gtail')
+        fig[3].add_hist(irf._psf._gtail_hist/irf0._psf._gtail_hist)
+        fig[4].set_title('fcore')
+        fig[4].add_hist(irf._psf._fcore_hist/irf0._psf._fcore_hist)
+        fig.plot()
+        
     
 
 #x = np.linspace(2.0,3.0,100)
@@ -81,26 +112,30 @@ plt.show()
     
 acc_hists = []
 effarea_hists = []
-psf_hists = []
+psf68_hists = []
+psf95_hists = []
 
 #fig, axes = plt.subplots(2,len(irf_models))
 
-acc_fig = ft.create('acc')
-psf_fig = ft.create('psf')
+#acc_fig = ft.create('acc')
+#psf_fig = ft.create('psf')
 
-energy_axis = Axis.create(1.00,6.00,36,label=energy_label)
+energy_axis = Axis.create(1.00,6.50,44,label=energy_label)
 cth_axis = Axis.create(0.2,1.0,32,label=costh_label)
 
 for k, irf in enumerate(irf_models):
-    hpsf = Histogram2D(energy_axis,cth_axis)
+    hpsf68 = Histogram2D(energy_axis,cth_axis)
+    hpsf95 = Histogram2D(energy_axis,cth_axis)
     hacc = Histogram2D(energy_axis,cth_axis)
     heffarea = Histogram2D(energy_axis,cth_axis)         
     heffarea._counts = irf.aeff(*heffarea.center()).reshape(heffarea.shape())
-    hpsf._counts = irf.psf_quantile(*hpsf.center()).reshape(hpsf.shape())
+    hpsf68._counts = irf.psf_quantile(*hpsf68.center()).reshape(hpsf68.shape())
+    hpsf95._counts = irf.psf_quantile(*hpsf95.center(),frac=0.95).reshape(hpsf95.shape())
 
     hacc = heffarea*2.*np.pi*hacc.yaxis().width()[np.newaxis,:]
     acc_hists.append(hacc)
-    psf_hists.append(hpsf)
+    psf68_hists.append(hpsf68)
+    psf95_hists.append(hpsf95)
     effarea_hists.append(heffarea)
     
     fig = ft.create('%s_effarea'%(labels[k]),
@@ -112,12 +147,21 @@ for k, irf in enumerate(irf_models):
     fig.plot()
 
     fig = ft.create('%s_psf68'%(labels[k]),
-                    title=labels[k],zlabel=psf_label,
+                    title=labels[k],zlabel=psf68_label,
                     xlabel=energy_label,costh_label=costh_label,
                     logz=True)
 
-    fig[0].add_hist(hpsf)
+    fig[0].add_hist(hpsf68)
+    
+    fig.plot()
 
+    fig = ft.create('%s_psf95'%(labels[k]),
+                    title=labels[k],zlabel=psf95_label,
+                    xlabel=energy_label,costh_label=costh_label,
+                    logz=True)
+
+    fig[0].add_hist(hpsf95)
+    
     fig.plot()
 
     continue
@@ -183,12 +227,13 @@ for k, irf in enumerate(irf_models):
     fig.savefig(opts.prefix + '%s_psf68_ratio.png'%(labels[k]))
     
     
-fig = ft.create('acc',ax=0,legend_loc='lower right',
-                xlabel=energy_label,ylabel=acceptance_label)
+fig = ft.create('acc',legend_loc='lower right',figstyle='ratio2',
+                xlabel=energy_label,ylabel=acceptance_label,
+                hist_xerr=False)
 
 for i in range(len(acc_hists)):
     hm = acc_hists[i].marginalize(1)
-    fig[0].add_hist(hm,label=labels[i])
+    fig[0].add_hist(hm,label=labels[i],marker='o')
     
 #plt.gca().legend(prop={'size':8},loc='lower right')
 
@@ -202,7 +247,8 @@ def make_projection_plots(hists,cut_label,cut_dim,cuts,figname,**kwargs):
 #            axes.flat[j].set_title('%s = %.2f'%(cut_label,cuts[j]))
             fig[j].set_title('%s = %.2f'%(cut_label,cuts[j]))
             hm = hists[i].sliceByValue(cut_dim,cuts[j])
-            fig[j].add_hist(hm,label=labels[i],linestyle='-')
+            fig[j].add_hist(hm,label=labels[i],linestyle='-',
+                            marker='o')
 
     fig.plot()
             
@@ -212,14 +258,25 @@ def make_projection_plots(hists,cut_label,cut_dim,cuts,figname,**kwargs):
 #        if logy: ax.set_yscale('log')
 #    fig.savefig(figname,bbox_inches='tight')
 
-make_projection_plots(psf_hists,'Cos $\\theta$',1,[1.0,0.8,0.6,0.4],
+common_kwargs = { 'hist_xerr': False, 'figscale' : 1.4 }
+    
+make_projection_plots(psf68_hists,'Cos $\\theta$',1,[1.0,0.8,0.6,0.4],
                       'psf68_egy',
-                      xlabel=energy_label,ylabel=psf_label,figscale=1.4,
-                      yscale='log',legend_loc='upper right')
+                      xlabel=energy_label,ylabel=psf68_label,
+                      yscale='log',legend_loc='upper right',**common_kwargs)
 
-make_projection_plots(psf_hists,'log$_{10}$(E/MeV)',0,[2.0,3.0,4.0,5.0],
-                      'psf68_costh',xlabel=costh_label,ylabel=psf_label,
-                      figscale=1.4,legend_loc='upper right')
+make_projection_plots(psf68_hists,'log$_{10}$(E/MeV)',0,[2.0,3.0,4.0,5.0],
+                      'psf68_costh',xlabel=costh_label,ylabel=psf68_label,
+                      legend_loc='upper right',**common_kwargs)
+
+make_projection_plots(psf95_hists,'Cos $\\theta$',1,[1.0,0.8,0.6,0.4],
+                      'psf95_egy',
+                      xlabel=energy_label,ylabel=psf95_label,
+                      yscale='log',legend_loc='upper right',**common_kwargs)
+
+make_projection_plots(psf95_hists,'log$_{10}$(E/MeV)',0,[2.0,3.0,4.0,5.0],
+                      'psf95_costh',xlabel=costh_label,ylabel=psf95_label,
+                      legend_loc='upper right',**common_kwargs)
 
 #make_projection_plots(psf_hists,'Cos $\\theta$',1,[1.0,0.8,0.6,0.4],
 #                      'psf68_ratio_egy',xlabel=energy_label,ylabel=psf_ratio_label)
@@ -228,10 +285,12 @@ make_projection_plots(psf_hists,'log$_{10}$(E/MeV)',0,[2.0,3.0,4.0,5.0],
 
 
 make_projection_plots(effarea_hists,'Cos $\\theta$',1,[1.0,0.8,0.6,0.4],
-                      'effarea_egy', xlabel=energy_label,ylabel=effarea_label)
+                      'effarea_egy',xlabel=energy_label,ylabel=effarea_label,
+                      **common_kwargs)
 
 make_projection_plots(effarea_hists,'log$_{10}$(E/MeV)',0,[2.0,3.0,4.0,5.0],
-                      'effarea_costh', xlabel=costh_label,ylabel=effarea_label)
+                      'effarea_costh',xlabel=costh_label,ylabel=effarea_label,
+                      **common_kwargs)
 
 
 if args.show: plt.show()

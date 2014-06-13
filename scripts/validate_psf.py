@@ -9,16 +9,12 @@ os.environ['CUSTOM_IRF_NAMES'] = 'P7SOURCE_V6,P7SOURCE_V6MC,P7SOURCE_V9,P7CLEAN_
 import sys
 import copy
 import re
-import pickle
 import argparse
-
-import math
+import yaml
 import numpy as np
 import matplotlib.pyplot as plt
-from gammatools.core.histogram import Histogram, Histogram2D
 from matplotlib import font_manager
 
-from gammatools.fermi.psf_model import *
 import gammatools.core.stats as stats
 from gammatools.fermi.catalog import Catalog
 from gammatools.fermi.validate import *
@@ -30,10 +26,19 @@ pulsar data samples."""
     parser = argparse.ArgumentParser(usage=usage, description=description)
 
     parser.add_argument('files', nargs='+')
-
-    PSFValidate.configure(parser)
-
+    parser.add_argument('--config', default=None )
+    
+    PSFValidate.add_arguments(parser)
+    
     args = parser.parse_args()
 
-    psfv = PSFValidate(args)
+    config = {}
+    if not args.config is None and os.path.isfile(args.config):
+        config = yaml.load(open(args.config,'r'))
+    
+    psfv = PSFValidate(config,args)
+
+    if not args.config is None and not os.path.isfile(args.config):
+        yaml.dump(psfv.config(),open(args.config,'w'))
+            
     psfv.run()

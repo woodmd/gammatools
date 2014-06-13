@@ -115,6 +115,12 @@ parser.add_option("--irf_scaling",default=None,
 parser.add_option("--psf_scaling",default=None,
                   help="Set the class name.")
 
+parser.add_option("--psf_overlap",default='1/1',
+                  help="Set the PSF overlap parameters for energy/angle.")
+
+parser.add_option("--edisp_overlap",default='1/1',
+                  help="Set the class name.")
+
 parser.add_option("--generated",default=None,type='float',
                   help="Set the number of generated events in each file.  "
                   "If this option is not given the number of "
@@ -209,12 +215,31 @@ elif opts.irf_scaling == 'back':
     psf_pars_string = '[9.6e-2, 1.3e-3, 9.6e-2, 1.3e-3, -0.8]'
     edisp_front_pars_string = '[0.0215, 0.0507, -0.22, -0.243, 0.065, 0.584]'
     edisp_back_pars_string = '[0.0215, 0.0507, -0.22, -0.243, 0.065, 0.584]'
-
+elif opts.irf_scaling == 'psf3':
+    psf_pars_string = '[4.97e-02,6.13e-04,4.97e-02,6.13e-04,-0.8]'
+    edisp_front_pars_string = '[0.0210, 0.058, -0.207, -0.213, 0.042, 0.564]'
+    edisp_back_pars_string = '[0.0210, 0.058, -0.207, -0.213, 0.042, 0.564]'
+elif opts.irf_scaling == 'psf2':
+    psf_pars_string = '[7.02e-02,1.07e-03,7.02e-02,1.07e-03,-0.8]'
+    edisp_front_pars_string = '[0.0210, 0.058, -0.207, -0.213, 0.042, 0.564]'
+    edisp_back_pars_string = '[0.0210, 0.058, -0.207, -0.213, 0.042, 0.564]'
+elif opts.irf_scaling == 'psf1':
+    psf_pars_string = '[9.64e-02,1.78e-03,9.64e-02,1.78e-03,-0.8]'
+    edisp_front_pars_string = '[0.0210, 0.058, -0.207, -0.213, 0.042, 0.564]'
+    edisp_back_pars_string = '[0.0210, 0.058, -0.207, -0.213, 0.042, 0.564]'
+elif opts.irf_scaling == 'psf0':
+    psf_pars_string = '[1.53e-01,5.70e-03,1.53e-01,5.70e-03,-0.8]'
+    edisp_front_pars_string = '[0.0210, 0.058, -0.207, -0.213, 0.042, 0.564]'
+    edisp_back_pars_string = '[0.0210, 0.058, -0.207, -0.213, 0.042, 0.564]'
+    
 if not opts.psf_scaling is None: psf_pars_string = opts.psf_scaling
     
-    
+edisp_energy_overlap, edisp_angle_overlap = opts.edisp_overlap.split('/')
+psf_energy_overlap, psf_angle_overlap = opts.psf_overlap.split('/')
+
+
 x = '''
-from IRFdefault import *
+from gammatools.fermi.IRFdefault import *
 
 className="%s"
 selectionName="front"
@@ -233,8 +258,10 @@ Data.files = [%s]
 Data.generated = [%s]
 Data.logemin = [%s]
 Data.logemax = [%s]
-Bins.logemin = 0.5
-Bins.logemax = 6.5
+#Bins.logemin = 0.75
+#Bins.logemax = 6.5
+Bins.set_energy_range(0.75,6.5)
+EffectiveAreaBins.set_energy_range(0.75,6.5)
 
 Data.friends = { %s }
 
@@ -243,11 +270,11 @@ Data.var_ydir = 'WP8BestYDir'
 Data.var_zdir = 'WP8BestZDir'
 Data.var_energy = 'WP8BestEnergy'
 
-Bins.edisp_energy_overlap = 1
-Bins.edisp_angle_overlap = 1
+Bins.edisp_energy_overlap = %s
+Bins.edisp_angle_overlap = %s
 
-Bins.psf_energy_overlap = 1
-Bins.psf_angle_overlap = 1
+Bins.psf_energy_overlap = %s
+Bins.psf_angle_overlap = %s
 
 PSF.pars = %s     # there must be 5 parameters
  
@@ -258,7 +285,9 @@ parameterFile = 'parameters.root'
 '''%(opts.class_name,cut_expr,' '.join(branch_names),
      ','.join(input_file_strings), ','.join(generated_array),
      ','.join(emin_array), ','.join(emax_array), 
-     friends,psf_pars_string,edisp_front_pars_string,edisp_back_pars_string)
+     friends,edisp_energy_overlap,edisp_angle_overlap,
+     psf_energy_overlap,psf_angle_overlap,
+     psf_pars_string,edisp_front_pars_string,edisp_back_pars_string)
 
 f = open(os.path.join(opts.class_name,'setup.py'),'w')
 f.write(x)
@@ -294,6 +323,23 @@ cmd = 'makefits %s %s'%('parameters.root',opts.class_name)
 print cmd
 os.system(cmd)
 
+
+if not re.search('psf',opts.irf_scaling) is None:
+
+    os.system('rm *_front.fits')
+    os.system('rm *_back.fits')
+
+    for s in glob.glob('*%s*fits'%opts.class_name):
+
+        print s
+        
+        sf = os.path.splitext(s)[0] + '_front.fits'
+        sb = os.path.splitext(s)[0] + '_back.fits'
+
+        os.system('cp %s %s'%(s,sf))
+        os.system('cp %s %s'%(s,sb))
+        os.system('rm %s'%(s))
+        
 os.system('tar cfz %s.tar.gz *%s*fits'%(opts.class_name,opts.class_name))
 
 os.system('cp *%s*fits %s'%(opts.class_name,irf_output_dir))

@@ -243,7 +243,7 @@ parser.add_argument('--show', default = False, action='store_true',
 
 parser.add_argument('files', nargs='+')
 
-FigTool.configure(parser)
+FigTool.add_arguments(parser)
 
 args = parser.parse_args()
 
@@ -286,6 +286,9 @@ mdl_fig95 = ft.create('psf_quantile_r95',figstyle='residual2',yscale='log',
 
 norm_index = 1
 
+mdl_hists68 = []
+mdl_hists95 = []
+
 for i, arg in enumerate(args.files):
     
     d = PSFData.load(arg)
@@ -318,6 +321,7 @@ for i, arg in enumerate(args.files):
         else:
             label = config['model_labels'][j]
 
+            
         mdl_fig68[0].add_hist(d.qdata[1].slice(1,0),hist_style='line',
                               label=label)
         mdl_fig95[0].add_hist(d.qdata[3].slice(1,0),hist_style='line',
