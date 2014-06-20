@@ -773,7 +773,7 @@ class Histogram(HistogramND):
         return h
     
     @staticmethod
-    def createHistModel(xedge,ncount,min_count=5):
+    def createHistModel(xedge,ncount,min_count=0):
 
         if np.sum(ncount) == 0: return Histogram(xedge)
 
@@ -1053,19 +1053,21 @@ class Histogram(HistogramND):
 #        import stats
 #        return stats.HistQuantile(self).eval(fraction,**kwargs)
 
-    def central_quantile(self,fraction=0.68,unbias_method='median'):
+    def central_quantile(self,fraction=0.68,unbias_method='median',
+                         method='bootstrap_poisson'):
 
         if  unbias_method == 'median': loc = self.quantile(fraction=0.5)[0]
         elif unbias_method == 'mean': loc = self.mean()
         else:
             raise('Exception')
+
+        delta_max = max(loc-self.axis().center())
         
-        habs = Histogram(np.linspace(0,max(np.abs(loc-self.axis().edges())),
-                                     self.axis().nbins()))
+        habs = Histogram(Axis.create(0,delta_max,self._axis.nbins()*2))
         habs.fill(np.abs(self.axis().center()-loc),
                   self._counts,var=self._var)
         
-        return habs.quantile(fraction,method='bootstrap_poisson',niter=100)
+        return habs.quantile(fraction,method=method,niter=100)
     
     def chi2(self,model,min_counts=None):
 
@@ -1112,10 +1114,10 @@ class Histogram(HistogramND):
             if len(var) < len(w): var = np.ones(len(w))*var
         
         if w.ndim == 1:
-
+            
             c1 = np.histogram(x,bins=self._axis.edges(),weights=w)[0]
             c2 = np.histogram(x,bins=self._axis.edges(),weights=var)[0]
-
+            
             self._counts += c1
             self._var += c2
 

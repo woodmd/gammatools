@@ -6,6 +6,7 @@ import re
 import cPickle as pickle
 import gzip
 import bisect
+import inspect
 
 class Units(object):
 
@@ -252,6 +253,19 @@ class Configurable(object):
         self._config = {}
         self._default_config = {}
 
+        
+        
+        
+    @classmethod
+    def test(cls):
+
+        print 'test method'
+        
+        print cls
+        
+        for base_class in inspect.getmro(cls):
+            print base_class
+            
     def update_config(self,config):
         update_dict(self._config,config)
 
@@ -259,6 +273,10 @@ class Configurable(object):
         """Update configuration for the object adding keys for
         elements that are not present. """
         if config is None: return
+        
+        if not isinstance(config,dict) and issubclass(config,Configurable):
+            config = config.default_config
+            
         update_dict(self._default_config,config,True)
         for k in config.keys():
             if not isinstance(self._default_config[k],Option):

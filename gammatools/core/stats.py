@@ -13,6 +13,16 @@ from scipy.interpolate import UnivariateSpline
 import scipy.optimize as opt
 import matplotlib.pyplot as plt
 from gammatools.core.histogram import Histogram
+from scipy.stats import norm
+
+def gauss_pval_to_sigma(p):
+
+    return norm().isf(0.5+p*0.5)
+
+def gauss_sigma_to_pval(s):
+
+    return 2.0*(norm().cdf(s)-0.5)
+
 
 class HistBootstrap(object):
     def __init__(self,hist,fn):
@@ -107,7 +117,7 @@ class HistQuantileBkgFn(object):
         nedge = len(self._ncounts[self._xedge<=xmax])
         xedge = self._xedge[:nedge]
         
-        h = Histogram.createHistModel(xedge,self._ncounts[1:nedge],5)
+        h = Histogram.createHistModel(xedge,self._ncounts[1:nedge])
         nbkg = np.random.poisson(self._nbkg,niter)
         ncounts = np.random.poisson(np.concatenate(([0],h._counts)),
                                     (niter,nedge))
@@ -161,8 +171,8 @@ class HistQuantileBkgHist(object):
     def bootstrap(self,fraction=0.68,niter=1000,xmax=None):
 
         nedge = len(self._non)
-        hon = Histogram.createHistModel(self._xedges,self._non[1:],5)
-        hoff = Histogram.createHistModel(self._xedges,self._noff[1:],5)
+        hon = Histogram.createHistModel(self._xedges,self._non[1:])
+        hoff = Histogram.createHistModel(self._xedges,self._noff[1:])
 
         non = np.random.poisson(np.concatenate(([0],hon._counts)),
                                 (niter,nedge))

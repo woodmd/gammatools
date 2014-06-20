@@ -429,5 +429,35 @@ class TestHistogram(unittest.TestCase):
 
         assert_almost_equal(q,mu,3)
 
-        q, qerr = h.central_quantile(fraction=0.68)
-        q, qerr = h.central_quantile(fraction=0.95)
+    def test_histogram_quantile_central(self):
+
+
+        h = Histogram(np.linspace(-3,3,2000))
+
+        x = h.axis().center()
+
+        sigma = 0.15
+        s2 = sigma**2
+        mu = x[800]
+
+        fn = lambda t: 1./np.sqrt(2*np.pi*s2)*np.exp(-(t-mu)**2/(2.*s2))
+        h.fill(x,fn(x))
+
+        from gammatools.core.stats import gauss_sigma_to_pval
+
+        f0 = gauss_sigma_to_pval(1.0)
+        f1 = gauss_sigma_to_pval(2.0)
+        
+        q, qerr = h.central_quantile(fraction=f0)
+
+#        print '%.5f %.5f'%(q, qerr)
+
+        assert_almost_equal(q,sigma,3)
+        
+        q, qerr = h.central_quantile(fraction=f1)
+
+        assert_almost_equal(q,2.0*sigma,3)
+        
+#        print '%.5f %.5f'%(q, qerr)
+
+        
