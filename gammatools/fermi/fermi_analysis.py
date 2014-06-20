@@ -3,6 +3,8 @@ import os
 import sys
 import shutil
 import copy
+import glob
+import numpy as np
 from tempfile import mkdtemp
 from skymaps import SkyDir
 from uw.like.pointspec import SpectralAnalysis,DataSpecification
@@ -17,8 +19,8 @@ from pyLikelihood import ParameterVector
 
 from catalog import Catalog, CatalogSource
 
-from util import Configurable
-from task import *
+from gammatools.core.util import Configurable
+from gammatools.fermi.task import *
 from Composite2 import *
 
 class BinnedAnalysisTool(Configurable):
@@ -31,7 +33,7 @@ class BinnedAnalysisTool(Configurable):
                        'evfile'     : None,
                        'scfile'     : None,
                        'srcmdl'     : None,
-                       'ltcube'     : None,
+                       'ltfile'     : None,
                        'galdiff'    : None,
                        'isodiff'    : None,
                        'gtbin'      : None,
@@ -43,13 +45,15 @@ class BinnedAnalysisTool(Configurable):
                        'irfs'       : 'P7REP_CLEAN_V10' }
     
     def __init__(self,src,target_name,config,**kwargs):
-        super(BinnedAnalysisTool,self).__init__()  
-        self.configure(dict(BinnedAnalysisTool.default_config.items() +
-                            SelectorTask.default_config.items() +
-                            BinnerTask.default_config.items() +
-                            SrcMapTask.default_config.items() +
-                            BExpTask.default_config.items()),
-                       config,**kwargs)
+        super(BinnedAnalysisTool,self).__init__()
+
+        self.update_default_config(BinnedAnalysisTool)
+        self.update_default_config(SelectorTask)
+        self.update_default_config(BinnerTask)
+        self.update_default_config(SrcMapTask)
+        self.update_default_config(BExpTask)
+        
+        self.configure(config,**kwargs)
 
         savedir = self.config('savedir')
         
@@ -128,7 +132,7 @@ class AnalysisManager(Configurable):
                        'target'     : None,
                        'evfile'     : None,
                        'scfile'     : None,
-                       'ltcube'     : None,
+                       'ltfile'     : None,
                        'galdiff'    : None,
                        'isodiff'    : None,
                        'event_types': None,
@@ -137,11 +141,13 @@ class AnalysisManager(Configurable):
                        'optimizer'  : 'MINUIT',
                        'irfs'       : 'P7REP_CLEAN_V10' }
     
-    def __init__(self,config,**kwargs):
-        super(AnalysisManager,self).__init__()  
-        self.configure(dict(AnalysisManager.default_config.items() +
-                            SelectorTask.default_config.items()),
-                       config,**kwargs)
+    def __init__(self,config,opts,**kwargs):
+        super(AnalysisManager,self).__init__()
+        
+        self.update_default_config(AnalysisManager)
+        self.update_default_config(SelectorTask)
+        
+        self.configure(config,opts,**kwargs)
 
     def setup_roi(self,**kwargs):
 
@@ -173,10 +179,32 @@ class AnalysisManager(Configurable):
         self.srcmdl_fit = os.path.join(config['savedir'],
                                        "%s_srcmdl_fit.xml"%target_name)
         
-        self.evfile = config['evfile']
+        self.evfile = sorted(glob.glob(config['evfile']))
+        self.ltfile = sorted(glob.glob(config['ltfile']))
+
+        
+        
+        if len(self.evfile) > 1:
+            evfile_list = os.path.join(self.config('savedir'),'evfile.txt')
+            np.savetxt(evfile_list,self.evfile,fmt='%s')
+            self.evfile = os.path.abspath(evfile_list)
+        else:
+            self.evfile = self.evfile[0]
+            
+        if len(self.ltfile) > 1:
+            ltfile_list = os.path.join(self.config('savedir'),'ltfile.txt')
+            np.savetxt(ltfile_list,self.ltfile,fmt='%s')
+            self.ltfile = os.path.abspath(ltfile_list)
+        else:
+            self.ltfile = self.ltfile[0]
+            
+
+        print self.evfile
+        print self.ltfile
+        
         self.skydir = SkyDir(src.ra(),src.dec())
 
-        lt_task = LTSumTask(self.ltcube,infile1=config['ltcube'],
+        lt_task = LTSumTask(self.ltcube,infile1=self.ltfile,
                             config=config)
 
         lt_task.run()

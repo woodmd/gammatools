@@ -24,10 +24,10 @@ class PSFModel(object):
         if psf_file is not None:
             self.load_file(psf_file)
 
-        self.set_spectrum(model='powerlaw',param=(2,1000))
+        self.set_spectrum(model=model,sp_param=sp_param)
 
-    def set_spectrum(self,model,param):
-        self._sp_param = param
+    def set_spectrum(self,model,sp_param):
+        self._sp_param = sp_param
 
         if model == 'powerlaw':
             self._wfn = self.powerlaw
@@ -154,11 +154,14 @@ class PSFModelLT(PSFModel):
     
     def __init__(self,ltfile,irf,nbin=600,
                  ebins_per_decade=16,
-                 cth_range=(0.4,1.0), build_model=True,
-                 src_type='src',
+                 cth_range=(0.4,1.0), 
+                 src_type='isodec',
+                 spectrum='powerlaw',
+                 spectrum_pars=[2.0],
+                 build_model=True,
                  edisp_table=None):
 
-        PSFModel.__init__(self,model='powerlaw',sp_param=(2,1000))
+        PSFModel.__init__(self,model=spectrum,sp_param=spectrum_pars)
 
         self._src_type = src_type
         self._cth_range = cth_range
@@ -167,11 +170,13 @@ class PSFModelLT(PSFModel):
         self._edisp_table = edisp_table
 
         self._lonlat = (0, 0)
-        if src_type != 'iso' and src_type != 'iso2':
+        if src_type != 'iso' and src_type != 'isodec':
             cat = Catalog()
             src = cat.get_source_by_name(src_type)
             self._lonlat = (src['RAJ2000'], src['DEJ2000'])
 
+        print self._lonlat
+            
         
         loge_step = 1./float(ebins_per_decade)
         emin = 1.0+loge_step/2.
@@ -300,7 +305,7 @@ class PSFModelLT(PSFModel):
 
             if self._src_type == 'iso':
                 self._tau[i] = dcostheta
-            elif self._src_type == 'iso2':
+            elif self._src_type == 'isodec':
                 sinlat = np.linspace(-1,1,48)
 
                 m = hdulist[1].data.field(0)[:,i]

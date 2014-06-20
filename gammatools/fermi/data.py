@@ -125,19 +125,24 @@ class PhotonData(object):
         return h
 
     def mask(self,selections=None,conversion_type=None,
-             event_class=None,event_class_id=None,
+             event_class=None,
+             event_class_id=None,
+             event_type_id=None,
              phases=None,cuts=None,
              src_index=None,cuts_file=None):
 
         msk = PhotonData.get_mask(self,selections,conversion_type,event_class,
-                                  event_class_id,phases,cuts,src_index,
+                                  event_class_id,event_type_id,phases,
+                                  cuts,src_index,
                                   cuts_file)
 
         self.apply_mask(msk)
     
     @staticmethod
     def get_mask(data,selections=None,conversion_type=None,
-                 event_class=None,event_class_id=None,
+                 event_class=None,
+                 event_class_id=None,
+                 event_type_id=None,
                  phases=None,cuts=None,
                  src_index=None,cuts_file=None):
         
@@ -187,6 +192,15 @@ class PhotonData(object):
         elif event_class == 'ultraclean':
             mask &= (data['event_class'].astype('int')&((0x1)<<4)>0)
 
+        if not event_type_id is None:
+
+            print np.sum(mask)
+            
+            mask &= (data['event_type'].astype('int')&
+                     ((0x1)<<event_type_id)>0)
+
+            print np.sum(mask)
+            
         if src_index is not None:
 
             src_mask = data['src_index'].astype('int') < 0

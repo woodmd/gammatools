@@ -51,7 +51,7 @@ class IRFManager(object):
         else: return IRFManager.createFromIRF(irf_name)
 
     @staticmethod
-    def createFromFile(irf_name,irf_dir=None,expand_irf_name=False):
+    def createFromFile(irf_name,irf_dir=None,expand_irf_name=True):
         
         if expand_irf_name: irf_names = expand_irf(irf_name)
         else: irf_names = [irf_name]

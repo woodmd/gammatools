@@ -3,6 +3,7 @@ import os
 import shutil
 import copy
 from tempfile import mkdtemp
+import re
 #from uw.like.pointspec import SpectralAnalysis,DataSpecification
 #from uw.like.pointspec_helpers import get_default_diffuse, PointSource, FermiCatalog, get_diffuse_source
 
@@ -21,8 +22,8 @@ class TaskDispatcher(Configurable):
     default_config = { 'queue'   : 'xlong' }
     
     def __init__(self,config=None,**kwargs):
-        super(TaskDispatcher,self).__init__(TaskDispatcher.default_config)    
-        self.configure(config,**kwargs)
+        super(TaskDispatcher,self).__init__()    
+        self.configure(config,TaskDispatcher.default_config,**kwargs)
 
     
         
@@ -92,8 +93,8 @@ class LTSumTask(Task):
     default_config = { 'infile1' : None }
 
     def __init__(self,outfile,config=None,**kwargs):
-        super(LTSumTask,self).__init__(config,**kwargs)
-        self.update_default_config(LTSumTask.default_config)
+        super(LTSumTask,self).__init__()
+        self.update_default_config(LTSumTask)
         self.configure(config,**kwargs)
 
         self._outfile = os.path.abspath(outfile)
@@ -116,7 +117,7 @@ class LTCubeTask(Task):
                        'zmax' : 105.0 }
 
     def __init__(self,outfile,config=None,**kwargs):
-        super(LTCubeTask,self).__init__(config,**kwargs)
+        super(LTCubeTask,self).__init__()
         self.configure(config,
                        default_config=LTCubeTask.default_config,**kwargs)
 
@@ -145,8 +146,7 @@ class SrcModelTask(Task):
 
     
     def __init__(self,outfile,config=None,**kwargs):
-        super(SrcModelTask,self).__init__(config,**kwargs)
-        self.update_default_config(SrcModelTask.default_config)
+        super(SrcModelTask,self).__init__()
         self.configure(config,**kwargs)
 
         self._outfile = os.path.abspath(outfile)
@@ -174,9 +174,9 @@ class SrcMapTask(Task):
                        'minbinsz' : 0.1 }
     
     def __init__(self,outfile,config=None,**kwargs):
-        super(SrcMapTask,self).__init__(config,**kwargs)
-        self.update_default_config(SrcMapTask.default_config)
-        self.configure(config,'gtsrcmaps',**kwargs)
+        super(SrcMapTask,self).__init__()
+        self.update_default_config(SrcMapTask)
+        self.configure(config,subsection='gtsrcmaps',**kwargs)
         
         self._outfile = os.path.abspath(outfile)
         self.register_output_file(self._outfile)
@@ -211,8 +211,9 @@ class BExpTask(Task):
                        'binsz' : 1.0 }
     
     def __init__(self,outfile,config=None,**kwargs):
-        super(BExpTask,self).__init__(config,**kwargs)
-        self.configure(BExpTask.default_config,config,'gtexpcube',**kwargs)
+        super(BExpTask,self).__init__()
+        self.update_default_config(BExpTask)
+        self.configure(config,subsection='gtexpcube',**kwargs)
 
         if self.config('allsky'):
             self.set_config('nxpix',360)
@@ -252,8 +253,9 @@ class BinnerTask(Task):
                        'binsz' : 0.1 }
     
     def __init__(self,infile,outfile,config=None,**kwargs):
-        super(BinnerTask,self).__init__(config,**kwargs)
-        self.configure(BinnerTask.default_config,config,'gtbin',**kwargs)
+        super(BinnerTask,self).__init__()
+        self.update_default_config(BinnerTask)
+        self.configure(config,subsection='gtbin',**kwargs)
         
         self._infile = os.path.abspath(infile)
         self._outfile = os.path.abspath(outfile)
@@ -303,13 +305,18 @@ class SelectorTask(Task):
                        'convtype' : -1 }               
     
     def __init__(self,infile,outfile,config=None,**kwargs):
-        super(SelectorTask,self).__init__(config,**kwargs)        
-        self.configure(SelectorTask.default_config,config,'gtselect',**kwargs)
+        super(SelectorTask,self).__init__()
+        self.update_default_config(SelectorTask)
+        self.configure(config,subsection='gtselect',**kwargs)
 
+        
         self._infile = os.path.abspath(infile)
         self._outfile = os.path.abspath(outfile)
         self.register_output_file(self._outfile)
-        
+
+        if re.search('^(?!\@)(.+)\.txt$',self._infile):
+            self._infile = '@'+self._infile
+            
         self._gtselect=GtApp('gtselect','dataSubselector')
 
 
@@ -318,6 +325,10 @@ class SelectorTask(Task):
         config = self.config()
 
         outfile = os.path.basename(self._output_files[0])
+
+
+        print self._infile
+        os.system('cat ' + self._infile[1:])
         
         self._gtselect.run(infile=self._infile,
                            outfile=outfile,
@@ -327,7 +338,7 @@ class SelectorTask(Task):
                            emin=config['emin'], emax=config['emax'],
                            zmax=config['zmax'], chatter=config['chatter'],
                            evclass=config['evclass'],   # Only for Pass7
-                           evclsmin=config['evclsmin'],
+#                           evclsmin=config['evclsmin'],
                            convtype=config['convtype']) # Only for Pass6
 
 
@@ -340,9 +351,9 @@ class MkTimeTask(Task):
                        'scfile' : None }               
     
     def __init__(self,infile,outfile,config=None,**kwargs):
-        super(MkTimeTask,self).__init__(config,**kwargs)
-        self.update_default_config(MkTimeTask.default_config)
-        self.configure(config,'gtmktime',**kwargs)
+        super(MkTimeTask,self).__init__()
+        self.update_default_config(MkTimeTask)
+        self.configure(config,subsection='gtmktime',**kwargs)
 
         self._infile = os.path.abspath(infile)
         self._outfile = os.path.abspath(outfile)

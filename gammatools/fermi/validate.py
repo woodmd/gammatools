@@ -36,8 +36,35 @@ from matplotlib import scale as mscale
 mscale.register_scale(SqrtScale)
 
 
+
+
 vela_phase_selection = {'on_phase' : '0.0/0.15,0.6/0.7',
                         'off_phase' : '0.2/0.5' }
+
+
+
+class PSFScalingFunction(object):
+
+    def __init__(self,c0,c1,beta):
+        self._c0 = c0
+        self._c1 = c1
+        self._beta = beta
+        
+    def __call__(self,x):
+
+         return np.sqrt((self._c0*np.power(np.power(10,x-2),self._beta))**2 +
+                        self._c1**2)
+        
+
+psf_scaling_fn = { 'front' : PSFScalingFunction(30.0,1.0,-0.8),
+                   'back' : PSFScalingFunction(35.0,1.5,-0.8),
+                   'p8front' : PSFScalingFunction(9.873*3.0,0.295*3.0,-0.8),
+                   'p8back' : PSFScalingFunction(16.556*3.0,0.609*3.0,-0.8),
+                   'p8psf0' : PSFScalingFunction(18.487*3.0,0.820*3.0,-0.8),
+                   'p8psf1' : PSFScalingFunction(12.637*3.0,0.269*3.0,-0.8),
+                   'p8psf2' : PSFScalingFunction(9.191*3.0,0.139*3.0,-0.8),
+                   'p8psf3' : PSFScalingFunction(6.185*3.0,0.078*3.0,-0.8) }
+
 
 class PSFData(Data):
 
@@ -151,7 +178,10 @@ class PSFValidate(Configurable):
                  'cth_bin'        : None,
                  'cth_bin_edge'   : None,
                  'event_class_id' : None,
+                 'event_type_id'  : None,
                  'data_type'      : 'agn',
+                 'spectrum'       : None,
+                 'spectrum_pars'  : None,
                  'output_prefix'  : None,
                  'output_dir'     : None,
                  'conversion_type' : None,
@@ -159,6 +189,9 @@ class PSFValidate(Configurable):
                  'on_phase'       : None,
                  'off_phase'      : None,
                  'ltfile'         : None,
+                 'theta_max'      : 30.0,
+                 'psf_scaling_fn' : None,
+                 'irf'            : None,
                  'src'            : 'iso' }
     
     def __init__(self, config, opts):
@@ -205,8 +238,11 @@ class PSFValidate(Configurable):
                                         self.cth_bin_edge[1] * 100)
 
             if not self.config('event_class_id') is None:
-                cth_label += '_%02i'%(self.config('event_class_id'))
+                cth_label += '_c%02i'%(self.config('event_class_id'))
 
+            if not self.config('event_type_id') is None:
+                cth_label += '_t%02i'%(self.config('event_type_id'))
+                
             self.output_prefix = '%s_' % (prefix)
 
             if not cfg['conversion_type'] is None:
@@ -222,8 +258,8 @@ class PSFValidate(Configurable):
         self.show = opts.show
 
         self.models = []
-        if opts.irf is not None:
-            self.models = opts.irf.split(',')
+        if self.config('irf') is not None:
+            self.models = self.config('irf').split(',')
 
             for i in range(len(self.models)):
                 if cfg['conversion_type'] == 'front':
@@ -261,24 +297,15 @@ class PSFValidate(Configurable):
                                 self.cth_bin_edge,
                                 'data')
 
-        theta_max_c0 = 30
-        theta_max_c1 = -0.8
-        theta_max_c2 = 1.0
-
-        if cfg['conversion_type'] == 'back' or cfg['conversion_type'] is None:
-            theta_max_c0 = 35
-            theta_max_c2 = 1.5
-
-        self.thetamax_fn = \
-            lambda x: np.sqrt(np.power(theta_max_c0 *
-                                       np.power(np.power(10, x - 2),
-                                                theta_max_c1), 2) +
-                              theta_max_c2 ** 2)
-
-        self.psf_data.init_hist(self.thetamax_fn, self.opts.theta_max)
-
+        if cfg['psf_scaling_fn']:
+            self.thetamax_fn = psf_scaling_fn[cfg['psf_scaling_fn']]
+        elif cfg['conversion_type'] == 'back' or cfg['conversion_type'] is None:
+            self.thetamax_fn = psf_scaling_function['back']
+        else:
+            self.thetamax_fn = psf_scaling_function['front']
+            
+        self.psf_data.init_hist(self.thetamax_fn, self.config('theta_max'))
         self.build_models()
-
 
     @staticmethod
     def add_arguments(parser):
@@ -293,7 +320,7 @@ class PSFValidate(Configurable):
         parser.add_argument('--irf', default=None,
                             help='Set the names of one or more IRF models.')
 
-        parser.add_argument('--theta_max', default=25.0, type=float,
+        parser.add_argument('--theta_max', default=None, type=float,
                             help='Set the names of one or more IRF models.')
 
         parser.add_argument('--irf_labels', default=None,
@@ -347,6 +374,13 @@ class PSFValidate(Configurable):
         parser.add_argument('--event_class_id', default=None, type=int,
                             help='Set the event class ID.')
 
+        parser.add_argument('--event_type_id', default=None, type=int,
+                            help='Set the event type ID.')
+
+        parser.add_argument('--psf_scaling_fn', default=None, 
+                            help='Set the scaling function to use for '
+                            'determining the edge of the ROI at each energy.')
+        
         parser.add_argument('--quantiles', default='0.34,0.68,0.90,0.95',
                             help='Draw plots.')
 
@@ -355,24 +389,25 @@ class PSFValidate(Configurable):
 
     def build_models(self):
 
-        print 'Building Models'
-
         self.psf_models = {}
 
         for imodel, ml in enumerate(self.models):
             self.psf_models[ml] = []
 
             for icth in range(self.psf_data.cth_axis.nbins()):
-
-                print self.config('irf_dir')
                 
                 cth_range = self.psf_data.cth_axis.edges()[icth:icth+2]
                 irfm = IRFManager.create(self.models[imodel], True,
                                          irf_dir=self.config('irf_dir'))
 
+
+                sp = self.config('spectrum')
+                sp_pars = string_to_array(self.config('spectrum_pars'))
+                
                 m = PSFModelLT(self.config('ltfile'), irfm,
-                               nbin=300,cth_range=cth_range,
-                               src_type=self.config('src'))
+                               cth_range=cth_range,
+                               src_type=self.config('src'),
+                               spectrum=sp,spectrum_pars=sp_pars)
 
                 #                m.set_spectrum('powerlaw_exp',(1.607,3508.6))
                 #                m.set_spectrum('powerlaw',(2.0))
@@ -390,9 +425,9 @@ class PSFValidate(Configurable):
 
         for f in opts.files:
             print 'Loading ', f
-#            d = PhotonData.load(f)
             d = load_object(f)
             d.mask(event_class_id=self.config('event_class_id'),
+                   event_type_id=self.config('event_type_id'),
                    conversion_type=self.config('conversion_type'))
 
             self.data.merge(d)
@@ -412,9 +447,9 @@ class PSFValidate(Configurable):
 
         for f in self.opts.files:
             print 'Loading ', f
-#            d = PhotonData.load(f)
             d = load_object(f)            
             d.mask(event_class_id=self.config('event_class_id'),
+                   event_type_id=self.config('event_type_id'),
                    conversion_type=self.config('conversion_type'))
             d['dtheta'] = np.degrees(d['dtheta'])
 
@@ -712,7 +747,7 @@ class PSFValidate(Configurable):
         emin = 10 ** psf_data.egy_axis.edges()[iegy]
         emax = 10 ** psf_data.egy_axis.edges()[iegy+1]
 
-        theta_max = min(self.opts.theta_max, self.thetamax_fn(ecenter))
+        theta_max = min(self.config('theta_max'), self.thetamax_fn(ecenter))
 
         bkg_hist = psf_data.bkg_hist[iegy, icth]
         sig_hist = psf_data.sig_hist[iegy, icth]
@@ -729,7 +764,7 @@ class PSFValidate(Configurable):
         hq = HistQuantileBkgFn(on_hist, 
                                lambda x: x**2 * np.pi / bkg_domega,
                                bkg_counts)
-
+        
         if excess_sum > 25:
             self.compute_quantiles(hq, psf_data, iegy, icth, theta_max)
 
@@ -1005,7 +1040,7 @@ class PSFValidate(Configurable):
 
         print 'Analyzing Bin ', emin, emax
         
-        theta_max = min(self.opts.theta_max, self.thetamax_fn(ecenter))
+        theta_max = min(self.config('theta_max'), self.thetamax_fn(ecenter))
 
         bkg_hist = psf_data.bkg_hist[iegy, icth]
         sig_hist = psf_data.sig_hist[iegy, icth]
@@ -1097,7 +1132,7 @@ class PSFValidate(Configurable):
         emax = 10 ** qdata.egy_axis.edges()[iegy+1]
 
         for i, q in enumerate(qdata.quantiles):
-
+            
             ql = qdata.quantile_labels[i]
             qmean = hq.quantile(fraction=q)
             qdist_mean, qdist_err = hq.bootstrap(q, niter=200, xmax=theta_max)
