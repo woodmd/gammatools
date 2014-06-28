@@ -276,18 +276,27 @@ class SkyCube(FITSImage):
         pixcrd = self._wcs.wcs_sky2pix(lon,lat, 0)
         ecrd = self._axes[2].coord_to_pix(loge)
         super(SkyCube,self).fill(np.vstack((pixcrd[0],pixcrd[1],ecrd)))
-            
+
+    @staticmethod
+    def createFromHDU(hdu):
+        
+        header = hdu.header
+        wcs = pywcs.WCS(header,naxis=[1,2],relax=True)
+#        wcs1 = pywcs.WCS(header,naxis=[3])
+        axes = copy.deepcopy(FITSAxis.create_axes(header))
+        return SkyCube(wcs,axes,copy.deepcopy(hdu.data.astype(float).T))
+        
     @staticmethod
     def createFromFITS(fitsfile,ihdu=0):
         
-        hdu = pyfits.open(fitsfile)
-        
-        header = hdu[ihdu].header
+        hdulist = pyfits.open(fitsfile)        
+        header = hdulist[ihdu].header
         wcs = pywcs.WCS(header,naxis=[1,2],relax=True)
-#        wcs1 = pywcs.WCS(header,naxis=[3])
+
         
         axes = copy.deepcopy(FITSAxis.create_axes(header))
-        return SkyCube(wcs,axes,copy.deepcopy(hdu[ihdu].data.astype(float).T))
+        return SkyCube(wcs,axes,
+                       copy.deepcopy(hdulist[ihdu].data.astype(float).T))
 
     @staticmethod
     def createFromTree(tree,lon,lat,lon_var,lat_var,egy_var,roi_radius_deg,
@@ -479,14 +488,15 @@ class SkyImage(FITSImage):
 
         plt.gca().grid(True)
         
-    def plot(self,subplot=111,logz=False,show_catalog=False,**kwargs):
+    def plot(self,ax=None,subplot=111,logz=False,show_catalog=False,**kwargs):
 
         from matplotlib.colors import NoNorm, LogNorm, Normalize
 
         if logz: norm = LogNorm()
         else: norm = Normalize()
-
+        
         ax = pywcsgrid2.subplot(subplot, header=self._wcs.to_header())
+
 #        ax = pywcsgrid2.axes(header=self._wcs.to_header())
 #        ax = make_allsky_axes_from_header(plt.gcf(), rect=111,
 #                                          header=self._wcs.to_header(True),
@@ -508,7 +518,7 @@ class SkyImage(FITSImage):
         counts = copy.copy(self._counts)
         counts[self._roi_msk.T] = np.min(self._counts)-1.0
 
-        print 'vmin ', vmin, np.min(self._counts)-1.0, np.sum(self._roi_msk)
+#        print 'vmin ', vmin, np.min(self._counts)-1.0, np.sum(self._roi_msk)
         
         im = ax.imshow(counts.T,#np.power(self._counts.T,1./3.),
                        interpolation='nearest',origin='lower',norm=norm,
