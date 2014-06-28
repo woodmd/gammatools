@@ -291,7 +291,6 @@ def polyval(c,x):
 
 class GaussFn(Model):
 
-
     @staticmethod
     def create(norm,mu,sigma,pset=None):
         
@@ -308,6 +307,47 @@ class GaussFn(Model):
     def evals(x,a):
         sig2 = a[2]**2        
         return a[0]/np.sqrt(2.*np.pi*sig2)*np.exp(-(x-a[1])**2/(2.0*sig2))
+
+class Gauss2DProjFn(Model):
+
+    @staticmethod
+    def create(norm,sigma,pset=None):
+        
+        if pset is None: pset = ParameterSet()
+        p0 = pset.createParameter(norm,'norm')
+        p1 = pset.createParameter(sigma,'sigma')
+        return Gauss2DProjFn(ParameterSet([p0,p1]))
+
+    def _eval(self,x,pset):
+        return self.evals(x,pset.array())
+
+    @staticmethod
+    def evals(x,a):
+        sig2 = a[1]**2        
+        return a[0]/(2.*np.pi*sig2)*np.exp(-x**2/(2.0*sig2))
+
+class Gauss2DFn(Model):
+
+    @staticmethod
+    def create(norm,mux,muy,sigma,pset=None):
+        
+        if pset is None: pset = ParameterSet()
+        p0 = pset.createParameter(norm,'norm')
+        p1 = pset.createParameter(mux,'mux')
+        p2 = pset.createParameter(muy,'muy')
+        p3 = pset.createParameter(sigma,'sigma')
+        return Gauss2DFn(ParameterSet([p0,p1,p2,p3]))
+
+    def _eval(self,x,pset):
+        return self.evals(x,pset.array())
+
+    @staticmethod
+    def evals(x,a):
+        sig2 = a[3]**2        
+        dx = (x[0]-a[1])**2
+        dy = (x[1]-a[2])**2
+        return a[0]/(2.*np.pi*sig2)*np.exp(-(dx+dy)/(2.0*sig2))
+
     
 class SpectralModel(Model):
 

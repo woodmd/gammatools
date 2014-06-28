@@ -8,6 +8,7 @@ import gzip
 import bisect
 import inspect
 
+
 class Units(object):
 
     s = 1.0
@@ -522,6 +523,64 @@ def percentile(x,cdf,frac=0.68):
             *(x[indx+1] - x[indx]) + x[indx])
 
 
+def edge_to_center(edges):
+    return 0.5*(edges[1:]+edges[:-1])
+
+def edge_to_width(edges):
+    return (edges[1:]-edges[:-1])
+
+def convolve2d_king(fn,r,sig,gam,rmax,nstep=200):
+    """Evaluate the convolution f'(x,y) = f(x,y) * g(x,y) where f(r) is
+    azimuthally symmetric function in two dimensions and g is a
+    King function given by:
+
+    g(r,sig,gam) = 1/(2*pi*sig^2)*(1-1/gam)*(1+gam/2*(r/sig)**2)**(-gam)
+
+    Parameters
+    ----------
+
+    fn  : Input function that takes a single radial coordinate parameter.
+
+    r   :  Array of points at which the convolution is to be evaluated.
+
+    sig : Width parameter of the King function.
+
+    gam : Gamma parameter of the King function.
+
+    """
+
+    r = np.array(r,ndmin=1,copy=True)
+    sig = np.array(sig,ndmin=1,copy=True)
+    gam = np.array(gam,ndmin=1,copy=True)
+
+    r2p = edge_to_center(np.linspace(0,rmax**2,nstep+1))
+    r2w = edge_to_width(np.linspace(0,rmax**2,nstep+1))
+
+    if sig.shape[0] > 1:        
+        r2p = r2p.reshape((1,1,nstep))
+        r2w = r2w.reshape((1,1,nstep))
+        r = r.reshape((1,r.shape[0],1))
+        sig = sig.reshape(sig.shape + (1,1))
+        gam = sig.reshape(gam.shape + (1,1))
+        saxis = 2
+    else:
+        r2p = r2p.reshape(1,nstep)
+        r2w = r2w.reshape(1,nstep)
+        r = r.reshape(r.shape + (1,))
+        saxis = 1
+
+    u = 0.5*(r/sig)**2
+    v = 0.5*r2p*(1./sig)**2
+    vw = 0.5*r2w*(1./sig)**2
+
+    z = 4*u*v/(gam+u+v)**2
+    hgfn = spfn.hyp2f1(gam/2.,(1.+gam)/2.,1.0,z)
+    fnrp = fn(np.sqrt(r2p))
+    s = np.sum(fnrp*(gam-1.0)/gam*np.power(gam/(gam+u+v),gam)*hgfn*vw,
+               axis=saxis)
+
+    return s
+
 def convolve2d_gauss(fn,r,sig,rmax,nstep=200):
     """Evaluate the convolution f'(r) = f(r) * g(r) where f(r) is
     azimuthally symmetric function in two dimensions and g is a
@@ -542,40 +601,39 @@ def convolve2d_gauss(fn,r,sig,rmax,nstep=200):
     r = np.array(r,ndmin=1,copy=True)
     sig = np.array(sig,ndmin=1,copy=True)
 
-    if sig.shape[0] > 1:
-        rp = np.ones(shape=(1,1,nstep))
-        rp *= np.linspace(0,rmax,nstep)
+    rp = edge_to_center(np.linspace(0,rmax,nstep+1))
+    dr = rmax/float(nstep)
 
+    if sig.shape[0] > 1:        
+        rp = rp.reshape((1,1,nstep))
         r = r.reshape((1,r.shape[0],1))
-        sig = sig.reshape((sig.shape[0],1,1))
-        
-        dr = rmax/float(nstep)
-
-        sig2 = sig*sig
-        x = r*rp/(sig2)
-        je = spfn.ive(0,x)
-        fnrp = fn(rp[0,...])
-        s = np.sum(rp*fnrp/(sig2)*
-                   np.exp(np.log(je)+x-(r*r+rp*rp)/(2*sig2)),axis=2)*dr
-
-        return s
+        sig = sig.reshape(sig.shape + (1,1))
+        saxis = 2
     else:
+        rp = rp.reshape(1,nstep)
+        r = r.reshape(r.shape + (1,))
+        saxis = 1
 
-        rp = np.zeros(shape=(r.shape[0],nstep))
-        rp[:] = np.linspace(0,rmax,nstep)
+    sig2 = sig*sig
+    x = r*rp/(sig2)
+    je = spfn.ive(0,x)
+    fnrp = fn(rp)
+    s = np.sum(rp*fnrp/(sig2)*
+               np.exp(np.log(je)+x-(r*r+rp*rp)/(2*sig2)),axis=saxis)*dr
 
-        rp = rp.T
+    return s
 
-        dr = rmax/float(nstep)
+#        sig2 = sig*sig
+#        x = r*rp/(sig2)
 
-        sig2 = sig*sig
-        x = r*rp/(sig2)
-        je = spfn.ive(0,x)
-        fnrp = fn(np.ravel(rp))
-        fnrp = fnrp.reshape(je.shape)
+#        print 'rp: ', rp.shape
+#        print 'x: ', x.shape
 
-        return np.sum(rp*fnrp/(sig2)*
-                      np.exp(np.log(je)+x-(r*r+rp*rp)/(2*sig2)),axis=0)*dr
+#        je = spfn.ive(0,x)
+#        fnrp = fn(rp)
+
+#        return np.sum(rp*fnrp/(sig2)*
+#                      np.exp(np.log(je)+x-(r*r+rp*rp)/(2*sig2)),axis=1)*dr
 
 
 def convolve1(fn,r,sig,rmax):
