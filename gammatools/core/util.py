@@ -604,7 +604,7 @@ def convolve2d_gauss(fn,r,sig,rmax,nstep=200):
 
     if sig.shape[0] > 1:        
         rp = rp.reshape((1,1,nstep))
-        fnrp = rp.reshape((1,1,nstep))
+        fnrp = fnrp.reshape((1,1,nstep))
         r = r.reshape((1,r.shape[0],1))
         sig = sig.reshape(sig.shape + (1,1))
         saxis = 2
