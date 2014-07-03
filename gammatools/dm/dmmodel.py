@@ -190,11 +190,11 @@ class DMChanSpectrum(object):
         @return:
         """
         e = np.power(10,loge)
-        return e**2*self.dnde(loge,mass,dloge)
+        return e**2*self.dnde(loge,mass)
  
     def ednde(self,loge,mass=None):        
         e = np.power(10,loge)
-        return e*self.dnde(loge,mass,dloge)
+        return e*self.dnde(loge,mass)
 
     def dnde(self,loge,mass=None):
         
@@ -228,15 +228,15 @@ class DMModelSpectrum(object):
 #        self._loge = np.log10(d[0])
 #        self._dnde = 8.*np.pi*d[1]*1E-29*np.power(Units.gev,-2)
 
-    def e2dnde(self,loge,mass=None,dloge=None):        
+    def e2dnde(self,loge,mass=None):        
         e = np.power(10,loge)
-        return e**2*self.dnde(loge,mass,dloge)
+        return e**2*self.dnde(loge,mass)
  
-    def ednde(self,loge,mass=None,dloge=None):        
+    def ednde(self,loge,mass=None):        
         e = np.power(10,loge)
-        return e*self.dnde(loge,mass,dloge)
+        return e*self.dnde(loge,mass)
 
-    def dnde(self,loge,mass=None,dloge=None):
+    def dnde(self,loge,mass=None):
         """Return the differential gamma-ray rate per annihilation or
         decay."""
 
