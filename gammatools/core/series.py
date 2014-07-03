@@ -18,7 +18,7 @@ class Band(object):
     default_draw_style = { 'marker' : None,
                            'facecolor' : None,                           
                            'linestyle' : None,
-                           'linewidth' : 1,
+                           'linewidth' : None,
                            'alpha' : 0.4,
                            'label' : None }
 
@@ -54,7 +54,7 @@ class Series(object):
                                'markerfacecolor' : None,
                                'markeredgecolor' : None,
                                'linestyle' : None,
-                               'linewidth' : 1,
+                               'linewidth' : None,
                                'label' : None }
 
     default_scatter_style = { 'marker' : None,

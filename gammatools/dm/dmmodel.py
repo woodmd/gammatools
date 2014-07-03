@@ -15,6 +15,7 @@ from scipy.optimize import brentq
 from scipy.interpolate import UnivariateSpline
 from gammatools.core.util import *
 from gammatools.core.histogram import *
+from gammatools.core.stats import poisson_lnl
 
 class LimitData(object):
 
@@ -85,10 +86,10 @@ class ModelPMSSM(object):
         self._spectrum = sp
         self._model_data = model_data
 
-class JFunction(object):
+class ConvolvedHaloModel(object):
     """Class that stores the J density profile convolved with an
     energy-dependent PSF."""
-    def __init__(self,fn,irf):
+    def __init__(self,hm,irf):
 
         self._irf = irf
 
@@ -104,27 +105,15 @@ class JFunction(object):
         self._h = Histogram2D(self._loge_axis,self._psi_axis)
 
         for i in range(len(self._loge)):
-            self._z[i] = convolve2d_gauss(fn,self._psi,
+            self._z[i] = convolve2d_gauss(hm._jp,self._psi,
                                           np.radians(th68[i]/1.50959),
                                           self._psi[-1])
         self._h._counts = self._z
 
-    def __call__(self,loge,psi):
+    def jval(self,loge,psi):
 
         return interpolate2d(self._loge,self._psi,self._z,
                              loge,psi)
-
-
-def multiply(x,y,dims):
-    """Mutiply x by y."""
-
-    z = copy.copy(x)
-    
-    shape = list(z.shape)
-    for i in range(z.ndim):
-        if not i in dims: shape[i] = 1
-    z *= y.reshape(shape)
-    return z
 
 def outer(x,y):
     z = np.ones(shape=(x.shape + y.shape))
@@ -144,10 +133,13 @@ class DMChanSpectrum(object):
     """Class that computes the differential annihilation yield for
     different DM channels.  Interpolates a set of tabulated values
     from DarkSUSY."""
-    def __init__(self,chan,mass = 100*Units.gev):
+    def __init__(self,chan,mass = 100*Units.gev, yield_table=None):
 
-        d = np.loadtxt(os.path.join(gammatools.PACKAGE_ROOT,
-                                    'data/gammamc_dif.dat'),unpack=True)
+        if yield_table is None:
+            yield_table = os.path.join(gammatools.PACKAGE_ROOT,
+                                       'data/gammamc_dif.dat')
+
+        d = np.loadtxt(yield_table,unpack=True)
 
         xedge = np.linspace(0,1.0,251)
         self._x = 0.5*(xedge[1:]+xedge[:-1])
@@ -192,23 +184,22 @@ class DMChanSpectrum(object):
 
 #            self._dndx[c] = d[:,i*18:(i+1)*18]
 
-    def e2dnde(self,loge,mass=None,dloge=None):
+    def e2dnde(self,loge,mass=None):
         """
         Evaluate the spectral energy density.
 
         @param m:
         @param loge:
-        @param dloge:
         @return:
         """
         e = np.power(10,loge)
-        return e**2*self.dnde(loge,mass,dloge)
+        return e**2*self.dnde(loge,mass)
  
-    def ednde(self,loge,mass=None,dloge=None):        
+    def ednde(self,loge,mass=None):        
         e = np.power(10,loge)
-        return e*self.dnde(loge,mass,dloge)
+        return e*self.dnde(loge,mass)
 
-    def dnde(self,loge,mass=None,dloge=None):
+    def dnde(self,loge,mass=None):
         
         loge = np.array(loge,ndmin=1)
 
@@ -240,15 +231,15 @@ class DMModelSpectrum(object):
 #        self._loge = np.log10(d[0])
 #        self._dnde = 8.*np.pi*d[1]*1E-29*np.power(Units.gev,-2)
 
-    def e2dnde(self,loge,mass=None,dloge=None):        
+    def e2dnde(self,loge,mass=None):        
         e = np.power(10,loge)
-        return e**2*self.dnde(loge,mass,dloge)
+        return e**2*self.dnde(loge,mass)
  
-    def ednde(self,loge,mass=None,dloge=None):        
+    def ednde(self,loge,mass=None):        
         e = np.power(10,loge)
-        return e*self.dnde(loge,mass,dloge)
+        return e*self.dnde(loge,mass)
 
-    def dnde(self,loge,mass=None,dloge=None):
+    def dnde(self,loge,mass=None):
         """Return the differential gamma-ray rate per annihilation or
         decay."""
 
@@ -256,30 +247,30 @@ class DMModelSpectrum(object):
         dnde = interpolate(self._loge,self._dnde,loge)
         return dnde
 
-class DMModel(object):
-    def __init__(self, sp, jp, mass = 1.0, sigmav = 1.0):
+class DMFluxModel(object):
+    def __init__(self, sp, hm, mass = 1.0, sigmav = 1.0):
 
         self._mass = mass
         self._sigmav = sigmav
         self._sp = sp
-        self._jp = jp
+        self._hm = hm
 
     @staticmethod
-    def createChanModel(jp,mass,sigmav,chan):
+    def createChanModel(hm,mass,sigmav=3E-26*Units.cm3_s,chan='bb'):
         """Create a model with a 100% BR to a single
         annihilation/decay channel."""
         sp = DMChanSpectrum(chan)
-        return DMModel(sp,jp,mass,sigmav)
+        return DMFluxModel(sp,hm,mass,sigmav)
 
     @staticmethod
-    def createModel(jp,d):
-        sp = DMModelSpectrum(d[0],d[1])
-        return DMModel(sp,jp,1.0,1.0)
+    def createModel(hm,d):
+        sp = DMFluxModelSpectrum(d[0],d[1])
+        return DMFluxModel(sp,jp,1.0,1.0)
 
     @staticmethod
-    def createModelFromFile(jp,spfile):
-        sp = DMModelSpectrum.create(spfile)
-        return DMModel(sp,jp,1.0,1.0)
+    def createModelFromFile(hm,spfile):
+        sp = DMFluxModelSpectrum.create(spfile)
+        return DMFluxModel(sp,hm,1.0,1.0)
 
     def e2flux(self,loge,psi):
         return np.power(10,2*loge)*self.flux(loge,psi)
@@ -288,7 +279,7 @@ class DMModel(object):
         return np.power(10,loge)*self.flux(loge,psi)
 
     def flux(self,loge,psi):
-        djdomega = self._jp(loge,psi)
+        djdomega = self._hm.jval(loge,psi)
         flux = 1./(8.*np.pi)*self._sigmav*np.power(self._mass,-2)* \
             self._sp.dnde(loge,self._mass)
 
@@ -296,7 +287,7 @@ class DMModel(object):
 
 class DMLimitCalc(object):
 
-    def __init__(self,irf,redge=0.0):
+    def __init__(self,irf,alpha,min_fsig=0.0,redge=0.0):
 
         self._irf = irf
 #        self._th68 = self._irf._psf.counts()        
@@ -306,22 +297,36 @@ class DMLimitCalc(object):
 
         self._loge_axis = Axis.create(np.log10(Units.gev)+1.4,
                                       np.log10(Units.gev)+3.2,18)
-        self._loge = self._loge_axis.center()
-        
+        self._loge = self._loge_axis.center()        
         self._dloge = self._loge_axis.width()
-        self._aeff = self._irf.aeff(self._loge - Units.log10_mev)
-        self._bkg_rate = irf.bkg(self._loge - Units.log10_mev)*self._dloge
-
-
-        self._redge = [np.radians(redge),np.radians(0.99)]
 
         self._psi_axis = Axis(np.linspace(np.radians(0.0),np.radians(1.0),101))
         self._psi = self._psi_axis.center()
         self._domega = np.pi*(np.power(self._psi_axis.edges()[1:],2)-
                               np.power(self._psi_axis.edges()[:-1],2))
 
-        self._iedge = [np.where(self._psi >= self._redge[0])[0][0],
-                       np.where(self._psi >= self._redge[1])[0][0]]
+        self._aeff = self._irf.aeff(self._loge - Units.log10_mev)
+        self._bkg_rate = irf.bkg(self._loge - Units.log10_mev)*self._dloge
+
+
+        self._redge = [np.radians(redge),np.radians(1.0)]
+        self._msk = (self._psi > self._redge[0]) & (self._psi < self._redge[1])
+
+
+        
+
+        self._domega_sig = np.sum(self._domega[self._msk])
+        self._domega_bkg = self._domega_sig/alpha
+
+
+        self._min_fsig = min_fsig
+        self._alpha = alpha
+        self._alpha_bin = self._domega/self._domega_bkg
+
+#        self._iedge = [np.where(self._psi >= self._redge[0])[0][0],
+#                       np.where(self._psi >= self._redge[1])[0][0]]
+
+
                
     def counts(self,model,tau):
         """Compute the signal counts distribution as a function of
@@ -333,39 +338,12 @@ class DMLimitCalc(object):
 
         exp = (self._dloge*np.log(10.)*self._aeff*tau)
         counts = eflux*exp[:,np.newaxis]*self._domega
-        counts = counts[:,self._iedge[0]:]
-
         return counts
 
     def bkg_counts(self,tau):
         counts = np.zeros(shape=(len(self._loge),len(self._psi)))
         counts = self._domega[np.newaxis,:]*self._bkg_rate[:,np.newaxis]*tau
-        counts = counts[:,self._iedge[0]:]
         return counts
-
-    def lnl(self,sc,bc,alpha):
-        
-        # total counts in each bin
-        nc = sc + bc        
-
-        # number of counts in control region
-        cc = bc/alpha
-
-        # model for total background counts in null hypothesis
-        mub0 = (nc+cc)/(1.0+alpha)*alpha
-
-        # model for total background counts in signal hypothesis
-        mub1 = bc
-
-        # model for signal counts
-        mus = sc
-
-        lnl0 = nc*np.log(mub0)-mub0 + cc*np.log(mub0/alpha) - mub0/alpha
-        lnl1 = nc*np.log(mub1+mus) - mub1 - mus + \
-            cc*np.log(mub1/alpha) - mub1/alpha
-                
-
-        return 2*(lnl1-lnl0)
         
     def plot_lnl(self,dmmodel,mchi,sigmav,tau):
 
@@ -380,7 +358,7 @@ class DMLimitCalc(object):
         sc_ncum = (sc_cum.T/np.sum(sc,axis=1)).T
 
 
-        dlnl = self.lnl(sc,bc,0.2)
+        dlnl = poisson_lnl(sc,bc,0.2)
         dlnl_cum = np.cumsum(dlnl,axis=1)
 
         
@@ -392,7 +370,7 @@ class DMLimitCalc(object):
 
         ax = fig.add_subplot(1,2,1)
 
-        sc_density = sc/self._domega[self._iedge[0]:]
+        sc_density = sc/self._domega[self._msk]
 
         def psf(x,s):
             return np.exp(-x**2/(2*s**2))
@@ -464,19 +442,21 @@ class DMLimitCalc(object):
 #        self._loge),len(self._psi)
 
 
-    def significance(self,sc,bc,alpha):
+    def significance(self,sc,bc,alpha=None):
 
-        dlnl = self.lnl(sc,bc,alpha)
+        if alpha is None: alpha = self._alpha_bin[:,np.newaxis]
+
+        dlnl = poisson_lnl(sc,bc,alpha)[:,self._msk,...]
         if dlnl.ndim == 2:
             return np.sqrt(max(0,np.sum(dlnl)))
         else:
-            s0 = np.sum(dlnl,axis=1)
-            s1 = np.sum(s0,axis=1)
+            s0 = np.sum(dlnl,axis=0)
+            s1 = np.sum(s0,axis=0)
             s1[s1<=0]=0
             return np.sqrt(s1)
             
 
-    def boost(self,model,tau,sthresh=5.0,alpha=0.2):
+    def boost(self,model,tau,sthresh=5.0):
 
         b = np.linspace(-4,6,60)
 
@@ -485,7 +465,7 @@ class DMLimitCalc(object):
 
         sc2 = outer(sc,np.power(10,b))
 
-        s = self.significance(sc2.T,bc.T,alpha)
+        s = self.significance(sc2.T,bc.T)
 #        i = np.where(s>sthresh)[0][0]
 
         if s[-1] <= sthresh: return b[-1]
@@ -495,7 +475,7 @@ class DMLimitCalc(object):
         return b0
 
 
-    def limit(self,dmmodel,mchi,tau,sthresh=5.0,alpha=0.2):
+    def limit(self,dmmodel,mchi,tau,sthresh=5.0):
 
         ul = []
         bc = self.bkg_counts(tau)
@@ -508,12 +488,128 @@ class DMLimitCalc(object):
             sc = self.counts(dmmodel,tau)
             t = np.linspace(np.log10(10./np.sum(sc)),
                             np.log10(10./np.sum(sc))+4,20)
-            sc2 = outer(sc,np.power(10,t))
-            s = self.significance(sc2.T,bc.T,alpha)
-            fn = UnivariateSpline(t,s,k=2,s=0)
+            sc2 = sc[...,np.newaxis]*np.power(10,t[np.newaxis,np.newaxis,:])
+            s = self.significance(sc2,bc[...,np.newaxis])
 
+            fn = UnivariateSpline(t,s,k=2,s=0)
             t0 = brentq(lambda t: fn(t) - sthresh ,t[0],t[-1])
-            ul.append(np.power(10,-28.+t0))
+            
+
+            sc0 = sc*10**t0
+            dlnl = poisson_lnl(sc0,bc,self._alpha_bin[np.newaxis,:])
+            dlnl[:,~self._msk] = 0
+
+            iarg = np.argsort(np.ravel(dlnl))[::-1]
+
+
+
+            dlnl_sort = dlnl.flat[iarg]
+
+            i0 = int(percentile(np.linspace(0,len(iarg),len(iarg)),
+                                np.cumsum(dlnl_sort)/np.sum(dlnl),0.5))
+
+            msk = np.empty(shape=dlnl_sort.shape,dtype=bool); msk.fill(False)
+            msk[iarg[:i0]] = True
+            msk = msk.reshape(dlnl.shape)
+
+#            print iarg[:i0]
+#            print sc0.flat[iarg[:i0]]/bc.flat[iarg[:i0]]
+            
+            sfrac = np.sum(sc0[msk])/np.sum(bc[msk])
+
+            print sfrac, self._min_fsig
+
+            if sfrac >= self._min_fsig:
+                ul.append(np.power(10,-28.+t0))
+            else:                           
+                print np.log10(self._min_fsig/sfrac)
+                ul.append(np.power(10,-28.+t0+np.log10(self._min_fsig/sfrac)))
+
+            continue
+
+#            print i0, np.sum(sc0[msk]), np.sum(bc[msk]), np.sum(dlnl[msk])
+#            print np.sum(dlnl), np.sum(sc0), np.sum(sc0.flat[iarg]), np.sum(bc), sfrac
+
+
+#            print np.sum(msk)
+#            print self._msk.shape
+#            print 'mass ', m/Units.gev
+
+            axis0 = Axis(self._loge_axis.edges()-np.log10(Units.gev))
+            axis1 = Axis(np.degrees(self._psi_axis.edges()))
+
+            dlnl_hist = Histogram2D(axis0,axis1)
+            dlnl_hist._counts = copy.copy(dlnl)
+
+            dlnl_hist_msk = copy.deepcopy(dlnl_hist)
+            
+            dlnl_hist_msk._counts[~msk]=0
+
+            plt.figure()
+            plt.gca().set_title('M = %.2f GeV'%(m/Units.gev))
+            im = dlnl_hist.plot()
+
+            plt.colorbar(im,label='TS')
+
+            plt.gca().set_xlabel('Energy [log$_{10}$(E/GeV)]')
+            plt.gca().set_ylabel('Offset [deg]')
+
+            plt.figure()
+            plt.gca().set_title('M = %.2f GeV'%(m/Units.gev))
+            im = dlnl_hist_msk.plot()
+
+            plt.colorbar(im,label='TS')
+
+            plt.gca().set_xlabel('Energy [log$_{10}$(E/GeV)]')
+            plt.gca().set_ylabel('Offset [deg]')
+
+            plt.show()
+
+
+            continue
+
+
+            sh2 = Histogram2D(axis,self._psi_axis)
+#            sh2._counts[:,self._msk][msk] = 1.0
+            sh2._counts[msk] = 1.0
+            
+            print sh2._counts.shape
+            print np.sum(sh2._counts)
+
+            print sc0[msk]
+
+            plt.figure()
+
+            sh2.plot()
+
+            plt.show()
+
+            continue
+            sh = Histogram2D(axis,self._psi_axis)
+            sh._counts[:,self._msk] = sc0
+
+            bh = Histogram2D(axis,self._psi_axis)
+            bh._counts[:,self._msk] = bc
+#                             counts = bc,var=0)
+
+
+            plt.figure()
+            sh.project(0).plot()
+            bh.project(0).plot()
+
+            plt.gca().set_yscale('log')
+
+            shp = sh.project(0)
+            bhp = bh.project(0)
+
+            plt.figure()
+            (shp/bhp).plot()
+
+            plt.figure()
+            im = (sh/bh).plot(zlabel='test')
+            plt.colorbar(im)
+
+            plt.show()
 
         return ul
             

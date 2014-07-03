@@ -533,11 +533,12 @@ class DensityProfile(object):
     the maximum DM density will be the lesser of rhomax and rho(rmin).
     
     """
-    def __init__(self,rhos,rmin=None,rhomax=None):
+    def __init__(self,rhos,rs,rmin=None,rhomax=None):
         self._name = 'profile'
         self._rmin=rmin
         self._rhomax=rhomax
         self._rhos = rhos
+        self._rs = rs
 
     def setMassConcentration(self,mvir,c):
 
@@ -575,9 +576,18 @@ class DensityProfile(object):
         """Fix the density normalization at a given radius."""
         rhor = self._rho(r)
         self._rhos = rho*self._rhos/rhor
-        
+
+    @property
     def name(self):
         return self._name
+
+    @property
+    def rhos(self):
+        return self._rhos
+
+    @property
+    def rs(self):
+        return self._rs
 
     @staticmethod
     def create(opts):
@@ -630,8 +640,7 @@ class BurkertProfile(DensityProfile):
         rho(r) = rhos/( (1+r/rs)(1+(r/rs)**2) )
     """
     def __init__(self,rhos=1,rs=1,rmin=None,rhomax=None):        
-        self._rs = rs
-        super(BurkertProfile,self).__init__(rhos,rmin,rhomax)
+        super(BurkertProfile,self).__init__(rhos,rs,rmin,rhomax)
         self._name = 'burkert'
 
     def _rho(self,r):
@@ -645,8 +654,7 @@ class BurkertProfile(DensityProfile):
 class IsothermalProfile(DensityProfile):
 
     def __init__(self,rhos=1,rs=1,rmin=None,rhomax=None):        
-        self._rs = rs
-        super(IsothermalProfile,self).__init__(rhos,rmin,rhomax)
+        super(IsothermalProfile,self).__init__(rhos,rs,rmin,rhomax)
         self._name = 'isothermal'
 
     def _rho(self,r):
@@ -663,8 +671,7 @@ class NFWProfile(DensityProfile):
         rho(r) = rhos/( (r/rs)(1+r/rs)**2)
     """
     def __init__(self,rhos=1,rs=1,rmin=None,rhomax=None):
-        self._rs = rs
-        super(NFWProfile,self).__init__(rhos,rmin,rhomax)
+        super(NFWProfile,self).__init__(rhos,rs,rmin,rhomax)
         self._name = 'nfw'
 
     def set(self,rhos,rs):
@@ -702,9 +709,8 @@ class EinastoProfile(DensityProfile):
         rho(r) = rhos*exp(-2*((r/rs)**alpha-1)/alpha)
     """
     def __init__(self,rhos=1,rs=1,alpha=0.17,rmin=None,rhomax=None):
-        self._rs = rs
         self._alpha = alpha
-        super(EinastoProfile,self).__init__(rhos,rmin,rhomax)
+        super(EinastoProfile,self).__init__(rhos,rs,rmin,rhomax)
         self._name = 'einasto'
 
     def set(self,rhos,rs):
@@ -731,9 +737,8 @@ class GNFWProfile(DensityProfile):
         rho(r) = rhos/( (r/rs)^g(1+r/rs)**(3-g))
     """
     def __init__(self,rhos=1,rs=1,gamma=1.0,rmin=None,rhomax=None):
-        self._rs = rs
         self._gamma = gamma
-        super(GNFWProfile,self).__init__(rhos,rmin,rhomax)
+        super(GNFWProfile,self).__init__(rhos,rs,rmin,rhomax)
         self._name = 'nfw'
 
     def set(self,rhos,rs):
@@ -760,7 +765,7 @@ class GeneralNFWProfile(DensityProfile):
         self._a = a
         self._b = b
         self._c = c
-        super(GeneralNFWProfile,self).__init__(rhos,rmin,rhomax)
+        super(GeneralNFWProfile,self).__init__(rhos,rs,rmin,rhomax)
         self._name = 'general_nfw'
 
     def _rho(self,r):

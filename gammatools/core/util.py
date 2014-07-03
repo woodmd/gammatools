@@ -253,9 +253,6 @@ class Configurable(object):
 
         self._config = {}
         self._default_config = {}
-
-        
-        
         
     @classmethod
     def test(cls):
@@ -370,11 +367,11 @@ def havsin(theta):
 def ahavsin(x):
     return 2.0*np.arcsin(np.sqrt(x))
 
-def separation_angle(phiA,lamA,phiB,lamB):
+def separation_angle_havsin(phiA,lamA,phiB,lamB):
     return ahavsin( havsin(lamA-lamB) + 
                     np.cos(lamA)*np.cos(lamB)*havsin(phiA-phiB) )
 
-def dtheta(ref_ra,ref_dec,ra,dec):
+def separation_angle(ref_ra,ref_dec,ra,dec):
     return np.arccos(np.sin(dec)*np.sin(ref_dec) + 
                      np.cos(dec)*np.cos(ref_dec)*
                      np.cos(ra-ref_ra))
@@ -603,21 +600,24 @@ def convolve2d_gauss(fn,r,sig,rmax,nstep=200):
 
     rp = edge_to_center(np.linspace(0,rmax,nstep+1))
     dr = rmax/float(nstep)
+    fnrp = fn(rp)
 
     if sig.shape[0] > 1:        
         rp = rp.reshape((1,1,nstep))
+        fnrp = rp.reshape((1,1,nstep))
         r = r.reshape((1,r.shape[0],1))
         sig = sig.reshape(sig.shape + (1,1))
         saxis = 2
     else:
         rp = rp.reshape(1,nstep)
+        fnrp = fnrp.reshape(1,nstep)
         r = r.reshape(r.shape + (1,))
         saxis = 1
 
     sig2 = sig*sig
     x = r*rp/(sig2)
     je = spfn.ive(0,x)
-    fnrp = fn(rp)
+
     s = np.sum(rp*fnrp/(sig2)*
                np.exp(np.log(je)+x-(r*r+rp*rp)/(2*sig2)),axis=saxis)*dr
 

@@ -355,7 +355,7 @@ class SkyImage(FITSImage):
     def createFromTree(tree,lon,lat,lon_var,lat_var,roi_radius_deg,cut='',
                        bin_size_deg=0.2,coordsys='cel'):
 
-        im = SkyImage.createROI(lon,lat,roi_radius_deg,bin_size_deg,coordsys)
+        im = SkyImage.createROI(lon,lat,roi_radius_deg,bin_size_deg,coordsys) 
         im.fill(get_vector(tree,lon_var,cut=cut),
                 get_vector(tree,lat_var,cut=cut))
         return im
@@ -422,16 +422,22 @@ class SkyImage(FITSImage):
     def ax(self):
         return self._ax
         
-    def fill(self,lon,lat):
+    def fill(self,lon,lat,w=1.0):
 
         pixcrd = self._wcs.wcs_sky2pix(lon,lat, 0)
-        super(SkyImage,self).fill(pixcrd[0],pixcrd[1])
+        super(SkyImage,self).fill(np.vstack((pixcrd[0],pixcrd[1])),w)
 
     def interpolate(self,lon,lat):
         
         pixcrd = self._wcs.wcs_sky2pix(lon, lat, 0)
         return interpolate2d(self._xedge,self._yedge,self._counts,
                              *pixcrd)
+
+    def center(self):
+        pixcrd = super(SkyImage,self).center()
+        skycrd = self._wcs.wcs_pix2sky(pixcrd[0], pixcrd[1], 0)
+
+        return np.vstack((skycrd[0],skycrd[1]))
 
     def smooth(self,sigma):
         sigma /= np.abs(self._axes[0]._delta)
