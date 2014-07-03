@@ -35,9 +35,16 @@ class IRFModel(object):
 
         msk = ((self._aeff_ptsrc.counts() > 0)&
                (self._aeff_ptsrc.axis().center()>4.0))
+
+
+        if np.sum(self._aeff_ptsrc.err()[msk]) < 1E-4:
+            err = np.ones(np.sum(msk))
+        else:
+            err = self._aeff_ptsrc.err()[msk]
+
+
         self._aeff_ptsrc_fn = BSpline.fit(self._aeff_ptsrc.axis().center()[msk],
-                                          self._aeff_ptsrc.counts()[msk],
-                                          self._aeff_ptsrc.err()[msk],
+                                          self._aeff_ptsrc.counts()[msk],err,
                                           np.linspace(4.0,8.0,16),4)
 
         
@@ -167,6 +174,9 @@ class IRFModel(object):
 
         aeff_ptsrc *= Units.m2
 
+        if not 'aeff_diffuse' in d:
+            d['aeff_diffuse'] = d['aeff_erec_ptsrc']
+
         aeff = Histogram(d['aeff_diffuse']['xedges']+3.0,
                          counts=d['aeff_diffuse']['counts'],
                          var=d['aeff_diffuse']['var'])
@@ -182,6 +192,7 @@ class IRFModel(object):
                         var=d['bkg_wcounts_rate_density']['var'])
 
         bkg *= Units._deg2
+
 
         psf = Histogram(d['th68']['xedges']+3.0,
                          counts=d['th68']['counts'],
