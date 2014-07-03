@@ -62,7 +62,7 @@ class FITSAxis(Axis):
         else:
             self._coordsys = 'gal'
 
-        super(FITSAxis, self).__init__(edges)
+        super(FITSAxis, self).__init__(edges,label=ctype)
             
 
     def naxis(self):
@@ -161,12 +161,7 @@ class FITSImage(HistogramND):
         
         if not invert: self._roi_msk[dist<rad] = True
         else: self._roi_msk[dist>rad] = True
-    
-class SkyCube(FITSImage):
 
-    def __init__(self,wcs,axes,counts=None,roi_radius_deg=180.,roi_msk=None):
-        super(SkyCube, self).__init__(wcs,axes,counts,roi_radius_deg,roi_msk)
-        
     def slice(self,sdims,dim_index):
 
         h = HistogramND.slice(self,sdims,dim_index)
@@ -185,12 +180,39 @@ class SkyCube(FITSImage):
         if h.ndim() == 2:
             return SkyImage(self._wcs,h.axes(),h.counts(),
                             self._roi_radius_deg,self._roi_msk)
+        else:
+            h._axes[0] = Axis(h.axis().pix_to_coord(h.axis().edges()))
+            return h
 
     def marginalize(self,mdims,bin_range=None):
 
         mdims = np.array(mdims,ndmin=1,copy=True)
         pdims = np.setdiff1d(self._dims,mdims)
         return self.project(pdims,bin_range)
+        
+    @staticmethod
+    def createFromHDU(hdu):
+        """Create an SkyCube or SkyImage object from a FITS HDU."""
+        header = hdu.header
+
+        if header['NAXIS'] == 3: return SkyCube.createFromHDU(hdu)
+        elif header['NAXIS'] == 2: return SkyImage.createFromHDU(hdu)
+        else:
+            print 'Wrong number of axes.'
+            sys.exit(1)
+        
+    @staticmethod
+    def createFromFITS(fitsfile,ihdu=0):
+        """ """
+        hdulist = pyfits.open(fitsfile)
+        return FITSImage.createFromHDU(hdulist[ihdu])
+    
+class SkyCube(FITSImage):
+    """Container class for a FITS counts cube with two space
+    dimensions and one energy dimension."""
+    
+    def __init__(self,wcs,axes,counts=None,roi_radius_deg=180.,roi_msk=None):
+        super(SkyCube, self).__init__(wcs,axes,counts,roi_radius_deg,roi_msk)
         
     def get_spectrum(self,lon,lat):
 
@@ -204,7 +226,6 @@ class SkyCube(FITSImage):
         c = self._counts.T[ilon,ilat,:]
         edges = self._axes[2].edges()
         return Histogram.createFromArray(edges,c)
-
 
     def plot_energy_slices(self,rebin=4,logz=False):
 
@@ -328,25 +349,31 @@ class SkyImage(FITSImage):
     def __init__(self,wcs,axes,counts,roi_radius_deg=180.,roi_msk=None):
         super(SkyImage, self).__init__(wcs,axes,counts,roi_radius_deg,roi_msk)
 
+        self._ax = None
+        
     @staticmethod
     def createFromTree(tree,lon,lat,lon_var,lat_var,roi_radius_deg,cut='',
                        bin_size_deg=0.2,coordsys='cel'):
 
-        im = SkyImage.createROI(lon,lat,roi_radius_deg,bin_size_deg,coordsys)        
+        im = SkyImage.createROI(lon,lat,roi_radius_deg,bin_size_deg,coordsys)
         im.fill(get_vector(tree,lon_var,cut=cut),
                 get_vector(tree,lat_var,cut=cut))
         return im
+
+    @staticmethod
+    def createFromHDU(hdu):
+        
+        header = hdu.header
+        wcs = pywcs.WCS(header,relax=True)
+        axes = copy.deepcopy(FITSAxis.create_axes(header))
+        
+        return SkyImage(wcs,axes,copy.deepcopy(hdu.data.astype(float).T))
     
     @staticmethod
     def createFromFITS(fitsfile,ihdu=0):
         
-        hdu = pyfits.open(fitsfile)
-        
-        header = hdu[ihdu].header
-        wcs = pywcs.WCS(header,relax=True)
-        axes = copy.deepcopy(FITSAxis.create_axes(header))
-        
-        return SkyImage(wcs,axes,copy.deepcopy(hdu[ihdu].data.astype(float).T))
+        hdulist = pyfits.open(fitsfile)
+        return SkyImage.createFromFITS(hdulist[ihdu])
 
     @staticmethod
     def createWCS(ra,dec,roi_radius_deg,bin_size_deg=0.2,coordsys='cel'):
@@ -391,7 +418,9 @@ class SkyImage(FITSImage):
 #            ymin = np.min(xy[1])
 #            ymax = np.max(xy[1])
 
-
+    
+    def ax(self):
+        return self._ax
         
     def fill(self,lon,lat):
 
@@ -452,7 +481,8 @@ class SkyImage(FITSImage):
                                color=src_color,size=8,clip_on=True)
 
             if signif_avg[i] > marker_threshold:            
-                plt.gca().plot(pixcrd[0][i],pixcrd[1][i],linestyle='None',marker='+',
+                plt.gca().plot(pixcrd[0][i],pixcrd[1][i],
+                               linestyle='None',marker='+',
                                color='g', markerfacecolor = 'None',
                                markeredgecolor=src_color,clip_on=True)
         
@@ -488,7 +518,7 @@ class SkyImage(FITSImage):
 
         plt.gca().grid(True)
         
-    def plot(self,ax=None,subplot=111,logz=False,show_catalog=False,**kwargs):
+    def plot(self,subplot=111,logz=False,show_catalog=False,**kwargs):
 
         from matplotlib.colors import NoNorm, LogNorm, Normalize
 
@@ -520,7 +550,7 @@ class SkyImage(FITSImage):
 
 #        print 'vmin ', vmin, np.min(self._counts)-1.0, np.sum(self._roi_msk)
         
-        im = ax.imshow(counts.T,#np.power(self._counts.T,1./3.),
+        im = ax.imshow(counts.T,
                        interpolation='nearest',origin='lower',norm=norm,
                        extent=[self.axis(0).edges()[0],
                                self.axis(0).edges()[-1],
@@ -553,4 +583,6 @@ class SkyImage(FITSImage):
 #        ax.set_display_coord_system("gal")       
  #       ax.locator_params(axis="x", nbins=12)
 
+        self._ax = ax
+        
         return ax
