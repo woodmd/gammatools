@@ -181,23 +181,22 @@ class DMChanSpectrum(object):
 
 #            self._dndx[c] = d[:,i*18:(i+1)*18]
 
-    def e2dnde(self,loge,mass=None,dloge=None):
+    def e2dnde(self,loge,mass=None):
         """
         Evaluate the spectral energy density.
 
         @param m:
         @param loge:
-        @param dloge:
         @return:
         """
         e = np.power(10,loge)
         return e**2*self.dnde(loge,mass,dloge)
  
-    def ednde(self,loge,mass=None,dloge=None):        
+    def ednde(self,loge,mass=None):        
         e = np.power(10,loge)
         return e*self.dnde(loge,mass,dloge)
 
-    def dnde(self,loge,mass=None,dloge=None):
+    def dnde(self,loge,mass=None):
         
         loge = np.array(loge,ndmin=1)
 
