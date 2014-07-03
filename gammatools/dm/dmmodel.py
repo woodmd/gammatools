@@ -133,10 +133,13 @@ class DMChanSpectrum(object):
     """Class that computes the differential annihilation yield for
     different DM channels.  Interpolates a set of tabulated values
     from DarkSUSY."""
-    def __init__(self,chan,mass = 100*Units.gev):
+    def __init__(self,chan,mass = 100*Units.gev, yield_table=None):
 
-        d = np.loadtxt(os.path.join(gammatools.PACKAGE_ROOT,
-                                    'data/gammamc_dif.dat'),unpack=True)
+        if yield_table is None:
+            yield_table = os.path.join(gammatools.PACKAGE_ROOT,
+                                       'data/gammamc_dif.dat')
+
+        d = np.loadtxt(yield_table,unpack=True)
 
         xedge = np.linspace(0,1.0,251)
         self._x = 0.5*(xedge[1:]+xedge[:-1])
