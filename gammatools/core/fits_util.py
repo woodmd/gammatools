@@ -450,7 +450,7 @@ class SkyImage(FITSImage):
 
         return im
 
-    def plot_catalog(self,src_color='w',marker_threshold=10,
+    def plot_catalog(self,src_color='k',marker_threshold=0,
                      label_threshold=20., **kwargs):
         
         if self._axes[0]._coordsys == 'gal':
@@ -458,8 +458,14 @@ class SkyImage(FITSImage):
         else:
             ra, dec = self._ra, self._dec
             
-        cat = Catalog()
-        srcs = cat.get_source_by_position(ra,dec,self._roi_radius_deg)
+        cat = Catalog.create()
+
+        
+
+        print self._ra,self._dec, ra, dec, self._roi_radius_deg
+
+        #srcs = cat.get_source_by_position(ra,dec,self._roi_radius_deg)
+        srcs = cat.get_source_by_position(ra,dec,10.0)
 
         src_lon = []
         src_lat = []
@@ -469,6 +475,8 @@ class SkyImage(FITSImage):
         
         for s in srcs:
             
+            print s['RAJ2000'], s['DEJ2000'], s['GLON'], s['GLAT']
+
             src_lon.append(s['RAJ2000'])
             src_lat.append(s['DEJ2000'])
             labels.append(s['Source_Name'])
@@ -486,7 +494,10 @@ class SkyImage(FITSImage):
                 plt.gca().text(pixcrd[0][i],pixcrd[1][i],labels[i],
                                color=src_color,size=8,clip_on=True)
 
-            if signif_avg[i] > marker_threshold:            
+            if signif_avg[i] > marker_threshold:      
+
+                print i, pixcrd[0][i],pixcrd[1][i]
+      
                 plt.gca().plot(pixcrd[0][i],pixcrd[1][i],
                                linestyle='None',marker='+',
                                color='g', markerfacecolor = 'None',
@@ -540,7 +551,7 @@ class SkyImage(FITSImage):
 
         colormap = mpl.cm.jet
         colormap.set_under('white')
-        vmin = np.min(self._counts[~self._roi_msk.T])
+        vmin = 0.8*np.min(self._counts[~self._roi_msk.T])
 
         
         
@@ -549,21 +560,22 @@ class SkyImage(FITSImage):
 #        c = self._counts[~self._roi_msk]        
 #        if logz: vmin = np.min(c[c>0])
 
-
-        
         counts = copy.copy(self._counts)
         counts[self._roi_msk.T] = np.min(self._counts)-1.0
 
 #        print 'vmin ', vmin, np.min(self._counts)-1.0, np.sum(self._roi_msk)
         
-        im = ax.imshow(counts.T,
-                       interpolation='nearest',origin='lower',norm=norm,
-                       extent=[self.axis(0).edges()[0],
+        kw = { 'interpolation' : 'nearest', 'origin' : 'lower','norm' : norm,
+                   'extent' : [self.axis(0).edges()[0],
                                self.axis(0).edges()[-1],
                                self.axis(1).edges()[0],
-                               self.axis(1).edges()[-1]],
-                       vmin=vmin,#vmax=vmax,
-                       **kwargs)
+                               self.axis(1).edges()[-1]] }
+#                   'vmin' : vmin }
+
+        update_dict(kw,kwargs)
+                   
+
+        im = ax.imshow(counts.T,**kw)
         im.set_cmap(colormap)
         
 #        im.set_clim(vmin=np.min(self._counts[~self._roi_msk]),
@@ -579,7 +591,8 @@ class SkyImage(FITSImage):
             ax.set_xlabel('RA')
             ax.set_ylabel('DEC')
 
-        plt.colorbar(im)
+#        plt.colorbar(im,orientation='horizontal',shrink=0.7,pad=0.15,
+#                     fraction=0.05)
         ax.grid()
 
         if show_catalog: self.plot_catalog(**kwargs)
@@ -591,4 +604,4 @@ class SkyImage(FITSImage):
 
         self._ax = ax
         
-        return ax
+        return im

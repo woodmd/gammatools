@@ -44,6 +44,7 @@ class FigureSubplot(object):
               'marker' : None,
               'color' : None,
               'linestyle' : None,
+              'linewidth' : None,
               'markersize' : None,
               'hist_style' : None,
               'hist_xerr' : True,
@@ -68,6 +69,7 @@ class FigureSubplot(object):
             'marker' : 0,
             'markersize' : 0,
             'linestyle' : 0,
+            'linewidth' : 0,
             'hist_style' : 0,
             'hist_xerr' : 0
             }
@@ -93,6 +95,7 @@ class FigureSubplot(object):
         style.update(kwargs)
         
         for k in self._style_counter.keys():  
+
             if not k in style: continue
             if not style[k] is None: continue
 
@@ -118,6 +121,7 @@ class FigureSubplot(object):
         s = Series(x,y,yerr)        
         style = self.get_style(s,**kwargs)
         s.update_style(style)
+
         self._data.append(s)
 
     def add_series(self,s,**kwargs):
@@ -529,6 +533,7 @@ class FigTool(object):
         style = { 'marker' : ['s','o','d','^','v','<','>'],
                   'color' : ['b','g','r','m','c','grey','brown'],
                   'linestyle' : ['-','--','-.','-','--','-.','-'],
+                  'linewidth' : [1.0],
                   'markersize' : [6.0],
                   'figsize' : [8.0,6.0],
                   'hist_style' : 'errorbar',

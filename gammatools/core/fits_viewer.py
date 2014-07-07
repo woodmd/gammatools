@@ -1,5 +1,6 @@
 import wx
 import numpy as np
+import pyfits
 
 from gammatools.core.fits_util import SkyImage, SkyCube
 
@@ -7,6 +8,7 @@ from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
 from matplotlib.backends.backend_wxagg import Toolbar
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_wx import NavigationToolbar2Wx
+from matplotlib.colors import NoNorm, LogNorm, Normalize
 
 def make_projection_plots_skyimage(im):
 
@@ -161,23 +163,70 @@ class Param(object):
             value = self.maximum
         return value
 
+class SpinCtrlGroup(object):
+    def __init__(self, parent, label, pmin, pmax, fn, pdefault=None):
+        self.label = wx.StaticText(parent, label=label)
+        self.spinCtrl = wx.SpinCtrl(parent)#, pos=(150, 75), size=(60, -1))
+        self.spinCtrl.SetRange(pmin,pmax) 
+        self.spinCtrl.SetValue(pmin)
+        self.spinCtrl.Bind(wx.EVT_SPINCTRL, self.spinCtrlHandler)
+
+        self.sizer = wx.GridBagSizer(1,2)#wx.BoxSizer(wx.HORIZONTAL)
+
+        self.sizer.Add(self.label, pos=(0,0), flag = wx.EXPAND | wx.ALIGN_CENTER,
+                       border=2)
+
+        self.sizer.Add(self.spinCtrl, pos=(0,1), flag = wx.EXPAND | wx.ALIGN_CENTER| wx.ALIGN_RIGHT,
+                       border=2)
+
+#        self.sizer.Add(self.label, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL,
+#                       border=2)
+
+#        self.sizer.Add(self.spinCtrl, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL,
+#                       border=2)
+
+        self.fn = fn
+
+    def init(self,pmin,pmax,pdefault=None):
+
+        self.spinCtrl.SetRange(pmin,pmax)
+        if pdefault is None: self.spinCtrl.SetValue(pmin)
+        else: self.spinCtrl.SetValue(pdefault)
+
+    def spinCtrlHandler(self, evt):
+        v = evt.GetPosition() 
+        self.fn(v)
 
 class SliderGroup(object):
     def __init__(self, parent, label, pmin, pmax, fn, pdefault=None):
         self.sliderLabel = wx.StaticText(parent, label=label)
         self.sliderText = wx.TextCtrl(parent, -1, style=wx.TE_PROCESS_ENTER)
-        self.slider = wx.Slider(parent, -1)
+
+#        self.spinCtrl = wx.SpinCtrl(parent, value='0')#, pos=(150, 75), size=(60, -1))
+#        self.spinCtrl.SetRange(pmin,pax)       
+#        self.spinCtrl.Bind(wx.EVT_SPINCTRL, self.sliderSpinCtrlHandler)
+
+        self.slider = wx.Slider(parent, -1,style=wx.SL_MIN_MAX_LABELS)#,style=wx.SL_AUTOTICKS | wx.SL_LABELS)
         self.slider.SetMin(pmin)
         self.slider.SetMax(pmax)
 
         if pdefault is None: self.set(pmin)
         
-        sizer = wx.BoxSizer(wx.HORIZONTAL)
-        sizer.Add(self.sliderLabel, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL,
-                  border=2)
-        sizer.Add(self.sliderText, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL,
-                  border=2)
-        sizer.Add(self.slider, 1, wx.EXPAND)
+
+        sizer = wx.GridBagSizer(1,3)
+        sizer.Add(self.sliderLabel, pos=(0,0), 
+                  border=5,flag =  wx.ALIGN_CENTER)#,flag=wx.EXPAND)
+        sizer.Add(self.sliderText, pos=(0,1), 
+                  border=5,flag =  wx.ALIGN_CENTER)#,flag=wx.EXPAND)
+        sizer.Add(self.slider, pos=(0,2),flag=wx.EXPAND | wx.ALIGN_CENTER,border=5)
+
+
+#        sizer = wx.GridSizer(wx.HORIZONTAL)
+#        sizer.Add(self.sliderLabel, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL,
+#                  border=2)
+#        sizer.Add(self.sliderText, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL,
+#                  border=2)
+#        sizer.Add(self.slider, 1, wx.EXPAND)
         self.sizer = sizer
 
         self.slider.Bind(wx.EVT_SLIDER, self.sliderHandler)
@@ -197,29 +246,23 @@ class SliderGroup(object):
         self.sliderText.Enable(False)
         
     def sliderHandler(self, evt):
-
-        print evt.GetInt()
-        
         v = evt.GetInt() 
         self.set(v)
         self.fn(v)
         
     def sliderTextHandler(self, evt):
         v = self.sliderText.GetValue()
-
-        print v
         self.set(v)
         self.fn(v)
         
     def set(self, value):
-        self.sliderText.SetValue('%i'%value)
-        self.slider.SetValue(value)
+        self.sliderText.SetValue('%s'%value)
+        self.slider.SetValue(int(value))
 
 class FITSViewerApp(wx.App):
 
     def __init__(self,im):
 
-        print im
         self._im = im
         wx.App.__init__(self)
 
@@ -239,38 +282,119 @@ class FITSViewerApp(wx.App):
         return True
         
 class FITSViewerFrame(wx.Frame):
-    def __init__(self, hdulist,hdu=0,*args, **kwargs):
+    def __init__(self, files, hdu=0,*args, **kwargs):
         wx.Frame.__init__(self, *args,**kwargs)
 
-        self.hdulist = hdulist
+        self.files = files
+        self.hdulist = []
+        self.show_image = []
+        self.image_window = []
+
+        for i, f in enumerate(files):
+            self.hdulist.append(pyfits.open(f))
+            self.show_image.append(True)
+            self.image_window.append(ImagePanel(self,i))
         self.hdu = hdu
         self.slice = 0
         self.nbin = 1
-        self.window = PlotPanel(self)
-        self.slider0 = SliderGroup(self, 'Slice',0,6,
-                                   fn=self.update_slice)
-        self.slider2 = SliderGroup(self, 'NBins',1,6,
-                                   fn=self.update_nbin)
-        self.slider1 = SliderGroup(self,'HDU',0,6,
-                                   fn=self.update_hdu)
 
-        self.slider1.init(0,len(hdulist)-1)
+        self.projx_window = PlotPanel(self,12,0)
+        self.projy_window = PlotPanel(self,13,1)
 
-        sizer0 = wx.BoxSizer(wx.HORIZONTAL)
+        self.ctrl_slice = SpinCtrlGroup(self,'Slice',0,6,fn=self.update_slice)
+        self.ctrl_nbins = SpinCtrlGroup(self,'NBins',0,6,fn=self.update_nbin)
+        self.ctrl_hdu = SpinCtrlGroup(self,'HDU',0,6,fn=self.update_hdu)
+
+#        self.spinctrl0 = wx.SpinCtrl(self, value='0')#, pos=(150, 75), size=(60, -1))
+#        self.spinctrl0.SetRange(0,6)
         
-        sizer = wx.BoxSizer(wx.VERTICAL)
+ #       self.spinctrl0.Bind(wx.EVT_SPINCTRL, lambda evt: self.update_slice(evt.GetPosition()))
+
+#        self.slider0 = SliderGroup(self, 'Slice',0,6,
+#                                   fn=self.update_slice)
+#        self.slider2 = SliderGroup(self, 'NBins',1,6,
+#                                   fn=self.update_nbin)
+#        self.slider1 = SliderGroup(self,'HDU',0,6,
+#                                   fn=self.update_hdu)
+
+        self.slider_rebin = SliderGroup(self,'REBIN',1,4,
+                                        fn=self.update_rebin)
+
+        self.ctrl_hdu.init(0,len(self.hdulist[0])-1)
+
+        sb0 = wx.StaticBox(self, label="Optional Attributes")
+        sb0sizer = wx.StaticBoxSizer(sb0, wx.VERTICAL)
+
+        sb1 = wx.StaticBox(self, label="Projection")
+        sb1sizer = wx.StaticBoxSizer(sb1, wx.VERTICAL)
+
+        sb2 = wx.StaticBox(self, label="Transform")
+        sb2sizer = wx.StaticBoxSizer(sb2, wx.VERTICAL)
+
+        sizer_main = wx.BoxSizer(wx.HORIZONTAL)
+
+        sizer_plots = wx.BoxSizer(wx.HORIZONTAL)
+
+        sizer_proj = wx.BoxSizer(wx.VERTICAL)
+        self.sizer_image = wx.BoxSizer(wx.VERTICAL)
+        
+        sizer_ctrls = wx.BoxSizer(wx.VERTICAL)
 #        sizer.Add(self.window, 1, wx.EXPAND)
-        sizer.Add(self.slider0.sizer, 0,
-                  wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
-        sizer.Add(self.slider2.sizer, 0,
-                  wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
-        sizer.Add(self.slider1.sizer, 0,
-                  wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
+        sizer_ctrls.Add(sb0sizer, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
+        sizer_ctrls.Add(sb1sizer, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
+        sizer_ctrls.Add(sb2sizer, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
 
-        sizer0.Add(sizer,1, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL)
-        sizer0.Add(self.window,2, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL)
+        sb0sizer.Add(self.ctrl_slice.sizer, 0,
+                     wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
+        sb0sizer.Add(self.ctrl_nbins.sizer, 0,
+                     wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
+        sb0sizer.Add(self.ctrl_hdu.sizer, 0,
+                     wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
 
-        self.SetSizer(sizer0)
+        fn = []
+
+        for i, w in enumerate(self.image_window):
+            cb = wx.CheckBox(self, label="Image %i"%i)
+            cb.Bind(wx.EVT_CHECKBOX, lambda t,i=i: self.toggle_image(t,i))
+            cb.SetValue(True)
+
+            sb0sizer.Add(cb, 0,
+                         wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
+
+        sb1sizer.Add(self.slider_rebin.sizer, 0,
+                     wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
+
+        tc0 = wx.TextCtrl(self, -1, style=wx.TE_PROCESS_ENTER)
+
+        bt0 = wx.Button(self, label="Update")
+        bt0.Bind(wx.EVT_BUTTON, self.update)
+
+        sizer_ctrls.Add(bt0, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
+
+        cb1 = wx.CheckBox(self, label="Log Scale")
+        cb1.Bind(wx.EVT_CHECKBOX, self.toggle_yscale)
+
+        cb0 = wx.CheckBox(self, label="Smooth")
+        cb0.Bind(wx.EVT_CHECKBOX, self.update_smoothing)
+
+        sb2sizer.Add(cb0,flag=wx.LEFT|wx.TOP, border=5)
+        sb2sizer.Add(cb1,flag=wx.LEFT|wx.TOP, border=5)
+        sb2sizer.Add(bt0,flag=wx.LEFT|wx.TOP, border=5)
+        sb2sizer.Add(tc0,flag=wx.LEFT|wx.TOP, border=5)
+
+        sizer_main.Add(sizer_ctrls,1, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL)
+        sizer_main.Add(sizer_plots,3, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL)
+
+        sizer_plots.Add(self.sizer_image,1, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL)
+        sizer_plots.Add(sizer_proj,1, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL)
+
+        for w in self.image_window:
+            self.sizer_image.Add(w,1, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL)
+
+        sizer_proj.Add(self.projx_window,1, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL)
+        sizer_proj.Add(self.projy_window,1, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL)
+
+        self.SetSizer(sizer_main)
 
         self.update_hdu(self.hdu)
         self.update_slice(self.slice)
@@ -278,61 +402,144 @@ class FITSViewerFrame(wx.Frame):
     def update_hdu(self,value):
 
         self.hdu = int(value)
-        
-        hdu = self.hdulist[self.hdu]
-        
-        if hdu.header['NAXIS'] == 3:
-            self._im = SkyCube.createFromHDU(hdu)
-            self.slider0.init(0,self._im.axis(2).nbins()-1)
-            self.slider2.init(1,self._im.axis(2).nbins())
 
-        else:
-            self._im = SkyImage.createFromHDU(hdu)
-            self.slider0.init(0,0)
-            self.slider0.disable()
-            self.slider2.init(0,0)
-            self.slider2.disable()
+        for w in self.image_window: w.clear()
+        self.projx_window.clear()
+        self.projy_window.clear()
+
+        for i, hl in enumerate(self.hdulist):
+            hdu = hl[self.hdu]        
+            self.load_hdu(hdu,self.image_window[i])
+
 
         self.update()
         
+    def load_hdu(self,hdu,image_window):
+
+        print 'Loading HDU'
+
+        style = {}
+
+        if 'CREATOR' in hdu.header and hdu.header['CREATOR'] == 'gtsrcmaps':
+            style['hist_style'] = 'line'
+            style['linestyle'] = '-'
+
+        if hdu.header['NAXIS'] == 3:
+            im = SkyCube.createFromHDU(hdu)
+
+            if image_window: image_window.add(im,style)
+            self.projx_window.add(im,style)
+            self.projy_window.add(im,style)
+            self.ctrl_slice.init(0,im.axis(2).nbins()-1)
+            self.ctrl_nbins.init(1,im.axis(2).nbins())
+        else:
+            im = SkyImage.createFromHDU(hdu)
+            self.ctrl_slice.init(0,0)
+            self.ctrl_slice.disable()
+            self.ctrl_nbins.init(0,0)
+            self.ctrl_nbins.disable()
+
     def update_slice(self,value):
 
         self.slice = int(value)
+
+        for w in self.image_window: w.set_slice(value)
+        self.projx_window.set_slice(value)
+        self.projy_window.set_slice(value)
         self.update()
 
     def update_nbin(self,value):
 
         self.nbin = int(value)
+
+        for w in self.image_window: w.set_nbin(value)
+        self.projx_window.set_nbin(value)
+        self.projy_window.set_nbin(value)
         self.update()
 
-    def update(self):
-
-        if isinstance(self._im,SkyCube):
-            im = self._im.marginalize(2,
-                                      bin_range=[self.slice,
-                                                 self.slice+self.nbin])
-            im.plot()
-        else:
-            self._im.plot()
-            
-        self.window.canvas.draw()
+    def update_rebin(self,value):
         
-    def OnPaint(self, event):
+#        self.projx_window.set_rebin(value)
+        self.projy_window.set_rebin(value)
+        self.update()
 
-        print 'OnPaint'
-        self.window.canvas.draw()
+    def update_smoothing(self, e):
+        
+        sender = e.GetEventObject()
+        isChecked = sender.GetValue()
+
+        if isChecked: 
+            self.image_window[0].smooth = True
+        else: 
+            self.image_window[0].smooth = False
+
+        self.update()
+
+    def toggle_image(self, e, i):
+
+        w = self.image_window[i]
+
+        sender = e.GetEventObject()
+        if sender.GetValue(): w.Show()
+        else: w.Hide()
+
+        self.sizer_image.Layout()
+#        self.update()
+
+    def toggle_smoothing(self, e):
+        
+        sender = e.GetEventObject()
+        if sender.GetValue(): 
+            self.image_window[0].smooth = True
+        else: 
+            self.image_window[0].smooth = False
+
+        self.update()
+
+    def toggle_yscale(self, evt):
+        
+        sender = evt.GetEventObject()
+        if sender.GetValue():
+            for w in self.image_window:
+                w.update_style('logz',True)
+        else: 
+            for w in self.image_window:
+                w.update_style('logz',False)
+
+        self.update()
+
+    def update(self,evt=None):
+
+        for w in self.image_window: w.update()
+        self.projx_window.update()
+        self.projy_window.update()
+        
+#    def OnPaint(self, event):
+#        print 'OnPaint'
+#        self.window.canvas.draw()
         
 
-class PlotPanel(wx.Panel):
-
-    def __init__(self, parent):
+class BasePanel(wx.Panel):
+    
+    def __init__(self, parent,fignum):
         wx.Panel.__init__(self, parent, -1)
 
-        self._fig = plt.figure(figsize=(5,4), dpi=75)
+    def update_style(self,k,v):
+        for i, s in enumerate(self._style):
+            self._style[i][k] = v
+
+class ImagePanel(BasePanel):
+
+    def __init__(self, parent,fignum):
+        BasePanel.__init__(self, parent, fignum)
+
+        self._fignum = fignum
+        self._fig = plt.figure(fignum,figsize=(5,4), dpi=75)
         self.canvas = FigureCanvasWxAgg(self, -1, self._fig)
-        self.toolbar = NavigationToolbar2Wx(self.canvas)
+        self.toolbar = NavigationToolbar2Wx(self._fig.canvas)
         #Toolbar(self.canvas) #matplotlib toolbar
         self.toolbar.Realize()
+
         #self.toolbar.set_active([0,1])
 
         # Now put all into a sizer
@@ -343,16 +550,207 @@ class PlotPanel(wx.Panel):
         sizer.Add(self.toolbar, 0, wx.GROW)
         self.SetSizer(sizer)
         self.Fit()
-
-
+        self._ax = None
+        self._im = []
+        self._style = []
+        self._axim = []
+        self.smooth = False
 #        self.toolbar.update() # Not sure why this is needed - ADS
-
-    
         
-    def update(self, value):
-        print 'update ', value
+        self.slice = 0
+        self.nbin = 1
+
+    def draw(self):
+
+        bin_range = [self.slice,self.slice+self.nbin]
+
+        if isinstance(self._im,SkyCube):
+            im = self._im.marginalize(2,bin_range=bin_range)
+        else:
+            im = self._im
+
+        self.scf()
+        self._axim = im.plot()
+
+        self.scf()
+        self._axim.set_data(im.counts().T)
+        self._axim.autoscale()
+        self.canvas.draw()
+        self._fig.canvas.draw()
+
+    def clear(self):
+
+        self._im = []
+        self._style = []
+        self._axim = []
+
+    def add(self,im,style):
+
+        style.setdefault('logz',False)
+
+        self._im.append(im)
+        self._style.append(style)
+
+    def scf(self):
+        plt.figure(self._fignum)
+
+    def set_slice(self,value):
+        self.slice = int(value)
+
+    def set_nbin(self,value):
+        self.nbin = int(value)
+
+    def update(self):
+
+        self.scf()
+
+        bin_range = [self.slice,self.slice+self.nbin]
+
+        cm = []
+
+        for im in self._im:
+            if isinstance(im,SkyCube):
+                cm.append(im.marginalize(2,bin_range=bin_range))
+            else:
+                cm.append(im)
+
+        for i in range(len(cm)):
+            if self.smooth: cm[i] = cm[i].smooth(0.1)
+
+        if len(cm) == 0: return
+
+        if len(self._axim) == 0:
+
+            axim = cm[0].plot(show_catalog=True,**self._style[0])
+
+            self._axim.append(axim)
+            self._ax = plt.gca()
+            plt.colorbar(axim,orientation='horizontal',shrink=0.7,pad=0.15,
+                         fraction=0.05)
+
+            return
+
+        self._axim[0].set_data(cm[0].counts().T)
+        self._axim[0].autoscale()
+
+        if self._style[0]['logz']:
+            self._axim[0].set_norm(LogNorm())
+        else:
+            self._axim[0].set_norm(Normalize())
+
+#        self._axim.set_clim(0,3)
+        self.canvas.draw()
+        self._fig.canvas.draw()
+
         self.toolbar.update()
-        self._fig.canvas.draw_idle()
+#        self._fig.canvas.draw_idle()
+
+class PlotPanel(BasePanel):
+
+    def __init__(self, parent,fignum,pindex):
+        BasePanel.__init__(self, parent, fignum)
+#        wx.Panel.__init__(self, parent, -1)
+
+        self._fignum = fignum
+        self._pindex = pindex
+        self._fig = plt.figure(fignum,figsize=(5,4), dpi=75)
+        self.canvas = FigureCanvasWxAgg(self, -1, self._fig)
+        self.toolbar = NavigationToolbar2Wx(self.canvas)
+        #Toolbar(self.canvas) #matplotlib toolbar
+        self.toolbar.Realize()
+
+        #self.toolbar.set_active([0,1])
+
+        # Now put all into a sizer
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        # This way of adding to sizer allows resizing
+        sizer.Add(self.canvas, 1, wx.LEFT|wx.TOP|wx.GROW)
+        # Best to allow the toolbar to resize!
+        sizer.Add(self.toolbar, 0, wx.GROW)
+        self.SetSizer(sizer)
+        self.Fit()
+        self._ax = None
+        self._im = []
+        self._style = []
+        self._lines = []
+#        self.toolbar.update() # Not sure why this is needed - ADS
+        
+        self.slice = 0
+        self.nbin = 1
+        self.rebin = 0
+
+    def clear(self):        
+        self._im = []
+        self._style = []
+        self._lines = []
+
+    def add(self,im,style):
+
+        style.setdefault('linestyle','None')
+
+        self._im.append(im)
+        self._style.append(style)
+
+    def scf(self):
+        plt.figure(self._fignum)
+
+    def set_slice(self,value):
+        self.slice = int(value)
+
+    def set_nbin(self,value):
+        self.nbin = int(value)
+
+    def set_rebin(self,value):
+        self.rebin = int(value)
+
+    def draw(self):
+
+        bin_range = [self.slice,self.slice+self.nbin]
+
+        if isinstance(self._im,SkyCube):
+            im = self._im.marginalize(2,bin_range=bin_range)
+        else:
+            im = self._im
+
+        self.window1.scf()
+        self._lines = im.project(self._pindex).plot()
+        self._ax = plt.gca()
+        self._ax.grid(True)
+
+    def update(self):
+
+        self.scf()
+
+        bin_range = [self.slice,self.slice+self.nbin]
+
+        pcm = []
+
+        for im in self._im:
+            if isinstance(im,SkyCube):
+                cm = im.marginalize(2,bin_range=bin_range)
+            else:
+                cm = im
+
+            pcm.append(cm.project(self._pindex).rebin(self.rebin))
+
+        if len(self._lines) == 0:
+
+            for i, p in enumerate(pcm): self._lines.append(p.plot(**self._style[i]))
+            self._ax = plt.gca()
+            self._ax.grid(True)
+            return
+
+        for i, p in enumerate(pcm):
+            p.update_artists(self._lines[i])
+
+        self._ax.relim()
+        self._ax.autoscale(axis='y')
+
+        self.canvas.draw()
+        self._fig.canvas.draw()
+
+        self.toolbar.update()
+#        self._fig.canvas.draw_idle()
 
 class FourierDemoWindow(wx.Window, Knob):
     def __init__(self, *args, **kwargs):

@@ -17,9 +17,12 @@ import numpy as np
 import sys
 import pyfits
 import os
-from gammatools.core.algebra import Vector3D
 import yaml
 import copy
+
+import gammatools
+from gammatools.core.algebra import Vector3D
+
 
 def latlon_to_xyz(lat,lon):
     phi = lon
@@ -100,20 +103,17 @@ class CatalogSource(object):
 
 class Catalog(object):
 
+    catalog_files = { '2fgl' : os.path.join(gammatools.PACKAGE_ROOT,
+                                            'data/gll_psc_v08.fit') }
+
     src_name_cols = ['Source_Name',
                      'ASSOC1','ASSOC2','ASSOC_GAM1','ASSOC_GAM2','ASSOC_TEV']
 
-    def __init__(self,infile=None):
+    def __init__(self):
 
-        if infile is None:
-            dirname = os.path.dirname(os.path.realpath(__file__))
-            infile = os.path.join(dirname,'2fgl_catalog_v08.P')
-            
         self._src_data = []
         self._src_index = {}
-        self._src_radec = []
-
-        if not infile is None: self.load(infile)
+        self._src_radec = np.zeros(shape=(0,3))
 
     def get_source_by_name(self,name):
 
@@ -134,16 +134,20 @@ class Catalog(object):
         return srcs
 
     def sources(self):
-
         return self._src_data
 
     @staticmethod
-    def load_from_fits(fitsfile):
+    def create(name='2fgl'):
+        return Catalog.create_from_fits(Catalog.catalog_files[name])
+
+    @staticmethod
+    def create_from_fits(fitsfile=None):
+
+        if fitsfile is None:
+            fitsfile = os.path.join(gammatools.PACKAGE_ROOT,
+                                    'data/gll_psc_v08.fit')
 
         cat = Catalog()
-
-        print 'Loading from FITS catalog'
-
         hdulist = pyfits.open(fitsfile)
         cols = hdulist[1].columns.names
 
@@ -182,7 +186,8 @@ class Catalog(object):
 
     def save(self,outfile,format='pickle'):
 
-        if format == 'pickle': self.save_to_pickle(outfile)
+        if format == 'pickle': 
+            save_object(self,outfile,compress=True)
         elif format == 'yaml': self.save_to_yaml(outfile)
         else:
             print 'Unrecognized output format: ', format
@@ -282,12 +287,8 @@ if __name__ == '__main__':
     else:
         cat = Catalog()
 
-
     if not opts.source is None:
         src = CatalogSource(cat.get_source_by_name(opts.source))
-
-        print src
-        print src.get_roi_cut(opts.roi_radius)
 
     if not opts.output is None:
         cat.save(opts.output,opts.format)

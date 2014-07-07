@@ -808,6 +808,30 @@ class Histogram(HistogramND):
 
         return h
     
+    def update_artists(self,artists):
+
+        artists[0].set_ydata(self.counts())
+        artists[0].set_xdata(self.axis().center())
+
+        if len(artists[1]) == 0: return
+
+        x = self.axis().center()
+        y = self.counts()
+        xerr = np.abs(0.5*self.axis().width())
+        yerr = self.err()
+
+        error_positions = (x-xerr,y), (x+xerr,y), (x,y-yerr), (x,y+yerr) 
+
+        # Update the caplines 
+        for i,pos in enumerate(error_positions): 
+            artists[1][i].set_data(pos) 
+
+        sx = np.array([[x - xerr, y], [x + xerr, y]]).transpose(2,0,1)
+        sy = np.array([[x, y-yerr], [x, y+yerr]]).transpose(2,0,1)
+
+        artists[2][0].set_segments(sx)
+        artists[2][1].set_segments(sy)
+
     def update_style(self,style):
         update_dict(self._style,style)
 
@@ -1198,6 +1222,8 @@ class Histogram(HistogramND):
 
 
     def rebin(self,bins=2):
+
+        if bins <= 1: return copy.deepcopy(self)
 
         bins = np.array(bins)
 

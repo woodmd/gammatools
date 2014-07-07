@@ -80,19 +80,21 @@ hdulist = pyfits.open(args.files[0])
 if not args.model_file is None:
     model_hdu = pyfits.open(args.model_file)[0]
     
-#for k, v in hdulist[0].header.iteritems():
-#    print k, v
+for k, v in hdulist[0].header.iteritems():
+    print k, v
     
 #viewer = FITSImageViewer(im)
 #viewer.plot()
+
+
 
 if args.gui:
     
     app = wx.App()
 
-    frame = FITSViewerFrame(hdulist,hdu=args.hdu,parent=None,
+    frame = FITSViewerFrame(args.files,hdu=args.hdu,parent=None,
                             title="FITS Viewer",
-                            size=(1.5*640, 1.5*480))
+                            size=(2.0*640, 1.5*480))
 
     frame.Show()
 
@@ -113,9 +115,10 @@ if args.gui:
 else:
     
     im = FITSImage.createFromHDU(hdulist[args.hdu])
-    im_mdl = FITSImage.createFromHDU(model_hdu)
 
-    im = im - im_mdl
+    if model_hdu:
+        im_mdl = FITSImage.createFromHDU(model_hdu)
+        im = im - im_mdl
     
     
     if isinstance(im,SkyImage):
