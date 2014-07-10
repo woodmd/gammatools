@@ -105,6 +105,14 @@ args = parser.parse_args()
 halo_model_lib = yaml.load(open(os.path.join(gammatools.PACKAGE_ROOT,
                                   'data/dm_halo_models.yaml'),'r'))
 
+if not args.halo_model in halo_model_lib:
+
+    print 'No such model file: ', args.halo_model
+
+    for k in sorted(halo_model_lib.keys()): 
+        print '%20s %s'%(k, halo_model_lib[k])
+    sys.exit(1)
+
 halo_model = halo_model_lib[args.halo_model]
 massv = [float(t) for t in args.mass.split('/')]
 massv = np.linspace(massv[0],massv[1],massv[2])

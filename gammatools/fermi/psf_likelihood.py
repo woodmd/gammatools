@@ -6,44 +6,48 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 
-from histogram import Histogram
+from gammatools.core.histogram import Histogram
 
-from likelihood import *
+from gammatools.core.model_fn import *
 
-from minuit import Minuit
-from util import convolve2d_gauss
+from gammatools.core.util import convolve2d_gauss
 import scipy.special as spfn
 
 
 class ConvolvedGaussFn(Model):
-    def __init__(self,pnorm,psigma,psf_model):   
-
-        pset = ParameterSet([pnorm,psigma])
-        pset.addSet(psf_model.param())     
-        Model.__init__(self,pset,cname='dtheta')
+    def __init__(self,pset,psf_model):   
+        Model.__init__(self,pset)
         self._psf_model = copy.deepcopy(psf_model)
-        self._pid = [pnorm.pid(),psigma.pid()]
+#        self._pid = [pnorm.pid(),psigma.pid()]
 
         x = np.linspace(-4,4,800)
         self._ive = UnivariateSpline(x,spfn.ive(0,10**x),s=0,k=2)
 
     @staticmethod
-    def create(norm,sigma,psf_model,offset=0):
+    def create(norm,sigma,psf_model,pset=None,prefix=''):
 
-        return ConvolvedGaussFn(Parameter(offset+0,norm,'norm'),
-                                Parameter(offset+1,sigma,'sigma'),
-                                psf_model)
+        if pset is None: pset = ParameterSet()
+#        
+        p0 = pset.createParameter(norm,prefix + 'norm')
+        p1 = pset.createParameter(sigma,prefix + 'sigma')
+        pset.addSet(psf_model.param()) 
+
+        return ConvolvedGaussFn(pset,psf_model)
 
     def _eval(self,dtheta,pset):
 
-        norm = pset[self._pid[0]]
-        sig = pset[self._pid[1]]
+        a = pset.array()
 
-        self._psf_model.setParam(pset)
-        v = self._psf_model.eval(dtheta)
+        print 'a ', a
 
-        return norm*self.convolve(lambda x: self._psf_model.eval(x),
-                                  dtheta,sig,3.0,nstep=200)
+#        norm = pset[self._pid[0]]
+#        sig = pset[self._pid[1]]
+
+#        self._psf_model.setParam(pset)
+        v = self._psf_model.eval(dtheta,pset)
+
+        return a[0]*self.convolve(lambda x: self._psf_model.eval(x),
+                                  dtheta,a[1],3.0,nstep=200)
 
     def _integrate(self,xlo,xhi,pset):
 
