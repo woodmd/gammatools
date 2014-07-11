@@ -17,8 +17,7 @@ from gammatools.core.histogram import Histogram, Histogram2D
 from matplotlib import font_manager
 
 from gammatools.fermi.psf_model import *
-import gammatools.core.stats as stats
-from gammatools.core.stats import *
+from gammatools.core.quantile import *
 from gammatools.fermi.catalog import Catalog
 from gammatools.core.plot_util import *
 from gammatools.core.util import Configurable
@@ -34,9 +33,6 @@ from irf_util import IRFManager
 from gammatools.core.mpl_util import SqrtScale
 from matplotlib import scale as mscale
 mscale.register_scale(SqrtScale)
-
-
-
 
 vela_phase_selection = {'on_phase' : '0.0/0.15,0.6/0.7',
                         'off_phase' : '0.2/0.5' }
