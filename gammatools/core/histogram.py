@@ -991,9 +991,12 @@ class Histogram(HistogramND):
         if ibin == None: return self._var
         else: return self._var[ibin]
 
-#    def stddev(self):
-#        x = self.axis().center()
-#        return np.sum(self.counts()*x)/np.sum(self.counts())
+    def stddev(self):
+
+        m = self.mean()
+        n = np.sum(self.counts())
+        dx = self.axis().center() - m        
+        return np.sqrt(np.sum(self.counts()*dx**2)/n)
         
     def mean(self):
         x = self.axis().center()
@@ -1145,10 +1148,15 @@ class Histogram(HistogramND):
             if len(var) < len(w): var = np.ones(len(w))*var
         
         if w.ndim == 1:
-            
-            c1 = np.histogram(x,bins=self._axes[0].edges(),weights=w)[0]
-            c2 = np.histogram(x,bins=self._axes[0].edges(),weights=var)[0]
-            
+
+
+            if self._axes[0].lo_edge() > self._axes[0].hi_edge():                
+                c1 = np.histogram(x,bins=self._axes[0].edges()[::-1],weights=w)[0][::-1]
+                c2 = np.histogram(x,bins=self._axes[0].edges()[::-1],weights=var)[0][::-1]
+            else:
+                c1 = np.histogram(x,bins=self._axes[0].edges(),weights=w)[0]
+                c2 = np.histogram(x,bins=self._axes[0].edges(),weights=var)[0]
+                
             self._counts += c1
             self._var += c2
 

@@ -58,8 +58,9 @@ class Task(Configurable):
         os.chdir(self._workdir)
 
     def run(self):
-
-        if os.path.isfile(self._output_files[0]):
+        
+        if os.path.isfile(self._output_files[0]) and \
+                not self.config('overwrite'):
             print 'Output file exists: ', self._output_files[0]
             return
         
@@ -302,6 +303,7 @@ class SelectorTask(Task):
                        'chatter' : 2,
                        'evclsmin' : 'INDEF',
                        'evclass' : 3,
+                       'evtype'  : 'INDEF',
                        'convtype' : -1 }               
     
     def __init__(self,infile,outfile,config=None,**kwargs):
@@ -327,8 +329,8 @@ class SelectorTask(Task):
         outfile = os.path.basename(self._output_files[0])
 
 
-        print self._infile
-        os.system('cat ' + self._infile[1:])
+#        print self._infile
+#        os.system('cat ' + self._infile[1:])
         
         self._gtselect.run(infile=self._infile,
                            outfile=outfile,
@@ -338,7 +340,7 @@ class SelectorTask(Task):
                            emin=config['emin'], emax=config['emax'],
                            zmax=config['zmax'], chatter=config['chatter'],
                            evclass=config['evclass'],   # Only for Pass7
-#                           evclsmin=config['evclsmin'],
+                           evtype=config['evtype'],
                            convtype=config['convtype']) # Only for Pass6
 
 

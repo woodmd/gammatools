@@ -3,7 +3,7 @@ import numpy as np
 import pyfits
 
 from gammatools.core.fits_util import SkyImage, SkyCube
-
+from gammatools.fermi.catalog import Catalog
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
 from matplotlib.backends.backend_wxagg import Toolbar
 import matplotlib.pyplot as plt
@@ -21,7 +21,8 @@ def make_projection_plots_skyimage(im):
     im.project(1).plot()
     
 def make_plots_skycube(im,delta_bin=None,paxis=None,plots_per_fig=None,
-                       smooth=False, **kwargs):
+                       smooth=False, residual=False,
+                       im_mdl=None, suffix='', **kwargs):
 
     nbins = im.axis(2).nbins()
     if delta_bin is None: delta_bin = nbins
@@ -37,12 +38,14 @@ def make_plots_skycube(im,delta_bin=None,paxis=None,plots_per_fig=None,
 
     if plots_per_fig > 4 and plots_per_fig <= 8:
         nx, ny = 4, 2
-    elif plots_per_fig <= 4:
+    elif plots_per_fig <= 4 and plots_per_fig > 1:
         nx, ny = 2, 2
+    else:
+        nx, ny = 1, 1
 
 
-    fig_sx = 4.0*nx
-    fig_sy = 4.0*ny
+    fig_sx = 5.0*nx
+    fig_sy = 5.0*ny
         
     for i in range(nfig):
 
@@ -57,24 +60,47 @@ def make_plots_skycube(im,delta_bin=None,paxis=None,plots_per_fig=None,
             
             print i, j, ibin
         
-            h = im.marginalize(2,[ibin,ibin+1])
-            if smooth: h = h.smooth(0.25)
+            h = im.marginalize(2,[ibin,ibin+delta_bin])
+
+            if residual and im_mdl:
+
+                hm = im_mdl.marginalize(2,[ibin,ibin+delta_bin])
+
+                if smooth:
+                    hm = hm.smooth(0.2,compute_var=True)
+                    h = h.smooth(0.2,compute_var=True)
+                
+                h -= hm
+                h /= np.sqrt(hm.var())
+            elif smooth:
+                h = h.smooth(0.2)
 
             emin = im.axis(2).pix_to_coord(ibin)
             emax = im.axis(2).pix_to_coord(ibin+delta_bin)
             
             subplot = '%i%i%i'%(ny,nx,j+1)
 
-            if paxis is None:            
-                h.plot(subplot=subplot,**kwargs)
+            if paxis is None:
+
+
+                if residual:
+                    kwargs['vmin'] = -5
+                    kwargs['vmax'] = 5
+                
+                axim = h.plot(subplot=subplot,**kwargs)
                 ax = h.ax()
                 ax.set_title('E = [%.3f %.3f]'%(emin,emax))
+                plt.colorbar(axim,orientation='horizontal',shrink=0.9,pad=0.15,
+                             fraction=0.05)#,ticks=[-30,0,10,20,30])
+                
             else:
                 ax = fig.add_subplot(subplot)
                 hp = h.project(paxis)
                 hp.plot(ax=ax,**kwargs)
                 ax.set_xlim(*hp.axis().lims())
 #                ax.set_ylim(0)
+
+        plt.savefig('fig_%i%s.png'%(i,suffix))
 
     
 def make_projection_plots_skycube(im,paxis,delta_bin=2):
@@ -166,17 +192,20 @@ class Param(object):
 class SpinCtrlGroup(object):
     def __init__(self, parent, label, pmin, pmax, fn, pdefault=None):
         self.label = wx.StaticText(parent, label=label)
-        self.spinCtrl = wx.SpinCtrl(parent)#, pos=(150, 75), size=(60, -1))
+        self.spinCtrl = wx.SpinCtrl(parent,style=wx.SP_ARROW_KEYS)#, pos=(150, 75), size=(60, -1))
         self.spinCtrl.SetRange(pmin,pmax) 
         self.spinCtrl.SetValue(pmin)
-        self.spinCtrl.Bind(wx.EVT_SPINCTRL, self.spinCtrlHandler)
+#        self.spinCtrl.Bind(wx.EVT_SPINCTRL, self.spinCtrlHandler)
+        parent.Bind(wx.EVT_SPINCTRL, self.spinCtrlHandler,self.spinCtrl)
 
         self.sizer = wx.GridBagSizer(1,2)#wx.BoxSizer(wx.HORIZONTAL)
 
-        self.sizer.Add(self.label, pos=(0,0), flag = wx.EXPAND | wx.ALIGN_CENTER,
+        self.sizer.Add(self.label, pos=(0,0),
+                       flag = wx.EXPAND | wx.ALIGN_CENTER,
                        border=2)
 
-        self.sizer.Add(self.spinCtrl, pos=(0,1), flag = wx.EXPAND | wx.ALIGN_CENTER| wx.ALIGN_RIGHT,
+        self.sizer.Add(self.spinCtrl, pos=(0,1),
+                       flag = wx.EXPAND | wx.ALIGN_CENTER | wx.ALIGN_RIGHT,
                        border=2)
 
 #        self.sizer.Add(self.label, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL,
@@ -189,16 +218,64 @@ class SpinCtrlGroup(object):
 
     def init(self,pmin,pmax,pdefault=None):
 
+        print 'init ', pmin, pmax, pdefault
+        
         self.spinCtrl.SetRange(pmin,pmax)
         if pdefault is None: self.spinCtrl.SetValue(pmin)
         else: self.spinCtrl.SetValue(pdefault)
 
     def spinCtrlHandler(self, evt):
         v = evt.GetPosition() 
+        print 'spinCtrlHandler ', v
         self.fn(v)
 
+class TwinSliderGroup(object):
+    def __init__(self, parent, label, pmin, pmax, fnlo, fnhi, pdefault=None):
+        
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        self.slider_lo = SliderGroup(parent,label,pmin,pmax,fn=self.loSliderHandler,float_arg=True)
+        self.slider_hi = SliderGroup(parent,label,pmin,pmax,fn=self.hiSliderHandler,float_arg=True)
+                
+        sizer.Add(self.slider_lo.sizer, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL,
+                  border=2)
+        sizer.Add(self.slider_hi.sizer, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL,
+                  border=2)
+        
+        self.sizer = sizer
+
+        self.fnlo = fnlo
+        self.fnhi = fnhi
+
+    def init(self,pmin,pmax,pdefault=None):
+
+        self.slider_lo.SetMin(pmin)
+        self.slider_lo.SetMax(pmax)
+        self.slider_hi.SetMin(pmin)
+        self.slider_hi.SetMax(pmax)
+#        if pdefault is None: self.set(pmin)
+#        else: self.set(pdefault)
+                
+    def loSliderHandler(self, v):
+#        self.slider_hi.set(v)
+
+        if self.slider_lo.value() > self.slider_hi.value():
+            self.slider_hi.set(self.slider_lo.value())
+        
+        self.fnlo(v)
+        
+    def hiSliderHandler(self, v):
+
+        if self.slider_hi.value() < self.slider_lo.value():
+            self.slider_lo.set(self.slider_hi.value())
+        
+        self.fnhi(v)
+        
+
+
+        
 class SliderGroup(object):
-    def __init__(self, parent, label, pmin, pmax, fn, pdefault=None):
+    def __init__(self, parent, label, pmin, pmax, fn, pdefault=None, float_arg=False):
         self.sliderLabel = wx.StaticText(parent, label=label)
         self.sliderText = wx.TextCtrl(parent, -1, style=wx.TE_PROCESS_ENTER)
 
@@ -206,27 +283,29 @@ class SliderGroup(object):
 #        self.spinCtrl.SetRange(pmin,pax)       
 #        self.spinCtrl.Bind(wx.EVT_SPINCTRL, self.sliderSpinCtrlHandler)
 
-        self.slider = wx.Slider(parent, -1,style=wx.SL_MIN_MAX_LABELS)#,style=wx.SL_AUTOTICKS | wx.SL_LABELS)
-        self.slider.SetMin(pmin)
-        self.slider.SetMax(pmax)
-
-        if pdefault is None: self.set(pmin)
+        self.float_arg = float_arg
         
+        self.slider_min = 0
+        self.slider_max = 1000
+        
+        self.slider = wx.Slider(parent, -1,style=wx.SL_MIN_MAX_LABELS)#,style=wx.SL_AUTOTICKS | wx.SL_LABELS)
 
-        sizer = wx.GridBagSizer(1,3)
-        sizer.Add(self.sliderLabel, pos=(0,0), 
-                  border=5,flag =  wx.ALIGN_CENTER)#,flag=wx.EXPAND)
-        sizer.Add(self.sliderText, pos=(0,1), 
-                  border=5,flag =  wx.ALIGN_CENTER)#,flag=wx.EXPAND)
-        sizer.Add(self.slider, pos=(0,2),flag=wx.EXPAND | wx.ALIGN_CENTER,border=5)
+        self.init(pmin,pmax,pdefault)
+        
+#        sizer = wx.GridBagSizer(1,3)
+#        sizer.Add(self.sliderLabel, pos=(0,0), 
+#                  border=5,flag =  wx.ALIGN_CENTER)#,flag=wx.EXPAND)
+#        sizer.Add(self.sliderText, pos=(0,1), 
+#                  border=5,flag =  wx.ALIGN_CENTER)#,flag=wx.EXPAND)
+#        sizer.Add(self.slider, pos=(0,2),flag=wx.EXPAND | wx.ALIGN_CENTER,border=5)
 
 
-#        sizer = wx.GridSizer(wx.HORIZONTAL)
-#        sizer.Add(self.sliderLabel, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL,
-#                  border=2)
-#        sizer.Add(self.sliderText, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL,
-#                  border=2)
-#        sizer.Add(self.slider, 1, wx.EXPAND)
+        sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sizer.Add(self.sliderLabel, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL,
+                  border=2)
+        sizer.Add(self.sliderText, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL,
+                  border=2)
+        sizer.Add(self.slider, 1, wx.EXPAND)
         self.sizer = sizer
 
         self.slider.Bind(wx.EVT_SLIDER, self.sliderHandler)
@@ -234,19 +313,46 @@ class SliderGroup(object):
 
         self.fn = fn
 
+    def getValue(self):
+
+        if self.float_arg:        
+            return float(self.sliderText.GetValue())
+        else:
+            return int(self.sliderText.GetValue())
+            
     def init(self,pmin,pmax,pdefault=None):
 
-        self.slider.SetMax(pmin)
-        self.slider.SetMax(pmax)
+        self.pmin = pmin
+        self.pmax = pmax
+        
+        if not self.float_arg:
+            self.slider_min = pmin
+            self.slider_max = pmax
+
+        self.slider.SetMin(self.slider_min)
+        self.slider.SetMax(self.slider_max)
+
         if pdefault is None: self.set(pmin)
         else: self.set(pdefault)
+        
+#        if pdefault is None: self.set(pmin)            
+#        self.slider.SetMin(pmin)
+#        self.slider.SetMax(pmax)
+#        if pdefault is None: self.set(pmin)
+#        else: self.set(pdefault)
         
     def disable(self):
         self.slider.Enable(False)
         self.sliderText.Enable(False)
         
     def sliderHandler(self, evt):
-        v = evt.GetInt() 
+        v = evt.GetInt()
+
+        if self.float_arg:
+            v = self.pmin + float(v)/1000.*(self.pmax-self.pmin)
+
+        print 'handler ', evt.GetInt(), v
+            
         self.set(v)
         self.fn(v)
         
@@ -254,10 +360,26 @@ class SliderGroup(object):
         v = self.sliderText.GetValue()
         self.set(v)
         self.fn(v)
+
+    def value(self):
+
+        v = self.slider.GetValue()
+        if self.float_arg:
+            return self.pmin + float(v)/1000.*(self.pmax-self.pmin)
+        else: return v
         
     def set(self, value):
         self.sliderText.SetValue('%s'%value)
-        self.slider.SetValue(int(value))
+
+        if self.float_arg:
+            v = 1000*((value-self.pmin)/(self.pmax-self.pmin))
+            #v = min(max(v,0),1000)
+
+            print 'set ', v, value
+            
+            self.slider.SetValue(int(v))
+        else:
+            self.slider.SetValue(int(value))
 
 class FITSViewerApp(wx.App):
 
@@ -294,13 +416,20 @@ class FITSViewerFrame(wx.Frame):
             self.hdulist.append(pyfits.open(f))
             self.show_image.append(True)
             self.image_window.append(ImagePanel(self,i))
+            
         self.hdu = hdu
         self.slice = 0
         self.nbin = 1
+        self._projx_width = 10.
+        self._projx_center = 50.
+        self._projy_width = 10.
+        self._projy_center = 50.
 
-        self.projx_window = PlotPanel(self,12,0)
-        self.projy_window = PlotPanel(self,13,1)
+        self.projx_window = PlotPanel(self,12,0,'LAT Projection','','')
+        self.projy_window = PlotPanel(self,13,1,'LON Projection','','')
 
+#        self.ctrl_slice = SliderGroup(self,'Slice',0,6,fn=self.update_slice)
+        
         self.ctrl_slice = SpinCtrlGroup(self,'Slice',0,6,fn=self.update_slice)
         self.ctrl_nbins = SpinCtrlGroup(self,'NBins',0,6,fn=self.update_nbin)
         self.ctrl_hdu = SpinCtrlGroup(self,'HDU',0,6,fn=self.update_hdu)
@@ -310,15 +439,23 @@ class FITSViewerFrame(wx.Frame):
         
  #       self.spinctrl0.Bind(wx.EVT_SPINCTRL, lambda evt: self.update_slice(evt.GetPosition()))
 
-#        self.slider0 = SliderGroup(self, 'Slice',0,6,
-#                                   fn=self.update_slice)
-#        self.slider2 = SliderGroup(self, 'NBins',1,6,
-#                                   fn=self.update_nbin)
-#        self.slider1 = SliderGroup(self,'HDU',0,6,
-#                                   fn=self.update_hdu)
+        self.ctrl_projx_center = SliderGroup(self,'X Center',0,100,
+                                             self.update_projx_center,
+                                             50.,
+                                             float_arg=True)
 
-        self.slider_rebin = SliderGroup(self,'REBIN',1,4,
-                                        fn=self.update_rebin)
+        self.ctrl_projx_width = SliderGroup(self,'X Width',0,100,
+                                            self.update_projx_width,
+                                            100.,
+                                            float_arg=True)
+
+        
+#        self.ctrl_projx = TwinSliderGroup(self,'X Range',0,10,
+#                                          fnlo=self.update_projx_lo,
+#                                          fnhi=self.update_projx_hi)
+        
+        self.ctrl_rebin = SpinCtrlGroup(self,'Rebin',1,4,
+                                          fn=self.update_rebin)
 
         self.ctrl_hdu.init(0,len(self.hdulist[0])-1)
 
@@ -361,9 +498,23 @@ class FITSViewerFrame(wx.Frame):
             sb0sizer.Add(cb, 0,
                          wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
 
-        sb1sizer.Add(self.slider_rebin.sizer, 0,
+        # Projection Controls
+
+        cb_proj_norm = wx.CheckBox(self, label="Normalize")
+        cb_proj_norm.Bind(wx.EVT_CHECKBOX, self.toggle_proj_norm)
+            
+        sb1sizer.Add(self.ctrl_rebin.sizer, 0,
                      wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
 
+        sb1sizer.Add(self.ctrl_projx_center.sizer, 0,
+                     wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
+
+        sb1sizer.Add(self.ctrl_projx_width.sizer, 0,
+                     wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
+
+        sb1sizer.Add(cb_proj_norm, 0,
+                     wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
+        
         tc0 = wx.TextCtrl(self, -1, style=wx.TE_PROCESS_ENTER)
 
         bt0 = wx.Button(self, label="Update")
@@ -446,7 +597,7 @@ class FITSViewerFrame(wx.Frame):
         for w in self.image_window: w.set_slice(value)
         self.projx_window.set_slice(value)
         self.projy_window.set_slice(value)
-        self.update()
+#        self.update()
 
     def update_nbin(self,value):
 
@@ -455,14 +606,48 @@ class FITSViewerFrame(wx.Frame):
         for w in self.image_window: w.set_nbin(value)
         self.projx_window.set_nbin(value)
         self.projy_window.set_nbin(value)
-        self.update()
+#        self.update()
 
     def update_rebin(self,value):
         
-#        self.projx_window.set_rebin(value)
+        self.projx_window.set_rebin(value)
         self.projy_window.set_rebin(value)
-        self.update()
+#        self.update()
 
+    def update_projx_lo(self,value):
+        
+        for w in self.image_window: w.set_projx_range_lo(value)
+        self.projx_window.set_proj_range_lo(value)
+        for w in self.image_window: w.update_lines()
+
+    def update_projx_hi(self,value):
+        
+        for w in self.image_window: w.set_projx_range_hi(value)
+        self.projx_window.set_proj_range_hi(value)
+        for w in self.image_window: w.update_lines()
+
+    def update_projx_center(self,value):
+
+        self._projx_center = value
+        self.update_projx()
+
+    def update_projx_width(self,value):
+
+        self._projx_width = value
+        self.update_projx()
+
+    def update_projx(self):
+
+        projx_lo = self._projx_center - self._projx_width*0.5
+        projx_hi = self._projx_center + self._projx_width*0.5
+
+        print 'update projx ', projx_lo, projx_hi
+        
+        for w in self.image_window: w.set_projx_range(projx_lo,projx_hi)
+        self.projx_window.set_proj_range(projx_lo,projx_hi)
+        for w in self.image_window: w.update_lines()
+        self.projx_window.update()
+        
     def update_smoothing(self, e):
         
         sender = e.GetEventObject()
@@ -473,7 +658,7 @@ class FITSViewerFrame(wx.Frame):
         else: 
             self.image_window[0].smooth = False
 
-        self.update()
+#        self.update()
 
     def toggle_image(self, e, i):
 
@@ -485,6 +670,18 @@ class FITSViewerFrame(wx.Frame):
 
         self.sizer_image.Layout()
 #        self.update()
+
+    def toggle_proj_norm(self, e):
+
+        sender = e.GetEventObject()
+        if sender.GetValue():
+            self.projx_window.set_norm(True)
+            self.projy_window.set_norm(True)
+        else:
+            self.projx_window.set_norm(False)
+            self.projy_window.set_norm(False)
+        self.projx_window.update()
+        self.projy_window.update()
 
     def toggle_smoothing(self, e):
         
@@ -524,10 +721,16 @@ class BasePanel(wx.Panel):
     def __init__(self, parent,fignum):
         wx.Panel.__init__(self, parent, -1)
 
+        self.slice = 0
+        self.nbin = 1
+        self.rebin = 0
+        
     def update_style(self,k,v):
         for i, s in enumerate(self._style):
             self._style[i][k] = v
 
+
+            
 class ImagePanel(BasePanel):
 
     def __init__(self, parent,fignum):
@@ -551,14 +754,28 @@ class ImagePanel(BasePanel):
         self.SetSizer(sizer)
         self.Fit()
         self._ax = None
+        self._projx_lines = [None,None]
+        self._projy_lines = [None,None]
         self._im = []
         self._style = []
         self._axim = []
         self.smooth = False
-#        self.toolbar.update() # Not sure why this is needed - ADS
+
+        self.projx_range = [None, None]
+        self.projy_range = [None, None]
         
-        self.slice = 0
-        self.nbin = 1
+#        self.toolbar.update() # Not sure why this is needed - ADS
+
+        
+    def set_projx_range_lo(self,value):
+        self.projx_range[0] = value
+
+    def set_projx_range_hi(self,value):
+        self.projx_range[1] = value
+
+    def set_projx_range(self,lovalue,hivalue):
+        self.projx_range[0] = lovalue
+        self.projx_range[1] = hivalue
 
     def draw(self):
 
@@ -600,31 +817,48 @@ class ImagePanel(BasePanel):
     def set_nbin(self,value):
         self.nbin = int(value)
 
+
     def update(self):
+
+        self.update_image()
+        self.update_lines()
+        
+    def update_image(self):
 
         self.scf()
 
         bin_range = [self.slice,self.slice+self.nbin]
 
-        cm = []
+        self._cm = []
 
         for im in self._im:
             if isinstance(im,SkyCube):
-                cm.append(im.marginalize(2,bin_range=bin_range))
+                self._cm.append(im.marginalize(2,bin_range=bin_range))
             else:
-                cm.append(im)
+                self._cm.append(im)
 
-        for i in range(len(cm)):
-            if self.smooth: cm[i] = cm[i].smooth(0.1)
+        for i in range(len(self._cm)):
+            if self.smooth: self._cm[i] = self._cm[i].smooth(0.1)
 
-        if len(cm) == 0: return
+        if len(self._cm) == 0: return
 
+        cm = self._cm
+        
+        cat = Catalog.get()
+        
         if len(self._axim) == 0:
 
-            axim = cm[0].plot(show_catalog=True,**self._style[0])
+            axim = cm[0].plot(**self._style[0])
 
+            cat.plot(cm[0],ax=axim)
+            
             self._axim.append(axim)
             self._ax = plt.gca()
+
+            
+            
+            
+            
             plt.colorbar(axim,orientation='horizontal',shrink=0.7,pad=0.15,
                          fraction=0.05)
 
@@ -638,16 +872,47 @@ class ImagePanel(BasePanel):
         else:
             self._axim[0].set_norm(Normalize())
 
-#        self._axim.set_clim(0,3)
         self.canvas.draw()
-        self._fig.canvas.draw()
-
-        self.toolbar.update()
+#        self._fig.canvas.draw()
+#        self.toolbar.update()
 #        self._fig.canvas.draw_idle()
 
+    def update_lines(self):
+
+        print 'update lines'
+        
+        cm = self._cm
+
+        if self._projx_lines[0]:            
+            self._ax.lines.remove(self._projx_lines[0])
+
+        if self._projx_lines[1]:
+            self._ax.lines.remove(self._projx_lines[1])
+
+        if self._projy_lines[0]:            
+            self._ax.lines.remove(self._projy_lines[0])
+
+        if self._projy_lines[1]:
+            self._ax.lines.remove(self._projy_lines[1])
+            
+        ixlo = max(0,self.projx_range[0])
+        ixhi = max(0,self.projx_range[1])
+
+        iylo = max(0,self.projy_range[0])
+        iyhi = max(0,self.projy_range[1])
+
+
+        self._projx_lines[0] = self._ax.axhline(ixlo,color='w')
+        self._projx_lines[1] = self._ax.axhline(ixhi,color='w')
+
+        self._projy_lines[0] = self._ax.axvline(iylo,color='w')
+        self._projy_lines[1] = self._ax.axvline(iyhi,color='w')
+            
+        self.canvas.draw()
+        
 class PlotPanel(BasePanel):
 
-    def __init__(self, parent,fignum,pindex):
+    def __init__(self, parent,fignum,pindex,title,xlabel,ylabel):
         BasePanel.__init__(self, parent, fignum)
 #        wx.Panel.__init__(self, parent, -1)
 
@@ -673,12 +938,13 @@ class PlotPanel(BasePanel):
         self._im = []
         self._style = []
         self._lines = []
+        self._title = title
+        self._xlabel = xlabel
+        self._ylabel = ylabel
+        self._proj_range = None
+        self._norm = False
 #        self.toolbar.update() # Not sure why this is needed - ADS
         
-        self.slice = 0
-        self.nbin = 1
-        self.rebin = 0
-
     def clear(self):        
         self._im = []
         self._style = []
@@ -688,6 +954,9 @@ class PlotPanel(BasePanel):
 
         style.setdefault('linestyle','None')
 
+        if self._proj_range is None:
+            self._proj_range = [0,im.axis(self._pindex).nbins()]
+        
         self._im.append(im)
         self._style.append(style)
 
@@ -703,26 +972,29 @@ class PlotPanel(BasePanel):
     def set_rebin(self,value):
         self.rebin = int(value)
 
-    def draw(self):
+    def set_proj_range(self,lo,hi):
+        self._proj_range = [lo,hi]
 
-        bin_range = [self.slice,self.slice+self.nbin]
-
-        if isinstance(self._im,SkyCube):
-            im = self._im.marginalize(2,bin_range=bin_range)
-        else:
-            im = self._im
-
-        self.window1.scf()
-        self._lines = im.project(self._pindex).plot()
-        self._ax = plt.gca()
-        self._ax.grid(True)
-
+    def set_norm(self,v):
+        self._norm = v
+        
     def update(self):
 
         self.scf()
 
         bin_range = [self.slice,self.slice+self.nbin]
 
+        print 'proj_range ', self._proj_range
+
+        proj_bin_range = []
+        proj_bin_range += [max(0,np.round(self._proj_range[0]))]
+        proj_bin_range += [np.round(self._proj_range[1])]
+
+        print 'proj_bin_range ', proj_bin_range
+        
+#        proj_bin_range = [self._im[0].axis(self._pindex).binToVal(self._proj_range[0])[0],
+#                          self._im[0].axis(self._pindex).binToVal(self._proj_range[1])[0]]
+        
         pcm = []
 
         for im in self._im:
@@ -731,13 +1003,19 @@ class PlotPanel(BasePanel):
             else:
                 cm = im
 
-            pcm.append(cm.project(self._pindex).rebin(self.rebin))
+            h = cm.project(self._pindex,
+                           bin_range=proj_bin_range).rebin(self.rebin)
+
+            if self._norm: h = h.normalize()
+            
+            pcm.append(h)
 
         if len(self._lines) == 0:
 
             for i, p in enumerate(pcm): self._lines.append(p.plot(**self._style[i]))
             self._ax = plt.gca()
             self._ax.grid(True)
+            self._ax.set_title(self._title)
             return
 
         for i, p in enumerate(pcm):
@@ -747,9 +1025,8 @@ class PlotPanel(BasePanel):
         self._ax.autoscale(axis='y')
 
         self.canvas.draw()
-        self._fig.canvas.draw()
-
-        self.toolbar.update()
+#        self._fig.canvas.draw()
+#        self.toolbar.update()
 #        self._fig.canvas.draw_idle()
 
 class FourierDemoWindow(wx.Window, Knob):

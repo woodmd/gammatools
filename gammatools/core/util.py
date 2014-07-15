@@ -253,6 +253,10 @@ class Configurable(object):
 
         self._config = {}
         self._default_config = {}
+
+    @property
+    def config(self):
+        return self._config
         
     @classmethod
     def test(cls):
