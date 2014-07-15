@@ -7,7 +7,8 @@ import cPickle as pickle
 import gzip
 import bisect
 import inspect
-
+from scipy.interpolate import UnivariateSpline
+from scipy.optimize import brentq
 
 class Units(object):
 
@@ -386,6 +387,19 @@ def integrate(fn,lo,hi,npoints):
     x = 0.5*(edges[:-1] + edges[1:])
     w = edges[1:] - edges[:-1]
     return np.sum(fn(x)*w)
+
+def find_root(x,y,y0):
+    """Solve for the x coordinate at which f(x)-y=0 where f(x) is
+    a smooth interpolation of the histogram contents."""
+
+    fn = UnivariateSpline(x,y-y0,k=2,s=0)
+    return brentq(lambda t: fn(t),x[0],x[-1])
+
+def find_fn_root(fn,x0,x1,y0):
+    """Solve for the x coordinate at which f(x)-y=0 where f(x) is
+    a smooth interpolation of the histogram contents."""
+
+    return brentq(lambda t: fn(t)-y0,x0,x1)
 
 def interpolate(x0,z,x):
     """Perform linear interpolation in 1 dimension.
