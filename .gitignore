@@ -3,3 +3,4 @@
 .idea
 .coverage
 build/
+*/.ipynb_checkpoints
