@@ -37,7 +37,7 @@ parser.add_argument('--show', default = False,
                     action='store_true',
                     help = 'Show plots interactively.')
 
-IRFManager.configure(parser)
+IRFManager.add_arguments(parser)
 
 args = parser.parse_args()
 
