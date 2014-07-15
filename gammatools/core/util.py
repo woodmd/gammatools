@@ -466,11 +466,11 @@ def interpolatend(x0,z,x):
 
     Parameters
     ----------
-    x0:  List of N arrays defining mesh coordinates in each of N dimensions.
+    x0:  List of arrays defining mesh coordinates in each of N dimensions.
 
     z: N-dimesional array of scalar values evaluated on the coordinate
     mesh defined by x0.  The number of elements along each dimension must
-    equal to the corresponding number of mesh points in x0.
+    equal to the corresponding number of mesh points in x0 (N_tot = Prod_i N_i).
 
     x: NxM numpy array specifying the M points in N-dimensional space at
     which the interpolation should be evaluated.
