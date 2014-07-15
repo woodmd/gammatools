@@ -7,7 +7,7 @@
 
 @author Matthew Wood       <mdwood@slac.stanford.edu>
 """
-__source__   = "$Source: /nfs/slac/g/glast/ground/cvs/users/mdwood/python/catalog.py,v $"
+
 __author__   = "Matthew Wood"
 __date__     = "01/01/2013"
 __date__     = "$Date: 2013/10/08 01:03:01 $"
@@ -19,8 +19,12 @@ import pyfits
 import os
 import yaml
 import copy
+import re
+
+import matplotlib.pyplot as plt
 
 import gammatools
+from gammatools.core.util import save_object, load_object, gal2eq, eq2gal
 from gammatools.core.algebra import Vector3D
 
 
@@ -103,8 +107,11 @@ class CatalogSource(object):
 
 class Catalog(object):
 
+
+    cache = {}
+    
     catalog_files = { '2fgl' : os.path.join(gammatools.PACKAGE_ROOT,
-                                            'data/gll_psc_v08.fit') }
+                                            'data/gll_psc_v08.P.gz') }
 
     src_name_cols = ['Source_Name',
                      'ASSOC1','ASSOC2','ASSOC_GAM1','ASSOC_GAM2','ASSOC_TEV']
@@ -137,8 +144,22 @@ class Catalog(object):
         return self._src_data
 
     @staticmethod
-    def create(name='2fgl'):
-        return Catalog.create_from_fits(Catalog.catalog_files[name])
+    def get(name='2fgl'):
+
+        if not name in Catalog.cache:
+            Catalog.cache[name] = Catalog.create(Catalog.catalog_files[name])
+
+        return Catalog.cache[name]
+    
+    @staticmethod
+    def create(filename):
+
+        if re.search('\.fits$',filename):        
+            return Catalog.create_from_fits(filename)
+        elif re.search('(\.P|\.P\.gz)',filename):
+            return load_object(filename)
+        else:
+            sys.exit(1)
 
     @staticmethod
     def create_from_fits(fitsfile=None):
@@ -200,20 +221,58 @@ class Catalog(object):
         pickle.dump(self,fp,protocol = pickle.HIGHEST_PROTOCOL)
         fp.close()
 
-    def load(self,infile):
+    def plot(self,im,src_color='k',marker_threshold=0,
+             label_threshold=20., ax=None,**kwargs):
 
-        import cPickle as pickle
-        c = pickle.load(open(infile,'rb'))
+        if ax is None: ax = plt.gca()
         
-        self._src_data = c._src_data
-        self._src_index = c._src_index
-        self._src_radec = c._src_radec
+        if im.axis(0)._coordsys == 'gal':
+            ra, dec = gal2eq(im.lon,im.lat)
+        else:
+            ra, dec = im.lon, im.lat
 
-        for i, s in enumerate(self._src_data):
-            src = CatalogSource(self._src_data[i])            
-            for n in src.names(): self._src_index[n] = i
+        #srcs = cat.get_source_by_position(ra,dec,self._roi_radius_deg)
+        srcs = self.get_source_by_position(ra,dec,10.0)
 
+        src_lon = []
+        src_lat = []
 
+        labels = []
+        signif_avg = []
+        
+        for s in srcs:
+            
+            print s['RAJ2000'], s['DEJ2000'], s['GLON'], s['GLAT']
+
+            src_lon.append(s['RAJ2000'])
+            src_lat.append(s['DEJ2000'])
+            labels.append(s['Source_Name'])
+            signif_avg.append(s['Signif_Avg'])
+        
+        if im.axis(0)._coordsys == 'gal':
+            src_lon, src_lat = eq2gal(src_lon,src_lat)
+            
+            
+        pixcrd = im.wcs.wcs_sky2pix(src_lon,src_lat, 0)
+
+        for i in range(len(labels)):
+
+            if signif_avg[i] > label_threshold:             
+                plt.gca().text(pixcrd[0][i],pixcrd[1][i],labels[i],
+                               color=src_color,size=8,clip_on=True)
+
+            if signif_avg[i] > marker_threshold:      
+
+                print i, pixcrd[0][i],pixcrd[1][i]
+      
+                plt.gca().plot(pixcrd[0][i],pixcrd[1][i],
+                               linestyle='None',marker='+',
+                               color='g', markerfacecolor = 'None',
+                               markeredgecolor=src_color,clip_on=True)
+        
+        plt.gca().set_xlim(im.axis(0).lo_edge(),im.axis(0).hi_edge())
+        plt.gca().set_ylim(im.axis(1).lo_edge(),im.axis(1).hi_edge())
+        
     def save_to_yaml(self,outfile):
 
         print 'Saving catalog ', outfile
@@ -259,36 +318,38 @@ SourceCatalog = { 'vela' :     (128.83606354, -45.17643181),
 
 if __name__ == '__main__':
 
-    from optparse import Option
-    from optparse import OptionParser
+    import argparse
+    import re
 
-    usage = "usage: %prog [options] [catalog file]"
+    usage = "usage: %(prog)s [options] [catalog FITS file]"
     description = "Load a FITS catalog and write to an output file."
-    parser = OptionParser(usage=usage,description=description)
+    parser = argparse.ArgumentParser(usage=usage,description=description)
 
-    parser.add_option('--output', default = None, type='string',
-                      help = 'Output file')
-
-    parser.add_option('--source', default = None, type='string',
-                      help = 'Output file')
-
-    parser.add_option('--roi_radius', default = 10., type='float',
-                      help = 'Output file')
+    parser.add_argument('files', nargs='+')
     
-    parser.add_option('--format', default = 'pickle', 
-                      choices=['pickle','yaml'],
-                      help = 'Set output file format.')
+    parser.add_argument('--output', default = None, 
+                        help = 'Output file')
+    
+    parser.add_argument('--source', default = None, 
+                        help = 'Output file')
+    
+    parser.add_argument('--roi_radius', default = 10., type=float,
+                        help = 'Output file')
 
-    (opts, args) = parser.parse_args()
+    args = parser.parse_args()
 
 
-    if len(args) == 1:           
-        cat = Catalog.load_from_fits(sys.argv[-1])
+    if len(args.files) == 1:           
+        cat = Catalog.create_from_fits(args.files[0])
     else:
         cat = Catalog()
 
-    if not opts.source is None:
-        src = CatalogSource(cat.get_source_by_name(opts.source))
+#    if not opts.source is None:
+#        src = CatalogSource(cat.get_source_by_name(opts.source))
 
-    if not opts.output is None:
-        cat.save(opts.output,opts.format)
+    if not args.output is None:
+
+        print 
+        
+        if re.search('\.P$',args.output):
+            save_object(cat,args.output,compress=True)

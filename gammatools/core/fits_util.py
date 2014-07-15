@@ -121,8 +121,8 @@ class FITSImage(HistogramND):
         self._roi_radius_deg = roi_radius_deg
         self._header = self._wcs.to_header(True)
         
-        self._ra = self._header['CRVAL1']
-        self._dec = self._header['CRVAL2']
+        self._lon = self._header['CRVAL1']
+        self._lat = self._header['CRVAL2']
         
         self._roi_msk = np.empty(shape=self._counts.shape[:2],dtype=bool)
         self._roi_msk.fill(False)
@@ -135,7 +135,7 @@ class FITSImage(HistogramND):
         
         self._pix_lon, self._pix_lat = self._wcs.wcs_pix2sky(xpix,ypix, 0)
 
-        self.add_roi_msk(self._ra,self._dec,roi_radius_deg,True,
+        self.add_roi_msk(self._lon,self._lat,roi_radius_deg,True,
                          self.axis(1)._coordsys)
 
     def __getnewargs__(self):
@@ -189,7 +189,23 @@ class FITSImage(HistogramND):
         mdims = np.array(mdims,ndmin=1,copy=True)
         pdims = np.setdiff1d(self._dims,mdims)
         return self.project(pdims,bin_range)
-        
+
+    @property
+    def lat(self):
+        return self._lat
+
+    @property
+    def lon(self):
+        return self._lon
+
+    @property
+    def roi_radius(self):
+        return self._roi_radius_deg
+
+    @property
+    def wcs(self):
+        return self._wcs
+    
     @staticmethod
     def createFromHDU(hdu):
         """Create an SkyCube or SkyImage object from a FITS HDU."""
@@ -439,7 +455,7 @@ class SkyImage(FITSImage):
 
         return np.vstack((skycrd[0],skycrd[1]))
 
-    def smooth(self,sigma):
+    def smooth(self,sigma,compute_var=False):
         sigma /= np.abs(self._axes[0]._delta)
         
         from scipy import ndimage
@@ -448,67 +464,26 @@ class SkyImage(FITSImage):
         im._counts = ndimage.gaussian_filter(self._counts, sigma=sigma,
                                              mode='nearest')
 
+        if compute_var:
+            fn = lambda t, s: 1./(2*np.pi*s**2)*np.exp(-t**2/(s**2*2.0))
+
+            nk =41
+            b = np.abs(np.linspace(0,nk-1,nk) - (nk-1)/2.)
+            k = np.zeros((nk,nk)) + b[np.newaxis,:] + b[:,np.newaxis]
+            
+            k = fn(k,sigma*np.sqrt(2.))
+            k /= np.sum(k)
+
+            var = ndimage.convolve(self._counts, k**2, mode='wrap')
+
+            im._var = var
+            
+
         return im
-
-    def plot_catalog(self,src_color='k',marker_threshold=0,
-                     label_threshold=20., **kwargs):
-        
-        if self._axes[0]._coordsys == 'gal':
-            ra, dec = gal2eq(self._ra,self._dec)
-        else:
-            ra, dec = self._ra, self._dec
-            
-        cat = Catalog.create()
-
-        
-
-        print self._ra,self._dec, ra, dec, self._roi_radius_deg
-
-        #srcs = cat.get_source_by_position(ra,dec,self._roi_radius_deg)
-        srcs = cat.get_source_by_position(ra,dec,10.0)
-
-        src_lon = []
-        src_lat = []
-
-        labels = []
-        signif_avg = []
-        
-        for s in srcs:
-            
-            print s['RAJ2000'], s['DEJ2000'], s['GLON'], s['GLAT']
-
-            src_lon.append(s['RAJ2000'])
-            src_lat.append(s['DEJ2000'])
-            labels.append(s['Source_Name'])
-            signif_avg.append(s['Signif_Avg'])
-        
-        if self._axes[0]._coordsys == 'gal':
-            src_lon, src_lat = eq2gal(src_lon,src_lat)
-            
-            
-        pixcrd = self._wcs.wcs_sky2pix(src_lon,src_lat, 0)
-
-        for i in range(len(labels)):
-
-            if signif_avg[i] > label_threshold:             
-                plt.gca().text(pixcrd[0][i],pixcrd[1][i],labels[i],
-                               color=src_color,size=8,clip_on=True)
-
-            if signif_avg[i] > marker_threshold:      
-
-                print i, pixcrd[0][i],pixcrd[1][i]
-      
-                plt.gca().plot(pixcrd[0][i],pixcrd[1][i],
-                               linestyle='None',marker='+',
-                               color='g', markerfacecolor = 'None',
-                               markeredgecolor=src_color,clip_on=True)
-        
-        plt.gca().set_xlim(self.axis(0).lo_edge(),self.axis(0).hi_edge())
-        plt.gca().set_ylim(self.axis(1).lo_edge(),self.axis(1).hi_edge())
                     
     def plot_circle(self,rad_deg,radec=None,**kwargs):
 
-        if radec is None: radec = (self._ra,self._dec)
+        if radec is None: radec = (self._lon,self._lat)
 
         lon,lat = get_circle(radec[0],radec[1],rad_deg)
         xy =  self._wcs.wcs_sky2pix(lon,lat, 0)
@@ -529,7 +504,7 @@ class SkyImage(FITSImage):
         
         im = ax.imshow(self._counts.T,#np.power(self._counts.T,1./3.),
                        interpolation='nearest',origin='lower',norm=norm,
-                              extent=[np.radians(-180.),np.radians(180),np.radians(-90),np.radians(90)])
+                       extent=[np.radians(-180.),np.radians(180),np.radians(-90),np.radians(90)])
                       # extent=[self.axis(0).edges()[0],self.axis(0).edges()[-1],
                       #         self.axis(1).edges()[0],self.axis(1).edges()[-1]])
 
@@ -564,12 +539,19 @@ class SkyImage(FITSImage):
         counts[self._roi_msk.T] = np.min(self._counts)-1.0
 
 #        print 'vmin ', vmin, np.min(self._counts)-1.0, np.sum(self._roi_msk)
+
+        print self.axis(0).edges()[0]
+        print self.axis(0).edges()[-1]
+
+        print self.axis(1).edges()[0]
+        print self.axis(1).edges()[-1]
         
         kw = { 'interpolation' : 'nearest', 'origin' : 'lower','norm' : norm,
-                   'extent' : [self.axis(0).edges()[0],
-                               self.axis(0).edges()[-1],
-                               self.axis(1).edges()[0],
-                               self.axis(1).edges()[-1]] }
+               'vmin' : None, 'vmax' : None }
+#               'extent' : [self.axis(0).edges()[0],
+#                           self.axis(0).edges()[-1],
+#                           self.axis(1).edges()[0],
+#                           self.axis(1).edges()[-1]] }
 #                   'vmin' : vmin }
 
         update_dict(kw,kwargs)
