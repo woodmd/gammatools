@@ -12,6 +12,7 @@ import numpy as np
 import copy
 import re
 import abc
+import inspect
 from scipy.interpolate import UnivariateSpline
 from histogram import Histogram
 from util import expand_aliases, get_parameters
@@ -19,14 +20,21 @@ from minuit import Minuit
 from parameter_set import Parameter, ParameterSet
 import matplotlib.pyplot as plt
 
-class ParamFn(object):
-    """Class for a parameterized function."""
+class ParamFnBase(object):
+    """Base class for a parameterized function."""
 
     def __init__(self, param = None, name = None):
 
         if param is None: self._param = ParameterSet()
         else: self._param = param
         self._name = name
+
+    @staticmethod
+    def create(npar):
+
+        fn = ParamFn()
+        for i in range(npar):
+            pass
 
     def setName(self,name):
         """Set the name of the function."""
@@ -48,14 +56,41 @@ class ParamFn(object):
         else: return self._param
 
     def update(self,pset):
-        """Update the parameters."""
+        """Update the parameters of this function."""
         self._param.update(pset)
 
-class Model(ParamFn):    
+class ParamFn(ParamFnBase):
+
+    def __init__(self,fn,pset,name=None):
+        ParamFnBase.__init__(self,pset,name)
+        self._fn = fn
+
+    @staticmethod
+    def create(fn,p0):
+
+        # Construct a parameter set from inspection of the input function
+        npar = len(inspect.getargspec(fn)[0])
+        pset = ParameterSet()
+        for i in range(npar): pset.createParameter(p0[i])
+        return ParamFn(fn,pset)
+
+    def __call__(self,*args):
+
+        pset = self.param(True)
+        pset.update(*args)
+
+        return self._fn(*pset.list())
+
+class PDF(ParamFnBase):    
+    """Abstract base class for a probability distribution function.
+    All derived classes must implement an _eval_pdf method which returns
+    the function amplitude at a given point in the function phase
+    space."""
+
     __metaclass__  = abc.ABCMeta
 
     def __init__(self, pset=None, name=None):
-        ParamFn.__init__(self,pset,name)
+        ParamFnBase.__init__(self,pset,name)
 
     def __call__(self,x,p=None):
         return self.eval(x,p)
@@ -67,10 +102,10 @@ class Model(ParamFn):
 
         x = np.array(x,ndmin=1)
 
-        return self._eval(x,pset)
+        return self._eval_pdf(x,pset)
     
     @abc.abstractmethod
-    def _eval(self,x,p):
+    def _eval_pdf(self,x,p):
         pass
 
     def set_norm(self,norm,xlo,xhi):
@@ -78,7 +113,7 @@ class Model(ParamFn):
         n = self.integrate(xlo,xhi)
 
         for i, p in enumerate(self._param):
-            self._param[i].set(self._param[i].value()*norm/n)
+            self._param[i].set(self._param[i].value*norm/n)
 
     def integrate(self,xlo,xhi,p=None):
         
@@ -94,7 +129,7 @@ class Model(ParamFn):
 
         w = xhi-xlo
         xc = 0.5*(xhi+xlo)
-        return w*self._eval(xc,p)
+        return w*self._eval_pdf(xc,p)
 
     def histogram(self,edges,p=None):
         
@@ -124,10 +159,10 @@ class Model(ParamFn):
     def cdf(self,x,p=None):    
         return self.integrate(np.zeros(shape=x.shape),x,p)
 
-class ScaledHistogramModel(Model):
+class ScaledHistogramModel(PDF):
 
     def __init__(self,h,pset,name=None):
-        Model.__init__(self,pset,name)
+        PDF.__init__(self,pset,name)
         self._h = copy.deepcopy(h)
     
     @staticmethod
@@ -155,7 +190,7 @@ class ScaledHistogramModel(Model):
         if a.shape[1] > 1: a = a[...,np.newaxis]        
         return a[0]*self._h.counts()
     
-    def _eval(self,x,pset):
+    def _eval_pdf(self,x,pset):
         
         a = pset.array()
         if a.shape[1] > 1: a = a[...,np.newaxis]        
@@ -167,9 +202,9 @@ class ScaledHistogramModel(Model):
         if a.shape[1] > 1: a = a[...,np.newaxis]        
         return a[0]*self._h.counts()
     
-class ScaledModel(Model):
+class ScaledModel(PDF):
     def __init__(self,model,pset,expr,name=None):
-        Model.__init__(self,name=name)
+        PDF.__init__(self,name=name)
 
 #        pset = model.param()
         par_names = get_parameters(expr)
@@ -198,10 +233,10 @@ class ScaledModel(Model):
         if self._expr is None: return self._model.integrate(xlo,xhi,pset)
         else: return self._model.integrate(xlo,xhi,pset)*eval(self._expr)
 
-class CompositeSumModel(Model):
+class CompositeSumModel(PDF):
 
     def __init__(self,models=None):
-        Model.__init__(self)
+        PDF.__init__(self)
         self._models = []
 
         if not models is None:
@@ -233,7 +268,7 @@ class CompositeSumModel(Model):
             else: s += v
         return s
         
-    def _eval(self,x,pset=None):
+    def _eval_pdf(self,x,pset=None):
 
         s = None
         for i, m in enumerate(self._models):
@@ -289,7 +324,7 @@ def polyval(c,x):
     else:
         return c0.reshape(c0.shape[1:])
 
-class GaussFn(Model):
+class GaussFn(PDF):
 
     @staticmethod
     def create(norm,mu,sigma,pset=None):
@@ -300,7 +335,7 @@ class GaussFn(Model):
         p2 = pset.createParameter(sigma,'sigma')
         return GaussFn(ParameterSet([p0,p1,p2]))
 
-    def _eval(self,x,pset):
+    def _eval_pdf(self,x,pset):
         return self.evals(x,pset.array())
 
     @staticmethod
@@ -308,7 +343,7 @@ class GaussFn(Model):
         sig2 = a[2]**2        
         return a[0]/np.sqrt(2.*np.pi*sig2)*np.exp(-(x-a[1])**2/(2.0*sig2))
 
-class Gauss2DProjFn(Model):
+class Gauss2DProjFn(PDF):
 
     @staticmethod
     def create(norm,sigma,pset=None):
@@ -318,7 +353,7 @@ class Gauss2DProjFn(Model):
         p1 = pset.createParameter(sigma,'sigma')
         return Gauss2DProjFn(ParameterSet([p0,p1]))
 
-    def _eval(self,x,pset):
+    def _eval_pdf(self,x,pset):
         return self.evals(x,pset.array())
 
     @staticmethod
@@ -326,7 +361,7 @@ class Gauss2DProjFn(Model):
         sig2 = a[1]**2        
         return a[0]/(2.*np.pi*sig2)*np.exp(-x**2/(2.0*sig2))
 
-class Gauss2DFn(Model):
+class Gauss2DFn(PDF):
 
     @staticmethod
     def create(norm,mux,muy,sigma,pset=None):
@@ -338,7 +373,7 @@ class Gauss2DFn(Model):
         p3 = pset.createParameter(sigma,'sigma')
         return Gauss2DFn(ParameterSet([p0,p1,p2,p3]))
 
-    def _eval(self,x,pset):
+    def _eval_pdf(self,x,pset):
         return self.evals(x,pset.array())
 
     @staticmethod
@@ -349,23 +384,23 @@ class Gauss2DFn(Model):
         return a[0]/(2.*np.pi*sig2)*np.exp(-(dx+dy)/(2.0*sig2))
 
     
-class SpectralModel(Model):
+class SpectralModel(PDF):
 
     def flux(self,x,pset):
-        return self._eval(x,pset)
+        return self._eval_pdf(x,pset)
     
     def eflux(self,x,pset):
-        return 10**x*self._eval(x,pset)
+        return 10**x*self._eval_pdf(x,pset)
 
     def e2flux(self,x,pset):
-        return 10**(2*x)*self._eval(x,pset)
+        return 10**(2*x)*self._eval_pdf(x,pset)
 
-class LogParabola(Model):
+class LogParabola(PDF):
 
     def __init__(self,pset,name=None):
-        Model.__init__(self,pset,name)
+        PDF.__init__(self,pset,name)
         
-    def _eval(self,x,pset):
+    def _eval_pdf(self,x,pset):
 
         a = pset.array()
         es = 10**(x-a[3])
@@ -381,12 +416,12 @@ class LogParabola(Model):
         pset.createParameter(np.log10(eb),'eb')
         return LogParabola(pset)
 
-class PowerLawExp(Model):
+class PowerLawExp(PDF):
 
     def __init__(self,pset,name=None):
-        Model.__init__(self,pset,name)
+        PDF.__init__(self,pset,name)
         
-    def _eval(self,x,pset):
+    def _eval_pdf(self,x,pset):
 
         a = pset.array()
         es = 10**(x-a[3])
@@ -402,12 +437,12 @@ class PowerLawExp(Model):
         pset.createParameter(np.log10(eb),'eb')
         return PowerLawExp(pset)
 
-class PowerLaw(Model):
+class PowerLaw(PDF):
 
     def __init__(self,pset,name=None):
-        Model.__init__(self,pset,name)      
+        PDF.__init__(self,pset,name)      
 
-    def _eval(self,x,pset):
+    def _eval_pdf(self,x,pset):
 
         a = pset.array()
         es = 10**(x-a[2])
@@ -436,9 +471,9 @@ class PowerLaw(Model):
         p2 = pset.createParameter(np.log10(eb),prefix+'eb')
         return PowerLaw(ParameterSet([p0,p1,p2]),name)
         
-class PolyFn(Model):
+class PolyFn(PDF):
     def __init__(self,pset,name=None):
-        Model.__init__(self,pset,name)
+        PDF.__init__(self,pset,name)
         self._nc = pset.npar()
 
     @staticmethod
@@ -454,7 +489,7 @@ class PolyFn(Model):
 
         return PolyFn(ParameterSet(pars),name)
 
-    def _eval(self,x,pset):
+    def _eval_pdf(self,x,pset):
         
         a = pset.array()
         return polyval(a,x)

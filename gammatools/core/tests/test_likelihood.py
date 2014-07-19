@@ -7,6 +7,7 @@ from gammatools.core.nonlinear_fitting import *
 from gammatools.core.model_fn import *
 from gammatools.core.histogram import *
 
+
 def setup_gauss_test():
     pset = ParameterSet()        
     fn = GaussFn.create(100.0,0.0,0.1,pset)
@@ -37,15 +38,26 @@ class TestLikelihood(unittest.TestCase):
         pars = [par0,par1,par2,par4]
 
         for i, p in enumerate(pars):
-            pname = p.name()
-            self.assertEqual(pset[i].name(),pars[i].name())
-            self.assertEqual(pset[i].value(),pars[i].value())
-            self.assertEqual(pset[pname].name(),pars[i].name())
-            self.assertEqual(pset[pname].value(),pars[i].value())
+            pname = p.name
+            self.assertEqual(pset[i].name,pars[i].name)
+            self.assertEqual(pset[i].value,pars[i].value)
+            self.assertEqual(pset[pname].name,pars[i].name)
+            self.assertEqual(pset[pname].value,pars[i].value)
 
 #        assert_array_equal(pset.array(),
 #                           np.array([3.0,4.0,5.0,6.0],ndmin=2))
 
+    def test_parameter_set_access(self):
+
+        pset = ParameterSet()
+        pset.createParameter(3.0,'p0')
+        pset.createParameter(2.0,'p1')
+
+        self.assertEqual(pset['p0'].value,3.0)
+        self.assertEqual(pset[0].value,3.0)
+
+        self.assertEqual(pset['p1'].value,2.0)
+        self.assertEqual(pset[1].value,2.0)
 
 
     def test_parameter_set_merge(self):
@@ -92,8 +104,8 @@ class TestLikelihood(unittest.TestCase):
         chi2_fn = BinnedChi2Fn(h,f)
 #        print chi2_fn.eval(pset)
 
-        psetv = pset.makeParameterArray(1,pset[1].value()*np.linspace(0,2,10))
-        chi2_fn.param()[1].set(chi2_fn._param[1].value()*1.5)
+        psetv = pset.makeParameterArray(1,pset[1].value*np.linspace(0,2,10))
+        chi2_fn.param()[1].set(chi2_fn._param[1].value*1.5)
 
         fitter = MinuitFitter(chi2_fn)
 #        print fitter.fit()
@@ -125,13 +137,10 @@ class TestLikelihood(unittest.TestCase):
         pset1[0].set(1.5)
         pset1[1].set(0.5)
         
-        f = fitter.fit(pset1)
+        f = fitter.minimize(pset1)
         
-        assert_almost_equal(f[0].value(),0.9,4)
-        assert_almost_equal(f[1].value(),0.8,4)
-
-
-
+        assert_almost_equal(f[0].value,0.9,4)
+        assert_almost_equal(f[1].value,0.8,4)
 
     def test_binned_chi2_fn(self):
                 
@@ -146,21 +155,11 @@ class TestLikelihood(unittest.TestCase):
 
         fitter = BFGSFitter(chi2_fn)
 
-        f = fitter.fit(pset1)
+        f = fitter.minimize(pset1)
 
-        assert_almost_equal(f[0].value(),pset0[0].value(),4)
-        assert_almost_equal(f[1].value(),pset0[1].value(),4)
-        assert_almost_equal(f[2].value(),pset0[2].value(),4)
-
-#        plt.figure()
-#        hm0.plot()
-#        plt.plot(hm0.axis().center(),
-#                 fn0.histogram(hm0.axis().edges(),pset0))
-#        plt.plot(hm0.axis().center(),
-#                 fn0.histogram(hm0.axis().edges(),pset1))
-#        plt.show()
-
-        
+        assert_almost_equal(f[0].value,pset0[0].value,4)
+        assert_almost_equal(f[1].value,pset0[1].value,4)
+        assert_almost_equal(f[2].value,pset0[2].value,4)
         
     def test_bfgs(self):
         
@@ -168,5 +167,32 @@ class TestLikelihood(unittest.TestCase):
         pset0 = fn0.param()
         
 
-    
+    def test_bfgs_fn(self):
         
+        x0 = 0.324
+        y0 = -1.2
+
+        fn = lambda x, y : ((x-x0)**2 + (y-y0)**2)
+        fn2 = lambda x, y : -np.exp(-((x-x0)**2+(y-y0)**2))
+
+        p0 = BFGSFitter.fit(fn,[1.0,3.0])
+
+        assert_almost_equal(p0[0].value,x0,4)
+        assert_almost_equal(p0[1].value,y0,4)
+
+        p0 = BFGSFitter.fit(fn2,[1.0,3.0],pgtol=1E-8)
+
+        assert_almost_equal(p0[0].value,x0,4)
+        assert_almost_equal(p0[1].value,y0,4)
+
+        fitter = BFGSFitter(ParamFn.create(fn,[1.0,3.0]))
+
+        fitter.objfn.param()[0].fix()
+        p0 = fitter.minimize()
+
+        assert_almost_equal(p0[0].value,1.0,4)
+        assert_almost_equal(p0[1].value,y0,4)
+
+#        print fn2(*p0.list())
+
+#        print fn2(x0,y0)

@@ -19,12 +19,12 @@ from util import expand_aliases, get_parameters
 from minuit import Minuit
 from parameter_set import Parameter, ParameterSet
 import matplotlib.pyplot as plt
-from model_fn import ParamFn, Model
+from model_fn import ParamFnBase, PDF
 
-class CompProdModel(Model):
+class CompProdModel(PDF):
 
     def __init__(self):
-        Model.__init__(self)
+        PDF.__init__(self)
         self._models = []
 
     def addModel(self,m):
@@ -47,10 +47,10 @@ class CompProdModel(Model):
             else: s *= v
         return s
 
-class CompositeParameter(ParamFn):
+class CompositeParameter(ParamFnBase):
 
     def __init__(self,expr,pset):
-        ParamFn.__init__(self,pset)
+        ParamFnBase.__init__(self,pset)
 
         par_names = get_parameters(expr)
         for p in par_names:            
@@ -67,10 +67,10 @@ class CompositeParameter(ParamFn):
         pset.update(p)
         return eval(self._expr)
 
-class JointLnL(ParamFn):
+class JointLnL(ParamFnBase):
 
     def __init__(self,lnlfn=None):
-        ParamFn.__init__(self)
+        ParamFnBase.__init__(self)
         self._lnlfn = []
         if not lnlfn is None:     
             for m in lnlfn: self.add(m)
@@ -102,10 +102,10 @@ def chi2(y,var,fy,fvar=None):
     delta2 = (y-fy)**2
     return delta2*ivar
 
-class BinnedChi2Fn(ParamFn):
+class BinnedChi2Fn(ParamFnBase):
     """Objective function for binned chi2."""
     def __init__(self,h,model):
-        ParamFn.__init__(self,model.param())
+        ParamFnBase.__init__(self,model.param())
         self._h = h
         self._model = model
 
@@ -127,10 +127,10 @@ class BinnedChi2Fn(ParamFn):
 
         return s
 
-class Chi2Fn(ParamFn):
+class Chi2Fn(ParamFnBase):
 
     def __init__(self,x,y,yerr,model):
-        ParamFn.__init__(self,model.param())
+        ParamFnBase.__init__(self,model.param())
         self._x = x
         self._y = y
         self._yerr = yerr
@@ -158,10 +158,10 @@ class Chi2Fn(ParamFn):
         return s
 
 
-class Chi2HistFn(ParamFn):
+class Chi2HistFn(ParamFnBase):
 
     def __init__(self,h,model):
-        ParamFn.__init__(self,model.param())
+        ParamFnBase.__init__(self,model.param())
         self._h = h
         self._model = model
 

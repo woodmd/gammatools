@@ -32,32 +32,38 @@ class Parameter(object):
         else: self._lims = lims
         self._fixed = fixed
 
+    @property
     def lims(self):
         return self._lims
         
+    @property
     def name(self):
         return self._name
 
+    @property
     def pid(self):
         return self._pid
 
+    @property
     def value(self):
         return self._value
     
+    @property
     def error(self):
         return self._err
 
     def fix(self,fix=True):
         self._fixed = fix
 
+    @property
     def fixed(self):
         return self._fixed
 
+    @property
     def size(self):
         return self._value.shape[0]
 
     def set(self,v):
-
         self._value = np.array(v,ndmin=1)
 #        if isinstance(v,np.array): self._value = v
 #        else: self._value[...] = v
@@ -109,15 +115,23 @@ class ParameterSet(object):
         return fixed
 
     def array(self):
-        """Return an NxM numpy array with the values of the parameters
-        in this set."""
+        """Return parameter set contents as NxM numpy array where N is
+        the number of parameters and M is the number of parameter
+        values."""
 
 #        if self._pars[pkeys[0]].size() > 1:
-        x = np.zeros((len(self._pars),self._pars[0].size()))
+        x = np.zeros((len(self._pars),self._pars[0].size))
         for i, p in enumerate(self._pars):
-            x[i] = p.value()
+            x[i] = p.value
 
         return x
+
+    def list(self):
+        """Return parameter set contents as list of arrays."""
+        v = []
+        for i, p in enumerate(self._pars):
+            v.append(p.value)
+        return v
 
     def makeParameterArray(self,ipar,x):
 
@@ -125,7 +139,7 @@ class ParameterSet(object):
 
         for i, p in enumerate(self._pars):
             if i != ipar: 
-                pset[i].set(np.ones(len(x))*self._pars[i].value())
+                pset[i].set(np.ones(len(x))*self._pars[i].value)
             else:
                 pset[i].set(x)
 
@@ -153,20 +167,32 @@ class ParameterSet(object):
 
         for k in keys: self._pars_dict[k].fix(fix)
 
-    def update(self,pset):
+    def update(self,*args):
         """Update parameter values from an existing parameter set or from
         a numpy array."""
 
-        if pset is None: return
-        elif isinstance(pset,ParameterSet):
-            for p in pset:
-                if p.pid() in self._pars_dict:
-                    self._pars_dict[p.pid()].set(p.value())
-        else:
-            for i, p in enumerate(self._pars):
-                self._pars[i].set(np.array(pset[i],ndmin=1))
+        if len(args) == 0: return
+        elif len(args) == 1:
 
-    def createParameter(self,value,name,fixed=False,lims=None,pid=None):
+            pset = args[0]
+            if pset is None: return
+            elif isinstance(pset,ParameterSet):
+                for p in pset:
+                    if p.pid in self._pars_dict:
+                        self._pars_dict[p.pid].set(p.value)
+            else:
+                for i, p in enumerate(self._pars):
+                    self._pars[i].set(np.array(pset[i],ndmin=1))
+        else:
+
+            if len(args) != len(self._pars):
+                raise Exception('Wrong number of arguments for parameter set.')
+
+            for i, p in enumerate(args):
+                self._pars[i].set(np.array(p,ndmin=1))
+
+
+    def createParameter(self,value,name=None,fixed=False,lims=None,pid=None):
         """Create a new parameter and add it to the set.  Returns a
         reference to the new parameter."""
 
@@ -177,37 +203,39 @@ class ParameterSet(object):
             else:
                 pid = 0
 
+        if name is None: name = 'p%i'%pid
+
         p = Parameter(pid,value,name,fixed,lims)
         self.addParameter(p)
         return p
 
     def addParameter(self,p):        
 
-        if p.pid() in self._pars_dict.keys():
-            raise Exception('Parameter with ID %i already exists.'%p.pid())
-        elif p.pid() in self._pars and p.name() != self._pars[p.pid()].name():
-            raise Exception('Parameter with name %s already exists.'%p.name())
-#            print "Error : Parameter already exists: ", p.pid()
-#            print "Error : Mismatch in parameter name: ", p.pid()
+        if p.pid in self._pars_dict.keys():
+            raise Exception('Parameter with ID %i already exists.'%p.pid)
+        elif p.pid in self._pars and p.name != self._pars[p.pid].name:
+            raise Exception('Parameter with name %s already exists.'%p.name)
+#            print "Error : Parameter already exists: ", p.pid
+#            print "Error : Mismatch in parameter name: ", p.pid
 #            sys.exit(1)
-#        if p.name() in self._par_names.keys():
-#            print "Error : Parameter with name already exists: ", p.name()
+#        if p.name in self._par_names.keys():
+#            print "Error : Parameter with name already exists: ", p.name
 #            sys.exit(1)
 
         par = copy.deepcopy(p)
 
-        self._pars_dict[p.pid()] = par
+        self._pars_dict[p.pid] = par
 #        self._pars.append(par)
         self._pars = []
         for k in sorted(self._pars_dict.keys()):
             self._pars.append(self._pars_dict[k])
 
-        self._par_names[p.name()] = p.pid()
+        self._par_names[p.name] = p.pid
 
     def addSet(self,pset): 
 
         for p in pset:
-            if not p.pid() in self._pars_dict.keys():
+            if not p.pid in self._pars_dict.keys():
                 self.addParameter(p)
 
     def __getitem__(self,ipar):
@@ -275,7 +303,7 @@ class FitResults(ParameterSet):
     def getParError(self,pid):
 
         if isinstance(pid,str):
-            pid = self.getParByName(pid).pid()
+            pid = self.getParByName(pid).pid
 
         return self._err[pid]
 

@@ -1,5 +1,8 @@
 from parameter_set import *
-from model_fn import ParamFn, Model
+from util import update_dict
+from model_fn import ParamFn
+import inspect
+from gammatools.core.config import Configurable
 #from iminuit import Minuit as Minuit2
 
 class NLFitter(object):
@@ -85,19 +88,19 @@ class MinuitFitter(object):
             
         return np.array(fval)
 
-    def fit(self,pset=None):
+    def minimize(self,pset=None):
 
         if pset is None: pset = self._objfn.param(True)
 
         npar = pset.npar()
 
-        fixed = pset.fixed()
+        fixed = pset.fixed
         lo_lims = npar*[None]
         hi_lims = npar*[None]
         lims = []
         
         for i, p in enumerate(pset):
-            if not p.lims() is None: lims.append(p.lims())
+            if not p.lims is None: lims.append(p.lims)
             else: lims.append([0.0,0.0])
                             
         print pset.array()
@@ -132,34 +135,54 @@ class MinuitFitter(object):
             plt.axvline(pset[j])
 
     @staticmethod
-    def fit2(objfn):
+    def fit(objfn,**kwargs):
         """Convenience method for fitting."""
-        fitter = Fitter(objfn)
-        return fitter.fit()
+        fitter = Fitter(objfn,**kwargs)
+        return fitter.minimize()
 
 
-class BFGSFitter(object):
+class BFGSFitter(Configurable):
 
-    def __init__(self,objfn,tol=1E-3):
+    default_config = { 'pgtol'   : 1E-5, 'factr' : 1E7 }
 
+    def __init__(self,objfn,**kwargs):
+        super(BFGSFitter,self).__init__(**kwargs)    
         self._objfn=objfn
-    
-    def fit(self,pset=None):
+
+    @property
+    def objfn(self):
+        return self._objfn
+
+    @staticmethod
+    def fit(fn,p0,**kwargs):        
+
+        if not isinstance(fn,ParamFn):
+            fn = ParamFn.create(fn,p0)
+
+        fitter = BFGSFitter(fn,**kwargs)
+        return fitter.minimize(**kwargs)
+
+    def minimize(self,pset=None,**kwargs):
 
         if pset is None: pset = self._objfn.param(True)
 
         bounds = []
         for p in pset:
-            if p.fixed():
-                bounds.append([p.value().flat[0],p.value().flat[0]])
+            if p.fixed:
+                bounds.append([p.value.flat[0],p.value.flat[0]])
             else:
-                bounds.append(p.lims())
+                bounds.append(p.lims)
 
         from scipy.optimize import fmin_l_bfgs_b as fmin_bfgs
 
-        res = fmin_bfgs(self._objfn,
-                        pset.array(),None,bounds=bounds,
-                        approx_grad=1)
+        bfgs_kwargs = self.config
+#{'pgtol' : 1E-5, bounds=bounds, 'factr' : 1E7 }
+        update_dict(bfgs_kwargs,kwargs)
+
+        bfgs_kwargs['bounds'] = bounds
+
+        res = fmin_bfgs(self._objfn,pset.array(),None,
+                        approx_grad=1,**bfgs_kwargs)#,factr=1./self._tol)
 
         pset.update(res[0])        
         self._fit_results = FitResults(pset,res[1])
@@ -167,8 +190,3 @@ class BFGSFitter(object):
         # How to compute errors?
         
         return copy.deepcopy(self._fit_results)
-        
-#,epsilon=1E-10,
-#                        iprint=0,pgtol=1E-10)
-
-
