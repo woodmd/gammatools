@@ -25,6 +25,30 @@ from gammatools.core.histogram import *
 
 from pywcsgrid2.allsky_axes import make_allsky_axes_from_header
 
+def load_ds9_cmap():
+    # http://tdc-www.harvard.edu/software/saoimage/saoimage.color.html
+    ds9_b = {
+        'red'   : [[0.0 , 0.0 , 0.0], 
+                   [0.25, 0.0 , 0.0], 
+                   [0.50, 1.0 , 1.0], 
+                   [0.75, 1.0 , 1.0], 
+                   [1.0 , 1.0 , 1.0]],
+        'green' : [[0.0 , 0.0 , 0.0], 
+                   [0.25, 0.0 , 0.0], 
+                   [0.50, 0.0 , 0.0], 
+                   [0.75, 1.0 , 1.0], 
+                   [1.0 , 1.0 , 1.0]],
+        'blue'  : [[0.0 , 0.0 , 0.0], 
+                   [0.25, 1.0 , 1.0], 
+                   [0.50, 0.0 , 0.0], 
+                   [0.75, 0.0 , 0.0], 
+                   [1.0 , 1.0 , 1.0]]
+        }
+     
+    plt.register_cmap(name='ds9_b', data=ds9_b) 
+    plt.cm.ds9_b = plt.cm.get_cmap('ds9_b')
+    return plt.cm.ds9_b
+
 def get_circle(ra,dec,rad_deg,n=100):
     th = np.linspace(np.radians(rad_deg),
                      np.radians(rad_deg),n)
@@ -113,7 +137,9 @@ class FITSAxis(Axis):
 
 
 class FITSImage(HistogramND):
-
+    """Base class for SkyImage and SkyCube classes.  Handles common
+    functionality for performing sky to pixel coordinate conversions."""
+    
     def __init__(self,wcs,axes,counts=None,roi_radius_deg=180.,roi_msk=None):
         super(FITSImage, self).__init__(axes,counts=counts,var=counts)
         
@@ -254,41 +280,13 @@ class SkyCube(FITSImage):
         images = self.get_energy_slices(rebin)
         for i, im in enumerate(images):
             subplot = '%i%i%i'%(nx,ny,i%frame_per_fig+1)
-
-#            im = im.smooth(0.1)
-            
             im.plot(subplot=subplot,logz=logz)
-
-            break
-#            im.plot_catalog()
-#            im.plot_circle(2.0)
-    
-    def get_energy_slices(self,rebin=2):
-
-        nslice = int(np.ceil(self._axes[2].naxis()/float(rebin)))
         
-        images = []
-        
-        for i in range(nslice):
-
-            ilo = i*rebin
-            ihi = min((i+1)*rebin,self._axes[2].naxis())
-
-            print i, ilo, ihi
-            
-            counts = np.sum(self._counts[ilo:ihi],axis=0)
-            image = SkyImage(self._wcs,self._axes[:2],counts)
-            images.append(image)
-
-        return images
-    
     def energy_slice(self,ibin):
 
         counts = np.sum(self._counts[ibin:ibin+1],axis=0)
         return SkyImage(self._wcs,self._axes[:2],counts)
-        
-    
-                
+                        
     def get_integrated_map(self,emin,emax):
         
         ebins = self._axes[2].edges()
@@ -298,9 +296,6 @@ class SkyCube(FITSImage):
 
         imin = np.argmin(np.abs(emin-ebins))
         imax = np.argmin(np.abs(emax-ebins))
-
-
-
         edloge = 10**loge[imin:imax+1]*dloge[imin:imax+1]
 
         counts = np.sum(self._counts[imin:imax+1].T*edloge*np.log(10.),
@@ -455,114 +450,108 @@ class SkyImage(FITSImage):
 
         return np.vstack((skycrd[0],skycrd[1]))
 
-    def smooth(self,sigma,compute_var=False):
+    def smooth(self,sigma,compute_var=False,summed=False):
         sigma /= np.abs(self._axes[0]._delta)
         
         from scipy import ndimage
-
         im = copy.deepcopy(self)
-        im._counts = ndimage.gaussian_filter(self._counts, sigma=sigma,
-                                             mode='nearest')
+
+        # Construct a kernel
+        nk =41
+        fn = lambda t, s: 1./(2*np.pi*s**2)*np.exp(-t**2/(s**2*2.0))
+        b = np.abs(np.linspace(0,nk-1,nk) - (nk-1)/2.)
+        k = np.zeros((nk,nk)) + np.sqrt(b[np.newaxis,:]**2 +
+                                        b[:,np.newaxis]**2)
+        k = fn(k,sigma)
+        k /= np.sum(k)
+
+        im._counts = ndimage.convolve(self._counts,k,mode='nearest')
+        
+#        im._counts = ndimage.gaussian_filter(self._counts, sigma=sigma,
+#                                             mode='nearest')
 
         if compute_var:
-            fn = lambda t, s: 1./(2*np.pi*s**2)*np.exp(-t**2/(s**2*2.0))
-
-            nk =41
-            b = np.abs(np.linspace(0,nk-1,nk) - (nk-1)/2.)
-            k = np.zeros((nk,nk)) + b[np.newaxis,:] + b[:,np.newaxis]
-            
-            k = fn(k,sigma*np.sqrt(2.))
-            k /= np.sum(k)
-
             var = ndimage.convolve(self._counts, k**2, mode='wrap')
-
             im._var = var
+        else:
+            im._var = np.zeros(im._counts.shape)
             
-
+        if summed: im /= np.sum(k**2)
+            
         return im
-                    
+
+    def plot_marker(self,lonlat=None,**kwargs):
+
+        if lonlat is None: lon, lat = (self._lon,self._lat)
+        xy =  self._wcs.wcs_sky2pix(lon,lat, 0)
+        self._ax.plot(xy[0],xy[1],**kwargs)
+
+        plt.gca().set_xlim(self.axis(0).lo_edge(),self.axis(0).hi_edge())
+        plt.gca().set_ylim(self.axis(1).lo_edge(),self.axis(1).hi_edge()) 
+    
     def plot_circle(self,rad_deg,radec=None,**kwargs):
 
         if radec is None: radec = (self._lon,self._lat)
 
         lon,lat = get_circle(radec[0],radec[1],rad_deg)
         xy =  self._wcs.wcs_sky2pix(lon,lat, 0)
-        plt.gca().plot(xy[0],xy[1],**kwargs)
+        self._ax.plot(xy[0],xy[1],**kwargs)
 
-        plt.gca().set_xlim(self.axis(0).lo_edge(),self.axis(0).hi_edge())
-        plt.gca().set_ylim(self.axis(1).lo_edge(),self.axis(1).hi_edge())    
-
-
-    def plot2(self,logz=False):
-
-        ax = plt.subplot(111,projection='hammer')
-
-        if logz: norm = LogNorm()
-        else: norm = Normalize()
-
+        self._ax.set_xlim(self.axis(0).lo_edge(),self.axis(0).hi_edge())
+        self._ax.set_ylim(self.axis(1).lo_edge(),self.axis(1).hi_edge())    
 
         
-        im = ax.imshow(self._counts.T,#np.power(self._counts.T,1./3.),
-                       interpolation='nearest',origin='lower',norm=norm,
-                       extent=[np.radians(-180.),np.radians(180),np.radians(-90),np.radians(90)])
-                      # extent=[self.axis(0).edges()[0],self.axis(0).edges()[-1],
-                      #         self.axis(1).edges()[0],self.axis(1).edges()[-1]])
-
-        plt.gca().grid(True)
-        
-    def plot(self,subplot=111,logz=False,show_catalog=False,**kwargs):
+    def plot(self,subplot=111,logz=False,show_catalog=False,
+             cmap='jet',**kwargs):
 
         from matplotlib.colors import NoNorm, LogNorm, Normalize
 
-        if logz: norm = LogNorm()
-        else: norm = Normalize()
+        kwargs_contour = { 'levels' : None, 'colors' : ['k'],
+                           'linewidths' : None,
+                           'origin' : 'lower' }
         
-        ax = pywcsgrid2.subplot(subplot, header=self._wcs.to_header())
-
-#        ax = pywcsgrid2.axes(header=self._wcs.to_header())
-#        ax = make_allsky_axes_from_header(plt.gcf(), rect=111,
-#                                          header=self._wcs.to_header(True),
-#                                          lon_center=0.)
-
-        colormap = mpl.cm.jet
-        colormap.set_under('white')
-        vmin = 0.8*np.min(self._counts[~self._roi_msk.T])
-
-        
-        
-#        vmax = np.max(self._counts[~self._roi_msk])
-
-#        c = self._counts[~self._roi_msk]        
-#        if logz: vmin = np.min(c[c>0])
-
-        counts = copy.copy(self._counts)
-        counts[self._roi_msk.T] = np.min(self._counts)-1.0
-
-#        print 'vmin ', vmin, np.min(self._counts)-1.0, np.sum(self._roi_msk)
-
-        print self.axis(0).edges()[0]
-        print self.axis(0).edges()[-1]
-
-        print self.axis(1).edges()[0]
-        print self.axis(1).edges()[-1]
-        
-        kw = { 'interpolation' : 'nearest', 'origin' : 'lower','norm' : norm,
-               'vmin' : None, 'vmax' : None }
+        kwargs_imshow = { 'interpolation' : 'nearest',
+                          'origin' : 'lower','norm' : None,
+                          'vmin' : None, 'vmax' : None }
 #               'extent' : [self.axis(0).edges()[0],
 #                           self.axis(0).edges()[-1],
 #                           self.axis(1).edges()[0],
 #                           self.axis(1).edges()[-1]] }
 #                   'vmin' : vmin }
 
-        update_dict(kw,kwargs)
-                   
+        
+        if logz: kwargs_imshow['norm'] = LogNorm()
+        else: kwargs_imshow['norm'] = Normalize()
+        
+        ax = pywcsgrid2.subplot(subplot, header=self._wcs.to_header())
+#        ax = pywcsgrid2.axes(header=self._wcs.to_header())
 
-        im = ax.imshow(counts.T,**kw)
+        load_ds9_cmap()
+        colormap = mpl.cm.get_cmap(cmap)
+        colormap.set_under('white')
+
+        counts = copy.copy(self._counts)
+        
+        if np.any(self._roi_msk):        
+            kwargs_imshow['vmin'] = 0.8*np.min(self._counts[~self._roi_msk.T])
+            counts[self._roi_msk.T] = -np.inf
+        
+#        vmax = np.max(self._counts[~self._roi_msk])
+#        c = self._counts[~self._roi_msk]        
+#        if logz: vmin = np.min(c[c>0])
+
+        update_dict(kwargs_imshow,kwargs)
+        update_dict(kwargs_contour,kwargs)
+                   
+        im = ax.imshow(counts.T,**kwargs_imshow)
         im.set_cmap(colormap)
+
+        if kwargs_contour['levels']:        
+            cs = ax.contour(counts.T,**kwargs_contour)
+        #        plt.clabel(cs, fontsize=5, inline=0)
         
 #        im.set_clim(vmin=np.min(self._counts[~self._roi_msk]),
 #                    vmax=np.max(self._counts[~self._roi_msk]))
-#        norm=LogNorm()
         
         ax.set_ticklabel_type("d", "d")
 
@@ -577,10 +566,11 @@ class SkyImage(FITSImage):
 #                     fraction=0.05)
         ax.grid()
 
-        if show_catalog: self.plot_catalog(**kwargs)
+        if show_catalog:
+            cat = Catalog.get()
+            cat.plot(self,ax=ax)
         
 #        ax.add_compass(loc=1)
-#       
 #        ax.set_display_coord_system("gal")       
  #       ax.locator_params(axis="x", nbins=12)
 
