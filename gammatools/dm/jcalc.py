@@ -23,6 +23,7 @@ from scipy.interpolate import interp1d, UnivariateSpline
 import scipy.special as spfn
 import scipy.optimize as opt
 from gammatools.core.util import *
+from gammatools.core.algebra import *
 
 class LoSFn(object):
     """Integrand function for LoS parameter (J).  The parameter alpha
@@ -367,9 +368,13 @@ class JProfile(object):
                                     np.log10(np.radians(90.)),1000)
         self._psi = np.power(10,self._log_psi)
 
-        self._jpsi = losfn(self._psi)
+        domega = 2*np.pi*(-np.cos(self._psi[1:])+np.cos(self._psi[:-1]))
+        x = 0.5*(self._psi[1:]+self._psi[:-1])
 
-        self._jspline = UnivariateSpline(self._psi,self._jpsi,s=0,k=2)
+        self._jpsi = losfn(self._psi)
+        self._spline = UnivariateSpline(self._psi,self._jpsi,s=0,k=2)
+        self._jcum = np.cumsum(self._spline(x)*domega)
+        self._cum_spline = UnivariateSpline(x,self._jcum,s=0,k=2)
 
     @staticmethod
     def create(dp,dist,rmax):
@@ -377,24 +382,26 @@ class JProfile(object):
         return JProfile(losfn)
 
     def __call__(self,psi):
-        return self._jspline(psi)
+        return self._spline(psi)
 
     def integrate(self,psimax):
 
         xedge = np.linspace(0.0,np.radians(psimax),1001)
         x = 0.5*(xedge[1:] + xedge[:-1])
         domega = 2.0*np.pi*(-np.cos(xedge[1:])+np.cos(xedge[:-1]))
-        return np.sum(self._jspline(x)*domega)
+        return np.sum(self._spline(x)*domega)
 
     def cumsum(self,psi):
-        x = 0.5*(psi[1:]+psi[:-1])
-        dcos = -np.cos(psi[1:])+np.cos(psi[:-1])
-        return np.cumsum(self._jspline(x)*dcos)
+        return self._cum_spline(psi)
+#        x = 0.5*(psi[1:]+psi[:-1])
+#        dcos = -np.cos(psi[1:])+np.cos(psi[:-1])
+#        return np.cumsum(self._spline(x)*dcos)
 
-class JIntegrator(object):
+class ROIIntegrator(object):
 
     def __init__(self,jspline,lat_cut,lon_cut,source_list=None):
 
+        self._jspline = jspline
         self._lat_cut = lat_cut
         self._lon_cut = lon_cut
 
@@ -406,7 +413,7 @@ class JIntegrator(object):
 
         self._sources = None
 
-        if not opts.source_list is None:
+        if not source_list is None:
             source_list = np.loadtxt(opts.source_list,unpack=True,usecols=(1,2))
             self._sources = Vector3D.createLatLon(np.radians(source_list[0]),
                                                   np.radians(source_list[1]))
@@ -428,7 +435,7 @@ class JIntegrator(object):
 
         for i0, th in enumerate(self._theta):
 
-            jtot = integrate(lambda t: jspline(t)*np.sin(t),
+            jtot = integrate(lambda t: self._jspline(t)*np.sin(t),
                              np.radians(self._theta_edges[i0]),
                              np.radians(self._theta_edges[i0+1]),100)
 
@@ -486,14 +493,21 @@ class JIntegrator(object):
             units0 = Units.gev2_cm5
             units1 = (8.5*Units.kpc*np.power(0.4*Units.gev_cm3,2))
 
-        jv = self._jv_cum_spline(rgc)
-    
-        i = np.argmin(np.abs(rgc-self._theta))
 
-        print '%10.2f %20.6g %20.6g %20.6g %20.6g'%(rgc, jv, 
-                                                    jv/units0, 
-                                                    jv/units1,
-                                                    self._domega_cum[i])
+        rgc = [float(t) for t in rgc.split('/')]
+
+        if len(rgc) == 1:
+            jv = self._jv_cum_spline(rgc[0])
+            domega = np.cos(np.radians(rgc[0]))*2*np.pi/Units.deg2
+        else:
+            jv = self._jv_cum_spline(rgc[1]) - self._jv_cum_spline(rgc[0])
+            domega = -(np.cos(np.radians(rgc[1])) - np.cos(np.radians(rgc[0])))*2*np.pi/Units.deg2
+
+#        i = np.argmin(np.abs(rgc-self._theta))
+
+        print '%20.6g %20.6g %20.6g %20.6g'%(jv, 
+                                             jv/units0, 
+                                             jv/units1,domega)
 
 
     def print_profile(self,decay=False):

@@ -15,7 +15,7 @@ from scipy.optimize import brentq
 from scipy.interpolate import UnivariateSpline
 from gammatools.core.util import *
 from gammatools.core.histogram import *
-from gammatools.core.stats import poisson_lnl
+from gammatools.core.stats import *
 
 class LimitData(object):
 
@@ -446,7 +446,7 @@ class DMLimitCalc(object):
 
         if alpha is None: alpha = self._alpha_bin[:,np.newaxis]
 
-        dlnl = poisson_lnl(sc,bc,alpha)[:,self._msk,...]
+        dlnl = poisson_median_ts(sc,bc,alpha)[:,self._msk,...]
         if dlnl.ndim == 2:
             return np.sqrt(max(0,np.sum(dlnl)))
         else:
@@ -477,140 +477,116 @@ class DMLimitCalc(object):
 
     def limit(self,dmmodel,mchi,tau,sthresh=5.0):
 
-        ul = []
+        o = {}
         bc = self.bkg_counts(tau)
 
-        for i, m in enumerate(mchi):
+        dmmodel._mass = mchi
+        dmmodel._sigmav = np.power(10.,-28.)
 
-            dmmodel._mass = m
-            dmmodel._sigmav = np.power(10.,-28.)
+        sc = self.counts(dmmodel,tau)
+        onoff = OnOffExperiment(np.ravel(sc[:,self._msk]),
+                                np.ravel(bc[:,self._msk]),
+                                self._alpha)
 
-            sc = self.counts(dmmodel,tau)
-            t = np.linspace(np.log10(10./np.sum(sc)),
-                            np.log10(10./np.sum(sc))+4,20)
-            sc2 = sc[...,np.newaxis]*np.power(10,t[np.newaxis,np.newaxis,:])
-            s = self.significance(sc2,bc[...,np.newaxis])
+        t0, t0_err = onoff.asimov_mu_ts0(sthresh**2)
 
-            fn = UnivariateSpline(t,s,k=2,s=0)
-            t0 = brentq(lambda t: fn(t) - sthresh ,t[0],t[-1])
-            
+        sc0 = sc*t0
+        dlnl = poisson_median_ts(sc0,bc,self._alpha_bin[np.newaxis,:])
+        dlnl[:,~self._msk] = 0
 
-            sc0 = sc*10**t0
-            dlnl = poisson_lnl(sc0,bc,self._alpha_bin[np.newaxis,:])
-            dlnl[:,~self._msk] = 0
+        iarg = np.argsort(np.ravel(dlnl))[::-1]
+        dlnl_sort = dlnl.flat[iarg]
 
-            iarg = np.argsort(np.ravel(dlnl))[::-1]
+        i0 = int(percentile(np.linspace(0,len(iarg),len(iarg)),
+                            np.cumsum(dlnl_sort)/np.sum(dlnl),0.5))
 
-
-
-            dlnl_sort = dlnl.flat[iarg]
-
-            i0 = int(percentile(np.linspace(0,len(iarg),len(iarg)),
-                                np.cumsum(dlnl_sort)/np.sum(dlnl),0.5))
-
-            msk = np.empty(shape=dlnl_sort.shape,dtype=bool); msk.fill(False)
-            msk[iarg[:i0]] = True
-            msk = msk.reshape(dlnl.shape)
+        msk = np.empty(shape=dlnl_sort.shape,dtype=bool); msk.fill(False)
+        msk[iarg[:i0]] = True
+        msk = msk.reshape(dlnl.shape)
 
 #            print iarg[:i0]
 #            print sc0.flat[iarg[:i0]]/bc.flat[iarg[:i0]]
             
-            sfrac = np.sum(sc0[msk])/np.sum(bc[msk])
+        sfrac = np.sum(sc0[msk])/np.sum(bc[msk])
 
-            print sfrac, self._min_fsig
+        print sfrac, self._min_fsig
 
-            if sfrac >= self._min_fsig:
-                ul.append(np.power(10,-28.+t0))
-            else:                           
-                print np.log10(self._min_fsig/sfrac)
-                ul.append(np.power(10,-28.+t0+np.log10(self._min_fsig/sfrac)))
+        axis0 = Axis(self._loge_axis.edges()-np.log10(Units.gev))
+        axis1 = Axis(np.degrees(self._psi_axis.edges()))
 
-            continue
+        o['sigmav_ul'] = np.power(10,-28.)*t0
+        o['sc_hist'] = Histogram2D(axis0,axis1,counts=sc0)
+        o['bc_hist'] = Histogram2D(axis0,axis1,counts=bc)
+        o['msk_sfrac'] = msk
 
-#            print i0, np.sum(sc0[msk]), np.sum(bc[msk]), np.sum(dlnl[msk])
-#            print np.sum(dlnl), np.sum(sc0), np.sum(sc0.flat[iarg]), np.sum(bc), sfrac
+        if sfrac < self._min_fsig:
+            print np.log10(self._min_fsig/sfrac)
+            o['sigmav_ul'] *= np.log10(self._min_fsig/sfrac)
 
 
-#            print np.sum(msk)
-#            print self._msk.shape
-#            print 'mass ', m/Units.gev
+        return o
 
-            axis0 = Axis(self._loge_axis.edges()-np.log10(Units.gev))
-            axis1 = Axis(np.degrees(self._psi_axis.edges()))
+        axis0 = Axis(self._loge_axis.edges()-np.log10(Units.gev))
+        axis1 = Axis(np.degrees(self._psi_axis.edges()))
 
-            dlnl_hist = Histogram2D(axis0,axis1)
-            dlnl_hist._counts = copy.copy(dlnl)
+        dlnl_hist = Histogram2D(axis0,axis1)
+        dlnl_hist._counts = copy.copy(dlnl)
 
-            dlnl_hist_msk = copy.deepcopy(dlnl_hist)
+        dlnl_hist_msk = copy.deepcopy(dlnl_hist)
             
-            dlnl_hist_msk._counts[~msk]=0
+        dlnl_hist_msk._counts[~msk]=0
 
-            plt.figure()
-            plt.gca().set_title('M = %.2f GeV'%(m/Units.gev))
-            im = dlnl_hist.plot()
+        plt.figure()
+        plt.gca().set_title('M = %.2f GeV'%(m/Units.gev))
+        im = dlnl_hist.plot()
 
-            plt.colorbar(im,label='TS')
+        plt.colorbar(im,label='TS')
 
-            plt.gca().set_xlabel('Energy [log$_{10}$(E/GeV)]')
-            plt.gca().set_ylabel('Offset [deg]')
+        plt.gca().set_xlabel('Energy [log$_{10}$(E/GeV)]')
+        plt.gca().set_ylabel('Offset [deg]')
 
-            plt.figure()
-            plt.gca().set_title('M = %.2f GeV'%(m/Units.gev))
-            im = dlnl_hist_msk.plot()
+        plt.figure()
+        plt.gca().set_title('M = %.2f GeV'%(m/Units.gev))
+        im = dlnl_hist_msk.plot()
+            
+        plt.colorbar(im,label='TS')
 
-            plt.colorbar(im,label='TS')
+        plt.gca().set_xlabel('Energy [log$_{10}$(E/GeV)]')
+        plt.gca().set_ylabel('Offset [deg]')
 
-            plt.gca().set_xlabel('Energy [log$_{10}$(E/GeV)]')
-            plt.gca().set_ylabel('Offset [deg]')
+        plt.show()
 
-            plt.show()
-
-
-            continue
-
-
-            sh2 = Histogram2D(axis,self._psi_axis)
+        sh2 = Histogram2D(axis,self._psi_axis)
 #            sh2._counts[:,self._msk][msk] = 1.0
-            sh2._counts[msk] = 1.0
-            
-            print sh2._counts.shape
-            print np.sum(sh2._counts)
+        sh2._counts[msk] = 1.0
+        plt.figure()
 
-            print sc0[msk]
+        sh2.plot()
 
-            plt.figure()
+        plt.show()
 
-            sh2.plot()
+        sh = Histogram2D(axis,self._psi_axis)
+        sh._counts[:,self._msk] = sc0
 
-            plt.show()
+        bh = Histogram2D(axis,self._psi_axis)
+        bh._counts[:,self._msk] = bc
 
-            continue
-            sh = Histogram2D(axis,self._psi_axis)
-            sh._counts[:,self._msk] = sc0
+        plt.figure()
+        sh.project(0).plot()
+        bh.project(0).plot()
 
-            bh = Histogram2D(axis,self._psi_axis)
-            bh._counts[:,self._msk] = bc
-#                             counts = bc,var=0)
+        plt.gca().set_yscale('log')
 
+        shp = sh.project(0)
+        bhp = bh.project(0)
 
-            plt.figure()
-            sh.project(0).plot()
-            bh.project(0).plot()
-
-            plt.gca().set_yscale('log')
-
-            shp = sh.project(0)
-            bhp = bh.project(0)
-
-            plt.figure()
-            (shp/bhp).plot()
-
-            plt.figure()
-            im = (sh/bh).plot(zlabel='test')
-            plt.colorbar(im)
-
-            plt.show()
-
-        return ul
+        plt.figure()
+        (shp/bhp).plot()
+        
+        plt.figure()
+        im = (sh/bh).plot(zlabel='test')
+        plt.colorbar(im)
+        
+        plt.show()
             
 

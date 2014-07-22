@@ -205,7 +205,7 @@ class IRFModel(object):
         return IRFModel(aeff_ptsrc,aeff,bkg_ptsrc,bkg,psf,edisp)
 
 
-class BkgSpectrumModel(Model):
+class BkgSpectrumModel(PDF):
 
     def __init__(self,irf,livetime):
         Model.__init__(self)
@@ -216,7 +216,7 @@ class BkgSpectrumModel(Model):
 
         return 10**self._irf._log_bkg_ptsrc_fn(x)*self._livetime
         
-class CountsSpectrumModel(Model):
+class CountsSpectrumModel(PDF):
 
     ncall = 0
 

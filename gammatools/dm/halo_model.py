@@ -28,11 +28,23 @@ class HaloModel(object):
         self._losfn = LoSIntegralFnFast.create(src)
         self._dp = DensityProfile.create(src)
         self._jp = JProfile(self._losfn)
-        self._dist = src['dist']
+        self._dist = src['dist']*Units.kpc
 
     @property
     def dist(self):
         return self._dist
+
+    @property
+    def dp(self):
+        return self._dp
+
+    @property
+    def jp(self):
+        return self._jp
+
+    @property
+    def losfn(self):
+        return self._losfn
 
     def jval(self,loge,psi):
 
