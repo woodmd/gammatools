@@ -177,9 +177,9 @@ class BFGSFitter(Configurable):
 
         bfgs_kwargs = self.config
 #{'pgtol' : 1E-5, bounds=bounds, 'factr' : 1E7 }
-        update_dict(bfgs_kwargs,kwargs)
 
         bfgs_kwargs['bounds'] = bounds
+        update_dict(bfgs_kwargs,kwargs)
 
         res = fmin_bfgs(self._objfn,pset.array(),None,
                         approx_grad=1,**bfgs_kwargs)#,factr=1./self._tol)

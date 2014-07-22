@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from gammatools.core.histogram import Histogram
 from scipy.stats import norm
 from gammatools.core.util import find_root, find_fn_root
-
+from gammatools.core.nonlinear_fitting import BFGSFitter
 
 def pval_to_sigma(p):
     """Convert the pval of a one-sided confidence interval to sigma."""
@@ -61,11 +61,52 @@ class OnOffExperiment(object):
     """Evaluate the sensitivity of an on-off counting experiment.  If
     alpha = None then the background will be assumed to be known."""
 
-    def __init__(self,mus,mub,alpha=None):
+    def __init__(self,mus,mub,alpha=None,known_background=False):
         self._mus = np.array(mus,ndmin=1)
         self._mub = np.array(mub,ndmin=1)
         if not alpha is None: self._alpha = np.array(alpha,ndmin=1)
         else: self._alpha = None
+        self._data_axes = [0]
+
+    def mc_ts(self,mu,ntrial):
+        """Simulate a set of TS values."""
+
+        shape = (ntrial,len(self._mus))
+
+        ns = np.random.poisson(self._mus*mu,shape).T
+        nb = np.random.poisson(self._mub,shape).T
+        nc = np.random.poisson(np.sum(self._mub)/self._alpha,(ntrial,1)).T
+
+        ns = np.array(ns,dtype='float')
+        nb = np.array(nb,dtype='float')
+        nc = np.array(nc,dtype='float')
+
+        tsv = []
+
+        for i in range(ntrial):
+
+            # Fit for signal lnl
+            fn0 = lambda x,y: -OnOffExperiment.lnl_signal(ns[:,i]+nb[:,i],nc[:,i],
+                                                         x*self._mus,y*self._mub,
+                                                         self._alpha)
+
+            # Fit for signal null lnl
+            fn1 = lambda x: -OnOffExperiment.lnl_null(ns[:,i]+nb[:,i],nc[:,i],
+                                                      x*self._mub,self._alpha)
+
+            p0 = BFGSFitter.fit(fn0,[1.0,1.0],bounds=[[0.01,None],[0.01,None]])
+            p1 = BFGSFitter.fit(fn1,[1.0],bounds=[[0.01,None]])
+
+            ts = OnOffExperiment.ts(ns[:,i]+nb[:,i],nc[:,i],
+                                    p0[0].value*self._mus,
+                                    p0[1].value*self._mub,
+                                    p1[0].value*self._mub,
+                                    self._alpha)
+                                 
+            ts = max(ts,0)
+            tsv.append(ts)
+
+        return np.array(tsv)
 
     def asimov_mu_ts0(self,ts):
         """Return the value of the signal strength parameter for which
@@ -90,78 +131,106 @@ class OnOffExperiment(object):
         return self.asimov_mu_ts0(ts)
 
     def asimov_ts0_signal(self,s):
-        """Compute the discovery test statistic for a signal strength
-        parameter s for an asimov data set matching the signal hypothesis."""
+        """Compute the median discovery test statistic for a signal
+        strength parameter s using the asimov method."""
 
         s = np.array(s,ndmin=1)[np.newaxis,...]
 
         mub = self._mub[:,np.newaxis]
         mus = self._mus[:,np.newaxis]
 
-        wb = mub/np.apply_over_axes(np.sum,mub,0)
+        wb = mub/np.apply_over_axes(np.sum,mub,self._data_axes)
 
         # model amplitude for signal counts in signal region under
         # signal hypothesis
         s1 = s*mus
 
         # nb of counts in signal region
-        sc = mub + s1
+        ns = mub + s1
 
         if self._alpha is None:        
 
-            b0 = wb*np.apply_over_axes(np.sum,sc,0)
-            lnls1 = poisson_lnl(sc,sc)
-            lnls0 = poisson_lnl(sc,b0)
-            return 2*np.sum((lnls1-lnls0),axis=0)
+            b0 = wb*np.apply_over_axes(np.sum,ns,self._data_axes)
+            lnls1 = poisson_lnl(ns,ns)
+            lnls0 = poisson_lnl(ns,b0)
+            ts = 2*np.apply_over_axes(np.sum,(lnls1-lnls0),self._data_axes)
+
+            return ts
 
         alpha  = self._alpha[:,np.newaxis]
 
         # nb of counts in control region
-        cc = np.apply_over_axes(np.sum,mub/alpha,0)
+        nc = np.apply_over_axes(np.sum,mub/alpha,self._data_axes)
 
         # model amplitude for background counts in signal region under
         # null hypothesis
-        b0 = wb*(cc+np.apply_over_axes(np.sum,sc,0))*alpha/(1+alpha)
+        b0 = wb*(nc+np.apply_over_axes(np.sum,ns,
+                                       self._data_axes))*alpha/(1+alpha)
 
-        # model amplitude for background counts in signal region under
-        # signal hypothesis
-        b1 = mub
+        lnl1 = OnOffExperiment.lnl_signal(ns,nc,s1,mub,alpha)
+        lnl0 = OnOffExperiment.lnl_null(ns,nc,b0,alpha)
 
-        # model amplitude for counts in control region under null hypothesis
-        c0 = np.apply_over_axes(np.sum,b0,0)/alpha
-
-        # model amplitude for counts in control region under signal hypothesis
-        c1 = np.apply_over_axes(np.sum,b1,0)/alpha
-        
-        return OnOffExperiment.ts(sc,cc,s1+b1,b0,c1,c0)
-
-    def median_ts(self,s):
-        return self.plnl_signal(s)
-
-    
+        return 2*(lnl1-lnl0)
 
     @staticmethod
-    def ts(ns,nc,mus1,mus0,muc1,muc0,data_axis=0):
+    def lnl_signal(ns,nc,mus,mub,alpha=None,data_axes=0):
         """
-        Compute the TS (2 x delta log likelihood) between two
-        hypotheses given a number of counts in the signal/control
-        regions.
+        Log-likelihood for signal hypothesis.
+
+        Parameters
+        ----------
+        ns: Vector of observed counts in signal region.
+
+        nc: Vector of observed counts in control region(s).
+        """       
+
+        lnls = np.sum(poisson_lnl(ns,mus+mub),axis=data_axes)
+        if alpha is None: return lnls
+
+        # model amplitude for counts in control region
+        muc = np.apply_over_axes(np.sum,mub,data_axes)/alpha
+
+        lnlc = np.sum(poisson_lnl(nc,muc),axis=data_axes)
+        return lnls+lnlc
+
+    @staticmethod
+    def lnl_null(ns,nc,mub,alpha=None,data_axes=0):
+        """
+        Log-likelihood for null hypothesis.
+
+        Parameters
+        ----------
+        ns: Vector of observed counts in signal region.
+
+        nc: Vector of observed counts in control region(s).
+        """       
+        lnls = np.sum(poisson_lnl(ns,mub),axis=data_axes)
+        if alpha is None: return lnls
+
+        # model amplitude for counts in control region
+        muc = np.apply_over_axes(np.sum,mub,data_axes)/alpha
+
+        lnlc = np.sum(poisson_lnl(nc,muc),axis=data_axes)
+        return lnls+lnlc
+
+    @staticmethod
+    def ts(ns,nc,mus1,mub1,mub0,alpha,data_axis=0):
+        """
+        Compute the TS (2 x delta log likelihood) between signal and
+        null hypotheses given a number of counts and model amplitude
+        in the signal/control regions.
 
         Parameters
         ----------
         sc: Observed counts in signal region.
 
-        cc: Observed counts in control region.
+        nc: Observed counts in control region.
         """
 
-        lnls1 = np.sum(poisson_lnl(ns,mus1),axis=data_axis)
-        lnlc1 = np.sum(poisson_lnl(nc,muc1),axis=data_axis)
+        lnl1 = OnOffExperiment.lnl_signal(ns,nc,mus1,mub1,alpha,data_axis)
+        lnl0 = OnOffExperiment.lnl_null(ns,nc,mub0,alpha,data_axis)
 
-        lnls0 = np.sum(poisson_lnl(ns,mus0),axis=data_axis)
-        lnlc0 = np.sum(poisson_lnl(nc,muc0),axis=data_axis)
- 
-        return 2*(lnls1+lnlc1-lnls0-lnlc0)
-
+        return 2*(lnl1-lnl0)
 
 def poisson_median_ts(sc,bc,alpha):
     """Compute the median TS."""
@@ -183,13 +252,9 @@ def poisson_median_ts(sc,bc,alpha):
 
     lnl0 = nc*np.log(mub0)-mub0 + cc*np.log(mub0/alpha) - mub0/alpha
     lnl1 = nc*np.log(mub1+mus) - mub1 - mus + \
-        cc*np.log(mub1/alpha) - mub1/alpha
-                
+        cc*np.log(mub1/alpha) - mub1/alpha                
 
     return 2*(lnl1-lnl0)
-
-
-
 
 def poisson_median_ul(sc,bc,alpha):
     """Compute the median UL."""
@@ -297,26 +362,37 @@ if __name__ == '__main__':
 
     ntrial = 1000
 
-    
-
-    mub = np.array([101.3,51.3])
-    
-    mus = 1.*np.array([3.1,1.0])
+    mub = np.array([100.0,50.0])    
+    mus = 10.*np.array([3.0,1.0])
     alpha = np.array([1.0])
 
     scalc = OnOffExperiment(mus,mub,alpha)
 
+
+    print scalc.asimov_ts0_signal(1.0)
+    print scalc.asimov_ts0_signal(np.linspace(0.1,100,10))
+
+
+    ts = scalc.mc_ts(1.0,1000)
+
+    print np.median(ts)
+
+    sys.exit(0)
+
     s = np.linspace(0.1,100,10)
 
-    print 'ts0_signal ', scalc.ts0_signal(s)
-    print 'ts0_signal[5] ', s[5], scalc.ts0_signal(s[5])
-    mu, muerr =  scalc.mu_ts0(25.0)
+    print 'ts0_signal ', scalc.asimov_ts0_signal(s)
+    print 'ts0_signal[5] ', s[5], scalc.asimov_ts0_signal(s[5])
+    mu, muerr =  scalc.asimov_mu_ts0(25.0)
 
-    print 'TS(mu): ', scalc.ts0_signal(mu)
-    print 'TS(mu+muerr): ', scalc.ts0_signal(mu+muerr)
+    print 'TS(mu): ', scalc.asimov_ts0_signal(mu)
+    print 'TS(mu+muerr): ', scalc.asimov_ts0_signal(mu+muerr)
 
     ns = np.random.poisson(mus,(ntrial,len(mus))).T
     nb = np.random.poisson(mub,(ntrial,len(mub))).T
+
+    mub = mub[:,np.newaxis]
+    mus = mus[:,np.newaxis]
 
     nexcess = ns+nb-mub
     nexcess[nexcess<=0] = 0
@@ -329,23 +405,13 @@ if __name__ == '__main__':
     alpha = 0.05
     dlnl = pval_to_sigma(alpha)**2
 
-    print pval_to_sigma(0.05)
-    print gauss_pval_to_sigma(0.68)
-
     for i in range(ntrial):
 
-        xroot = find_fn_root(lambda t: fn_qmu((ns+nb)[i],
-                                              (mub+nexcess)[i],
-                                              (mub+nexcess)[i]+t),0,100,dlnl)
+        xroot = find_fn_root(lambda t: fn_qmu((ns+nb)[:,i],
+                                              (mub+nexcess)[:,i],
+                                              (mub+nexcess)[:,i]+t),0,100,dlnl)
         ul_mc[i] = nexcess[i]+xroot
 
-
-#        print i, nexcess[i], xroot, fn_qmu((ns+nb)[i],(mub+nexcess)[i],(mub+nexcess)[i]+xroot)
-
-
-#print ts_mc
-#print ns+nb
-#print poisson_lnl(0,0)
 
     sigma_mu_fn = lambda t: np.sqrt(t**2/fn_qmu(mub,mub,mub+t))
 

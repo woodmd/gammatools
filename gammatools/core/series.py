@@ -48,26 +48,27 @@ class Band(object):
 
 class Series(object):
 
-    default_errorbar_style = { 'marker' : None,
-                               'color' : None,
-                               'markersize' : None,
-                               'markerfacecolor' : None,
-                               'markeredgecolor' : None,
-                               'linestyle' : None,
-                               'linewidth' : None,
-                               'label' : None }
+    errorbar_kwargs = [ 'marker',
+                        'color',
+                        'markersize', 
+                        'markerfacecolor',
+                        'markeredgecolor',
+                        'linestyle',
+                        'linewidth',
+                        'label' ]
 
-    default_scatter_style = { 'marker' : None,
-                               'color' : None,
-                              'edgecolor' : None,
-#                               'markersize' : None,
-#                               'markerfacecolor' : None,
-#                               'markeredgecolor' : None,
-#                               'linestyle' : None,
-#                               'linewidth' : 1,
-                               'label' : None }
+    scatter_kwargs = ['marker','color','edgecolor','label']
 
-    default_style = { 'msk' : None, 'draw_style' : 'errorbar' }
+    default_style = { 'marker' : None,
+                      'color' : None,
+                      'markersize' : None,
+                      'markerfacecolor' : None,
+                      'markeredgecolor' : None,
+                      'linestyle' : None,
+                      'linewidth' : None,
+                      'label' : None,
+                      'msk' : None, 
+                      'draw_style' : 'errorbar' }
     
 
     def __init__(self,x,y,yerr=None,style=None):
@@ -79,9 +80,7 @@ class Series(object):
         self._msk = np.empty(len(self._x),dtype='bool')
         self._msk.fill(True)
         
-        self._style = copy.deepcopy(dict(Series.default_style.items() +
-                                         Series.default_scatter_style.items() +
-                                         Series.default_errorbar_style.items()))
+        self._style = copy.deepcopy(Series.default_style)
         if not style is None: update_dict(self._style,style)
 
     def x(self):
@@ -123,7 +122,7 @@ class Series(object):
         if style['msk'] is None: msk = self._msk
         else: msk = style['msk']
         
-        clear_dict_by_keys(style,Series.default_errorbar_style.keys(),False)
+        clear_dict_by_keys(style,Series.errorbar_kwargs,False)
         clear_dict_by_vals(style,None)
 
         if not self._yerr is None: yerr = self._yerr[msk]
@@ -141,15 +140,29 @@ class Series(object):
         if style['msk'] is None: msk = self._msk
         else: msk = style['msk']
         
-        clear_dict_by_keys(style,Series.default_scatter_style.keys(),False)
+        clear_dict_by_keys(style,Series.scatter_kwargs,False)
         clear_dict_by_vals(style,None)
 
         if not self._yerr is None: yerr = self._yerr[msk]
         else: yerr = self._yerr
 
-        print style
-
         ax.scatter(self._x[msk],self._y[msk],**style)
+
+
+    @staticmethod
+    def createPercentileFn(x,y,qfrac=0.5,axis=0):
+        """Create a series object by evaluating the given percentile
+        from a list of 1D functions."""
+
+        y = np.sort(y,axis=axis)
+        n = y.shape[0]
+
+        i = n*qfrac
+        i = min(n-1,max(0,i))
+
+        print i
+
+        return Series(x,y[i,:])
 
 
     @staticmethod
