@@ -22,10 +22,7 @@ class TaskDispatcher(Configurable):
     default_config = { 'queue'   : 'xlong' }
     
     def __init__(self,config=None,**kwargs):
-        super(TaskDispatcher,self).__init__()    
-        self.configure(config,TaskDispatcher.default_config,**kwargs)
-
-    
+        super(TaskDispatcher,self).__init__(config,**kwargs)    
         
 class Task(Configurable):
 
@@ -35,9 +32,7 @@ class Task(Configurable):
                        'stage_inputs' : False }
     
     def __init__(self,config=None,**kwargs):       
-        super(Task,self).__init__()
-        self.update_default_config(Task.default_config)
-        self.configure(config,**kwargs)
+        super(Task,self).__init__(config,**kwargs)
 
         self._input_files = []
         self._output_files = []
@@ -94,9 +89,7 @@ class LTSumTask(Task):
     default_config = { 'infile1' : None }
 
     def __init__(self,outfile,config=None,**kwargs):
-        super(LTSumTask,self).__init__()
-        self.update_default_config(LTSumTask)
-        self.configure(config,**kwargs)
+        super(LTSumTask,self).__init__(config,**kwargs)
 
         self._outfile = os.path.abspath(outfile)
         self.register_output_file(self._outfile)
@@ -105,9 +98,8 @@ class LTSumTask(Task):
     
     def run_task(self):
 
-        config = self.config()
         outfile = os.path.basename(self._output_files[0])        
-        self._gtapp.run(outfile=outfile,**config)
+        self._gtapp.run(outfile=outfile,**self.config)
             
 class LTCubeTask(Task):
 
@@ -118,9 +110,7 @@ class LTCubeTask(Task):
                        'zmax' : 105.0 }
 
     def __init__(self,outfile,config=None,**kwargs):
-        super(LTCubeTask,self).__init__()
-        self.configure(config,
-                       default_config=LTCubeTask.default_config,**kwargs)
+        super(LTCubeTask,self).__init__(config,**kwargs)
 
         self._outfile = os.path.abspath(outfile)
         self.register_output_file(self._outfile)
@@ -129,9 +119,8 @@ class LTCubeTask(Task):
     
     def run_task(self):
 
-        config = self.config()
         outfile = os.path.basename(self._output_files[0])        
-        self._gtapp.run(outfile=outfile,**config)
+        self._gtapp.run(outfile=outfile,**self.config)
     
 
 class SrcModelTask(Task):
@@ -147,8 +136,7 @@ class SrcModelTask(Task):
 
     
     def __init__(self,outfile,config=None,**kwargs):
-        super(SrcModelTask,self).__init__()
-        self.configure(config,**kwargs)
+        super(SrcModelTask,self).__init__(config,**kwargs)
 
         self._outfile = os.path.abspath(outfile)
         self.register_output_file(self._outfile)
@@ -157,9 +145,8 @@ class SrcModelTask(Task):
     
     def run_task(self):
 
-        config = self.config()
         outfile = os.path.basename(self._output_files[0])        
-        self._gtapp.run(outfile=outfile,**config)
+        self._gtapp.run(outfile=outfile,**self.config)
     
 class SrcMapTask(Task):
 

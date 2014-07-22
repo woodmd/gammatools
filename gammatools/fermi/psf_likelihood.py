@@ -8,15 +8,15 @@ import numpy as np
 
 from gammatools.core.histogram import Histogram
 
-from gammatools.core.model_fn import *
+from gammatools.core.model_fn import PDF, ParamFnBase
 
 from gammatools.core.util import convolve2d_gauss
 import scipy.special as spfn
 
 
-class ConvolvedGaussFn(Model):
+class ConvolvedGaussFn(PDF):
     def __init__(self,pset,psf_model):   
-        Model.__init__(self,pset)
+        PDF.__init__(self,pset)
         self._psf_model = copy.deepcopy(psf_model)
 #        self._pid = [pnorm.pid(),psigma.pid()]
 
@@ -107,7 +107,7 @@ class ConvolvedGaussFn(Model):
 
         
 
-class KingFn(Model):
+class KingFn(PDF):
     def __init__(self,psigma,pgamma,pnorm=None):
 
         pset = ParameterSet([psigma,pgamma])
@@ -115,7 +115,7 @@ class KingFn(Model):
         if not pnorm is None: 
             pset.addParameter(pnorm)
             self._pid += [pnorm.pid()]
-        Model.__init__(self,pset,cname='dtheta')      
+        PDF.__init__(self,pset,cname='dtheta')      
 
     @staticmethod
     def create(sigma,gamma,norm=1.0,offset=0):
@@ -171,7 +171,7 @@ class KingFn(Model):
     
         return self.integrate(0,dtheta,p)
 
-class PulsarOnFn(Model):
+class PulsarOnFn(PDF):
 
     def __init__(self,non,noff,alpha,psf_model):
         self._non = copy.copy(non)
@@ -192,13 +192,13 @@ class PulsarOnFn(Model):
                 np.sqrt(noff*mus/(alpha*(1+alpha)) + 
                         (self._mub0/2.-mus/(2.*alpha))**2)))
 
-class BinnedPLFluxModel(Model):
+class BinnedPLFluxModel(PDF):
 
     def __init__(self,spectral_model,spatial_model,ebin_edges,exp):
         pset = ParameterSet()
         pset.addSet(spectral_model.param())
         pset.addSet(spatial_model.param())
-        Model.__init__(self,pset)      
+        PDF.__init__(self,pset)      
         self._ebin_edges = ebin_edges
         self._exp = exp
         self.spatial_model = spatial_model
@@ -218,13 +218,13 @@ class BinnedPLFluxModel(Model):
                                             self._ebin_edges[1],p)
         return v0*v1*self._exp
 
-class PowerlawFn(Model):
+class PowerlawFn(PDF):
 
     def __init__(self,pnorm,pgamma):
         pset = ParameterSet([pnorm,pgamma])
         self._pid = [pnorm.pid(),pgamma.pid()]
         self._enorm = 3.0
-        Model.__init__(self,pset,cname='energy')      
+        PDF.__init__(self,pset,cname='energy')      
 
     def _eval(self,x,p):
 
@@ -244,10 +244,10 @@ class PowerlawFn(Model):
         g1 = -gamma+1
         return norm/g1*10**(gamma*self._enorm)*(10**(xhi*g1) - 10**(xlo*g1))
 
-class BinnedLnL(ParamFn):
+class BinnedLnL(ParamFnBase):
 
     def __init__(self,non,xedge,model):
-        ParamFn.__init__(self,model.param())
+        ParamFnBase.__init__(self,model.param())
         self._non = non
         self._model = model
         self._xedge = xedge        
@@ -276,10 +276,10 @@ class BinnedLnL(ParamFn):
         if pset.size() > 1: return -np.sum(lnl,axis=1)
         else: return -np.sum(lnl)
 
-class Binned2DLnL(ParamFn):
+class Binned2DLnL(ParamFnBase):
 
     def __init__(self,non,xedge,yedge,model):
-        ParamFn.__init__(self,model.param())
+        ParamFnBase.__init__(self,model.param())
         self._non = non.flat
         self._model = model
         self._xedge = xedge        
@@ -321,10 +321,10 @@ class Binned2DLnL(ParamFn):
         if pset.size() > 1: return -np.sum(lnl,axis=1)
         else: return -np.sum(lnl)
 
-class OnOffBinnedLnL(ParamFn):
+class OnOffBinnedLnL(ParamFnBase):
 
     def __init__(self,non,noff,xedge,alpha,model):
-        ParamFn.__init__(self,model.param())
+        ParamFnBase.__init__(self,model.param())
         self._non = copy.copy(non)
         self._noff = copy.copy(noff)
         self._alpha = alpha
