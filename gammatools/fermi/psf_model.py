@@ -166,7 +166,7 @@ class PSFModelLT(PSFModel):
         self._src_type = src_type
         self._cth_range = cth_range
         self._nbin_dtheta = nbin
-        self._irf = copy.deepcopy(irf)
+        self._irf = irf
         self._edisp_table = edisp_table
 
         self._lonlat = (0, 0)
@@ -207,6 +207,9 @@ class PSFModelLT(PSFModel):
         self._edisp = None
 
         shape = (self._log_energy.shape[0],self._ctheta_center.shape[0])
+
+        print self._gx, self._gx.shape
+        
         aeff = self._irf.aeff(self._gx.flat,self._gy.flat)
         aeff = aeff.reshape(shape)
         aeff[aeff < 0] = 0

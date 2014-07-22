@@ -1,7 +1,11 @@
 import wx
 import numpy as np
+import os
+import copy
 import pyfits
 
+from gammatools.core.stats import poisson_lnl
+from gammatools.core.histogram import Histogram, Axis
 from gammatools.core.fits_util import SkyImage, SkyCube
 from gammatools.fermi.catalog import Catalog
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
@@ -9,6 +13,8 @@ from matplotlib.backends.backend_wxagg import Toolbar
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_wx import NavigationToolbar2Wx
 from matplotlib.colors import NoNorm, LogNorm, Normalize
+
+from itertools import cycle
 
 def make_projection_plots_skyimage(im):
 
@@ -19,92 +25,226 @@ def make_projection_plots_skyimage(im):
     plt.figure()
 
     im.project(1).plot()
-    
-def make_plots_skycube(im,delta_bin=None,paxis=None,plots_per_fig=None,
-                       smooth=False, residual=False,
-                       im_mdl=None, suffix='', **kwargs):
 
-    nbins = im.axis(2).nbins()
-    if delta_bin is None: delta_bin = nbins
-    
-    nplots = nbins/delta_bin
 
-    if plots_per_fig is None: plots_per_fig = min(8,nplots)
+
 
     
-    nfig = nplots/plots_per_fig
+class FITSPlotter(object):
 
-    print nfig
+    fignum = 0
+    
+    def __init__(self,im,im_mdl,irf=None,prefix=None,outdir='plots'):
 
-    if plots_per_fig > 4 and plots_per_fig <= 8:
-        nx, ny = 4, 2
-    elif plots_per_fig <= 4 and plots_per_fig > 1:
-        nx, ny = 2, 2
-    else:
-        nx, ny = 1, 1
-
-
-    fig_sx = 5.0*nx
-    fig_sy = 5.0*ny
+        self._im = im
+        self._im_mdl = im_mdl
+        self._irf = irf
+        self._prefix = prefix
+        if self._prefix is None: self._prefix = 'fig'
+        if outdir: self._prefix = os.path.join(outdir,self._prefix)
         
-    for i in range(nfig):
+    def make_mdl_plots_skycube(self,**kwargs):
+
+        self.make_plots_skycube(model=True,**kwargs)
+        
+    def make_plots_skycube(self,delta_bin=None,paxis=None,plots_per_fig=None,
+                           smooth=False, residual=False,
+                           suffix='',model=False, **kwargs):
+
+        if model: im = self._im_mdl
+        else: im = self._im
+        
+        nbins = im.axis(2).nbins()
+        if delta_bin is None: delta_bin = nbins
+    
+        nplots = nbins/delta_bin
+
+        if plots_per_fig is None: plots_per_fig = min(8,nplots)
+
+    
+        nfig = nplots/plots_per_fig
+        if plots_per_fig > 4 and plots_per_fig <= 8:
+            nx, ny = 4, 2
+        elif plots_per_fig <= 4 and plots_per_fig > 1:
+            nx, ny = 2, 2
+        else:
+            nx, ny = 1, 1
+
+        fig_sx = 5.0*nx
+        fig_sy = 5.0*ny
+
+#        figs = []
+#        for i in range(nfig): figs.append(plt.figure(figsize=(fig_sx,fig_sy)))
+        
+        for i in range(nfig):
 
 #        fig, axes = plt.subplots(2,4,figsize=(1.5*10,1.5*5))
 
-        fig = plt.figure(figsize=(fig_sx,fig_sy))
-        for j in range(plots_per_fig):
+            fig = self.create_figure(figsize=(fig_sx,fig_sy))
+            fig2 = self.create_figure(figsize=(fig_sx,fig_sy))
+            ##plt.figure(FITSPlotter.fignum,figsize=(fig_sx,fig_sy))
 
-            ibin = i*nfig*delta_bin + j*delta_bin
 
-            if ibin >= nbins: break
-            
-            print i, j, ibin
-        
-            h = im.marginalize(2,[ibin,ibin+delta_bin])
+            #            fig2 = plt.figure(100+i,figsize=(fig_sx,fig_sy))
+            for j in range(plots_per_fig):
 
-            if residual and im_mdl:
+                ibin = i*nfig*delta_bin + j*delta_bin
 
-                hm = im_mdl.marginalize(2,[ibin,ibin+delta_bin])
+                if ibin >= nbins: break
+#                print i, j, ibin
 
-                if smooth:
-                    hm = hm.smooth(0.2,compute_var=True)
-                    h = h.smooth(0.2,compute_var=True)
+                h = im.marginalize(2,[ibin,ibin+delta_bin])
+                hm = None
+                if self._im_mdl:
+                    hm = self._im_mdl.marginalize(2,[ibin,ibin+delta_bin])
+
+                mc_resid = []
                 
-                h -= hm
-                h /= np.sqrt(hm.var())
-            elif smooth:
-                h = h.smooth(0.2)
-
-            emin = im.axis(2).pix_to_coord(ibin)
-            emax = im.axis(2).pix_to_coord(ibin+delta_bin)
-            
-            subplot = '%i%i%i'%(ny,nx,j+1)
-
-            if paxis is None:
-
-
+                    
                 if residual:
-                    kwargs['vmin'] = -5
-                    kwargs['vmax'] = 5
+                    for k in range(3):
+                        print k
+                        mc_resid.append(self.make_residual_map(h,hm,
+                                                               smooth,mc=True))
+                    h = self.make_residual_map(h,hm,smooth)
+                elif smooth: h = h.smooth(0.2,compute_var=True)
                 
-                axim = h.plot(subplot=subplot,**kwargs)
-                ax = h.ax()
-                ax.set_title('E = [%.3f %.3f]'%(emin,emax))
-                plt.colorbar(axim,orientation='horizontal',shrink=0.9,pad=0.15,
-                             fraction=0.05)#,ticks=[-30,0,10,20,30])
+#                h = self.make_counts_map(im,ibin,ibin+delta_bin,
+#                                         residual,smooth)
+
+                emin = im.axis(2).pix_to_coord(ibin)
+                emax = im.axis(2).pix_to_coord(ibin+delta_bin)
+
+                rpsf68 = self._irf.quantile(10**emin,10**emax,0.68)
+                rpsf95 = self._irf.quantile(10**emin,10**emax,0.95)
                 
-            else:
-                ax = fig.add_subplot(subplot)
-                hp = h.project(paxis)
-                hp.plot(ax=ax,**kwargs)
-                ax.set_xlim(*hp.axis().lims())
+                title = 'log$_{10}$(E/MeV) = [%.3f %.3f]'%(emin,emax)
+                
+                subplot = '%i%i%i'%(ny,nx,j+1)
+                
+                if paxis is None:
+                    self.make_image_plot(subplot,h,fig,fig2,
+                                         title,rpsf68,rpsf95,
+                                         residual,mc_resid=mc_resid,**kwargs)
+                else:
+                    ax = fig.add_subplot(subplot)
+                    hp = h.project(paxis)
+                    hp.plot(ax=ax,**kwargs)
+                    ax.set_xlim(*hp.axis().lims())
+                
 #                ax.set_ylim(0)
 
-        plt.savefig('fig_%i%s.png'%(i,suffix))
+        fig.savefig('%s_%i%s.png'%(self._prefix,i,suffix))
+        fig2.savefig('%s_%i%s_zproj.png'%(self._prefix,i,suffix))
 
-    
+    def create_figure(self,**kwargs):
+        fig = plt.figure('Figure %i'%FITSPlotter.fignum,**kwargs)
+        FITSPlotter.fignum += 1
+        return fig
+        
+    def make_residual_map(self,h,hm,smooth,mc=False):
+
+
+        
+        if mc:
+            h = copy.deepcopy(h)
+            h._counts = np.array(np.random.poisson(hm.counts()),
+                                 dtype='float')
+            
+        if smooth:
+            hm = hm.smooth(0.2,compute_var=True,summed=True)
+            h = h.smooth(0.2,compute_var=True,summed=True)
+
+#            print '-----------------'
+#            print 'hm var ', np.median(np.ravel(hm.var()))
+#            print 'h var ', np.median(np.ravel(h.var()))
+#            print 'hm counts ', np.median(np.ravel(hm.counts()))
+#            print 'h counts ', np.median(np.ravel(h.counts()))
+
+        ts = 2.0*(poisson_lnl(h.counts(),h.counts()) -
+                  poisson_lnl(h.counts(),hm.counts()))
+
+        s = h.counts() - hm.counts()
+
+        sigma = np.sqrt(ts)
+        sigma[s<0] *= -1
+
+        h._counts = sigma
+        h._var = np.zeros(sigma.shape)
+        
+#        h._counts -= hm._counts
+#        h._counts /= np.sqrt(hm._var)
+
+        return h
+        
+
+    def make_image_plot(self,subplot,h,fig,fig2,title,rpsf68,rpsf95,
+                        residual,mc_resid=None,**kwargs):
+
+        plt.figure(fig.get_label())
+        if residual:
+            kwargs['vmin'] = -5
+            kwargs['vmax'] = 5
+            kwargs['levels'] = [-5.0,-3.0,3.0,5.0]
+                
+        axim = h.plot(subplot=subplot,cmap='ds9_b',**kwargs)
+        h.plot_circle(rpsf68,color='w')
+        h.plot_circle(rpsf95,color='w',linestyle='--')
+        h.plot_marker(marker='+',color='w',linestyle='--')
+        ax = h.ax()
+        ax.set_title(title)
+        cb = plt.colorbar(axim,orientation='horizontal',
+                          shrink=0.9,pad=0.15,
+                          fraction=0.05)
+
+        if residual: cb.set_label('Significance [$\sigma$]')
+
+        cat = Catalog.get('3fgl')
+        cat.plot(h,ax=axim,src_color='w',label_threshold=5.0)
+
+        plt.figure(fig2.get_label())        
+        ax2 = fig2.add_subplot(subplot)
+
+        z = h.counts()[10:-10,10:-10]
+        hz = Histogram(Axis.create(-6,6,120))    
+        hz.fill(np.ravel(z))
+
+        nbin = np.prod(z.shape)
+        
+        hz_mc = Histogram(Axis.create(-6,6,120))    
+        
+        if mc_resid:
+            for mch in mc_resid:
+                z = mch.counts()[10:-10,10:-10]
+                hz_mc.fill(np.ravel(z))
+
+            hz_mc /= float(len(mc_resid))
+
+            
+        fn = lambda t : 1./np.sqrt(2*np.pi)*np.exp(-t**2/2.)
+        
+        hz.plot(label='Data',linestyle='None')
+
+        plt.plot(hz.axis().center(),
+                 fn(hz.axis().center())*hz.axis().width()*nbin,
+                 color='k',label='Gaussian ($\sigma = 1$)')
+        
+        hz_mc.plot(label='MC',hist_style='line')
+        plt.gca().grid(True)
+        plt.gca().set_yscale('log')
+        plt.gca().set_ylim(0.5)
+
+        ax2.legend(loc='upper right',prop= {'size' : 10 })
+
+        
+        ax2.set_xlabel('Significance [$\sigma$]')
+        ax2.set_title(title)
+
+        
+        
+        
+            
 def make_projection_plots_skycube(im,paxis,delta_bin=2):
-
 
     nbins = im.axis(2).nbins()
     nfig = nbins/(8*delta_bin)
@@ -189,9 +329,15 @@ class Param(object):
             value = self.maximum
         return value
 
-class SpinCtrlGroup(object):
+class CtrlGroup(object):
+
     def __init__(self, parent, label, pmin, pmax, fn, pdefault=None):
         self.label = wx.StaticText(parent, label=label)
+    
+class SpinCtrlGroup(CtrlGroup):
+    def __init__(self, parent, label, pmin, pmax, fn, pdefault=None):
+        CtrlGroup.__init__(self,parent,label,pmin,pmax,fn,pdefault=None)
+        
         self.spinCtrl = wx.SpinCtrl(parent,style=wx.SP_ARROW_KEYS)#, pos=(150, 75), size=(60, -1))
         self.spinCtrl.SetRange(pmin,pmax) 
         self.spinCtrl.SetValue(pmin)
@@ -202,11 +348,11 @@ class SpinCtrlGroup(object):
 
         self.sizer.Add(self.label, pos=(0,0),
                        flag = wx.EXPAND | wx.ALIGN_CENTER,
-                       border=2)
+                       border=5)
 
         self.sizer.Add(self.spinCtrl, pos=(0,1),
                        flag = wx.EXPAND | wx.ALIGN_CENTER | wx.ALIGN_RIGHT,
-                       border=2)
+                       border=5)
 
 #        self.sizer.Add(self.label, 0, wx.EXPAND | wx.ALIGN_CENTER | wx.ALL,
 #                       border=2)
@@ -218,7 +364,7 @@ class SpinCtrlGroup(object):
 
     def init(self,pmin,pmax,pdefault=None):
 
-        print 'init ', pmin, pmax, pdefault
+        print 'spinCtrlGroup init ', pmin, pmax, pdefault
         
         self.spinCtrl.SetRange(pmin,pmax)
         if pdefault is None: self.spinCtrl.SetValue(pmin)
@@ -275,7 +421,8 @@ class TwinSliderGroup(object):
 
         
 class SliderGroup(object):
-    def __init__(self, parent, label, pmin, pmax, fn, pdefault=None, float_arg=False):
+    def __init__(self, parent, label, pmin, pmax, fn,
+                 pdefault=None, float_arg=False):
         self.sliderLabel = wx.StaticText(parent, label=label)
         self.sliderText = wx.TextCtrl(parent, -1, style=wx.TE_PROCESS_ENTER)
 
@@ -322,6 +469,8 @@ class SliderGroup(object):
             
     def init(self,pmin,pmax,pdefault=None):
 
+        print 'sliderGroup init ', pmin, pmax, pdefault
+        
         self.pmin = pmin
         self.pmax = pmax
         
@@ -350,8 +499,6 @@ class SliderGroup(object):
 
         if self.float_arg:
             v = self.pmin + float(v)/1000.*(self.pmax-self.pmin)
-
-        print 'handler ', evt.GetInt(), v
             
         self.set(v)
         self.fn(v)
@@ -369,6 +516,9 @@ class SliderGroup(object):
         else: return v
         
     def set(self, value):
+
+        print 'sliderGroup value ', value
+        
         self.sliderText.SetValue('%s'%value)
 
         if self.float_arg:
@@ -439,20 +589,24 @@ class FITSViewerFrame(wx.Frame):
         
  #       self.spinctrl0.Bind(wx.EVT_SPINCTRL, lambda evt: self.update_slice(evt.GetPosition()))
 
+
+        
         self.ctrl_projx_center = SliderGroup(self,'X Center',0,100,
                                              self.update_projx_center,
-                                             50.,
                                              float_arg=True)
 
         self.ctrl_projx_width = SliderGroup(self,'X Width',0,100,
                                             self.update_projx_width,
-                                            100.,
                                             float_arg=True)
 
         
-#        self.ctrl_projx = TwinSliderGroup(self,'X Range',0,10,
-#                                          fnlo=self.update_projx_lo,
-#                                          fnhi=self.update_projx_hi)
+        self.ctrl_projy_center = SliderGroup(self,'Y Center',0,100,
+                                             self.update_projy_center,
+                                             float_arg=True)
+
+        self.ctrl_projy_width = SliderGroup(self,'Y Width',0,100,
+                                            self.update_projy_width,
+                                            float_arg=True)
         
         self.ctrl_rebin = SpinCtrlGroup(self,'Rebin',1,4,
                                           fn=self.update_rebin)
@@ -512,6 +666,12 @@ class FITSViewerFrame(wx.Frame):
         sb1sizer.Add(self.ctrl_projx_width.sizer, 0,
                      wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
 
+        sb1sizer.Add(self.ctrl_projy_center.sizer, 0,
+                     wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
+
+        sb1sizer.Add(self.ctrl_projy_width.sizer, 0,
+                     wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
+        
         sb1sizer.Add(cb_proj_norm, 0,
                      wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=5)
         
@@ -562,7 +722,6 @@ class FITSViewerFrame(wx.Frame):
             hdu = hl[self.hdu]        
             self.load_hdu(hdu,self.image_window[i])
 
-
         self.update()
         
     def load_hdu(self,hdu,image_window):
@@ -583,6 +742,16 @@ class FITSViewerFrame(wx.Frame):
             self.projy_window.add(im,style)
             self.ctrl_slice.init(0,im.axis(2).nbins()-1)
             self.ctrl_nbins.init(1,im.axis(2).nbins())
+
+            self.nbinx = im.axis(0).nbins()
+            self.nbiny = im.axis(1).nbins()
+
+            self._projx_center = self.nbinx/2.
+            self._projx_width = 10.0
+
+            self._projy_center = self.nbiny/2.
+            self._projy_width = 10.0
+            
         else:
             im = SkyImage.createFromHDU(hdu)
             self.ctrl_slice.init(0,0)
@@ -590,6 +759,12 @@ class FITSViewerFrame(wx.Frame):
             self.ctrl_nbins.init(0,0)
             self.ctrl_nbins.disable()
 
+        self.ctrl_projx_center.init(0,self.nbinx,self._projx_center)
+        self.ctrl_projx_width.init(0,self.nbinx,self._projx_width)
+
+        self.ctrl_projy_center.init(0,self.nbiny,self._projy_center)
+        self.ctrl_projy_width.init(0,self.nbiny,self._projy_width)
+        
     def update_slice(self,value):
 
         self.slice = int(value)
@@ -640,13 +815,43 @@ class FITSViewerFrame(wx.Frame):
 
         projx_lo = self._projx_center - self._projx_width*0.5
         projx_hi = self._projx_center + self._projx_width*0.5
-
-        print 'update projx ', projx_lo, projx_hi
         
         for w in self.image_window: w.set_projx_range(projx_lo,projx_hi)
         self.projx_window.set_proj_range(projx_lo,projx_hi)
         for w in self.image_window: w.update_lines()
         self.projx_window.update()
+        
+    def update_projy_lo(self,value):
+        
+        for w in self.image_window: w.set_projy_range_lo(value)
+        self.projy_window.set_proj_range_lo(value)
+        for w in self.image_window: w.update_lines()
+
+    def update_projy_hi(self,value):
+        
+        for w in self.image_window: w.set_projy_range_hi(value)
+        self.projy_window.set_proj_range_hi(value)
+        for w in self.image_window: w.update_lines()
+
+    def update_projy_center(self,value):
+
+        self._projy_center = value
+        self.update_projy()
+
+    def update_projy_width(self,value):
+
+        self._projy_width = value
+        self.update_projy()
+
+    def update_projy(self):
+
+        projy_lo = self._projy_center - self._projy_width*0.5
+        projy_hi = self._projy_center + self._projy_width*0.5
+        
+        for w in self.image_window: w.set_projy_range(projy_lo,projy_hi)
+        self.projy_window.set_proj_range(projy_lo,projy_hi)
+        for w in self.image_window: w.update_lines()
+        self.projy_window.update()
         
     def update_smoothing(self, e):
         
@@ -707,6 +912,9 @@ class FITSViewerFrame(wx.Frame):
 
     def update(self,evt=None):
 
+        self.update_projx()
+        self.update_projy()
+        
         for w in self.image_window: w.update()
         self.projx_window.update()
         self.projy_window.update()
@@ -757,6 +965,7 @@ class ImagePanel(BasePanel):
         self._projx_lines = [None,None]
         self._projy_lines = [None,None]
         self._im = []
+        self._cm = []
         self._style = []
         self._axim = []
         self.smooth = False
@@ -776,6 +985,16 @@ class ImagePanel(BasePanel):
     def set_projx_range(self,lovalue,hivalue):
         self.projx_range[0] = lovalue
         self.projx_range[1] = hivalue
+
+    def set_projy_range_lo(self,value):
+        self.projy_range[0] = value
+
+    def set_projy_range_hi(self,value):
+        self.projy_range[1] = value
+
+    def set_projy_range(self,lovalue,hivalue):
+        self.projy_range[0] = lovalue
+        self.projy_range[1] = hivalue
 
     def draw(self):
 
@@ -844,13 +1063,13 @@ class ImagePanel(BasePanel):
 
         cm = self._cm
         
-        cat = Catalog.get()
+        cat = Catalog.get('3fgl')
         
         if len(self._axim) == 0:
 
             axim = cm[0].plot(**self._style[0])
 
-            cat.plot(cm[0],ax=axim)
+            cat.plot(cm[0],ax=axim,src_color='w')
             
             self._axim.append(axim)
             self._ax = plt.gca()
@@ -879,7 +1098,9 @@ class ImagePanel(BasePanel):
 
     def update_lines(self):
 
-        print 'update lines'
+        if len(self._cm) == 0: return
+        
+        print 'update lines ', self.projx_range, self.projy_range
         
         cm = self._cm
 

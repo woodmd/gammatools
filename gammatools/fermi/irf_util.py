@@ -48,7 +48,7 @@ class IRFManager(object):
     def create(irf_name,load_from_file=False,irf_dir=None):
         
         if load_from_file:  return IRFManager.createFromFile(irf_name,irf_dir)
-        else: return IRFManager.createFromIRF(irf_name)
+        else: return IRFManager.createFromPyIRF(irf_name)
 
     @staticmethod
     def createFromFile(irf_name,irf_dir=None,expand_irf_name=True):
@@ -65,10 +65,24 @@ class IRFManager(object):
         return irfset
 
     @staticmethod
-    def createFromPyIRF(irf_name):
-        irf = IRFManager()
-        irf.loadPyIRF(irf_name)
-        return irf
+    def createFromPyIRF(irf_name,expand_irf_name=True):
+
+        if expand_irf_name: irf_names = expand_irf(irf_name)
+        else: irf_names = [irf_name]
+        
+        irfset = IRFManager()
+
+        for name in irf_names:
+
+            print 'Creating ', name
+            
+            irf = IRF.createFromPyIRF(name)
+            irfset.add_irf(irf)
+        return irfset
+        
+        #        irf = IRFManager()
+#        irf.loadPyIRF(irf_name)
+#        return irf
 
     def add_irf(self,irf):
         self._irfs.append(irf)
@@ -143,10 +157,10 @@ class IRFManager(object):
 
 class IRF(object):
 
-    def __init__(self,psf_file=None,aeff_file=None,edisp_file=None):
-        self._psf = PSFIRF(psf_file)
-        self._aeff = AeffIRF(aeff_file)
-        self._edisp = EDispIRF(edisp_file)
+    def __init__(self,psf,aeff,edisp):
+        self._psf = psf
+        self._aeff = aeff
+        self._edisp = edisp
 
     @staticmethod
     def create(irf_name,load_from_file=False,irf_dir=None):
@@ -165,8 +179,12 @@ class IRF(object):
         psf_file = os.path.join(irf_dir,'psf_%s.fits'%(irf_name))
         aeff_file = os.path.join(irf_dir,'aeff_%s.fits'%(irf_name))
         edisp_file = os.path.join(irf_dir,'edisp_%s.fits'%(irf_name))
-            
-        return IRF(psf_file,aeff_file,edisp_file)
+
+        psf = PSFIRF(psf_file)
+        aeff = AeffIRF(aeff_file)
+        edisp = EDispIRF(edisp_file)
+        
+        return IRF(psf,aeff,edisp)
 
     @staticmethod
     def createFromPyIRF(irf_name):
@@ -180,10 +198,12 @@ class IRF(object):
         irf_factory=pyIrfLoader.IrfsFactory.instance()
         irfs = irf_factory.create(irf_name)
 
-        self._psf = PSFPyIRF(irfs.psf())
-        self._aeff = AeffPyIRF(irfs.aeff())
-        self._edisp = EDispPyIRF(irfs.edisp())
-    
+        psf = PSFPyIRF(irfs.psf())
+        aeff = AeffPyIRF(irfs.aeff())
+        edisp = EDispPyIRF(irfs.edisp())
+
+        return IRF(psf,aeff,edisp)
+        
     def aeff(self,*args,**kwargs):
         return self._aeff(*args,**kwargs)
 

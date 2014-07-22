@@ -109,18 +109,20 @@ def common_prefix(strings):
 def string_to_array(x,delimiter=',',dtype=float):
     return np.array([t for t in x.split(delimiter)],dtype=dtype)
 
-def update_dict(d0,d1,add_new_keys=False):
+def update_dict(d0,d1,add_new_keys=False,append=False):
     """Recursively update the contents of python dictionary d1 with
     the contents of python dictionary d0."""
 
     if d0 is None or d1 is None: return
-
+    
     for k, v in d0.iteritems():
         
         if not k in d1: continue
 
         if isinstance(v,dict) and isinstance(d1[k],dict):
-            update_dict(d0[k],d1[k],add_new_keys)
+            update_dict(d0[k],d1[k],add_new_keys,append)
+        elif isinstance(v,np.ndarray) and append:
+            d0[k] = np.concatenate((v,d1[k]))
         else: d0[k] = d1[k]
 
     if add_new_keys:
