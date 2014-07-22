@@ -111,7 +111,10 @@ class Catalog(object):
     cache = {}
     
     catalog_files = { '2fgl' : os.path.join(gammatools.PACKAGE_ROOT,
-                                            'data/gll_psc_v08.P.gz') }
+                                            'data/gll_psc_v08.P.gz'),
+                      '3fgl' : os.path.join(gammatools.PACKAGE_ROOT,
+                                            'data/gll_psc4yearsource_v12r3_assoc_v6r6p0_flags.P.gz'),
+                      }
 
     src_name_cols = ['Source_Name',
                      'ASSOC1','ASSOC2','ASSOC_GAM1','ASSOC_GAM2','ASSOC_TEV']
@@ -242,8 +245,7 @@ class Catalog(object):
         
         for s in srcs:
             
-            print s['RAJ2000'], s['DEJ2000'], s['GLON'], s['GLAT']
-
+#            print s['RAJ2000'], s['DEJ2000'], s['GLON'], s['GLAT']
             src_lon.append(s['RAJ2000'])
             src_lat.append(s['DEJ2000'])
             labels.append(s['Source_Name'])
@@ -258,13 +260,11 @@ class Catalog(object):
         for i in range(len(labels)):
 
             if signif_avg[i] > label_threshold:             
-                plt.gca().text(pixcrd[0][i],pixcrd[1][i],labels[i],
+                plt.gca().text(pixcrd[0][i]+2.0,pixcrd[1][i]+2.0,labels[i],
                                color=src_color,size=8,clip_on=True)
 
             if signif_avg[i] > marker_threshold:      
-
-                print i, pixcrd[0][i],pixcrd[1][i]
-      
+#                print i, pixcrd[0][i],pixcrd[1][i]      
                 plt.gca().plot(pixcrd[0][i],pixcrd[1][i],
                                linestyle='None',marker='+',
                                color='g', markerfacecolor = 'None',
