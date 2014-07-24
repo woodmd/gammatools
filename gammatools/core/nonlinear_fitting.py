@@ -142,7 +142,8 @@ class MinuitFitter(object):
 
 
 class BFGSFitter(Configurable):
-
+    """Wrapper class for scipy BFGS function optimization."""
+    
     default_config = { 'pgtol'   : 1E-5, 'factr' : 1E7 }
 
     def __init__(self,objfn,**kwargs):

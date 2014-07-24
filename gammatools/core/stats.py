@@ -130,7 +130,7 @@ class OnOffExperiment(object):
         ts = pval_to_sigma(alpha)**2        
         return self.asimov_mu_ts0(ts)
 
-    def asimov_ts0_signal(self,s):
+    def asimov_ts0_signal(self,s,sum_lnl=True):
         """Compute the median discovery test statistic for a signal
         strength parameter s using the asimov method."""
 
@@ -167,13 +167,15 @@ class OnOffExperiment(object):
         b0 = wb*(nc+np.apply_over_axes(np.sum,ns,
                                        self._data_axes))*alpha/(1+alpha)
 
-        lnl1 = OnOffExperiment.lnl_signal(ns,nc,s1,mub,alpha)
-        lnl0 = OnOffExperiment.lnl_null(ns,nc,b0,alpha)
+        lnl1 = OnOffExperiment.lnl_signal(ns,nc,s1,mub,alpha,
+                                          self._data_axes,sum_lnl)
+        lnl0 = OnOffExperiment.lnl_null(ns,nc,b0,alpha,
+                                        self._data_axes,sum_lnl)
 
         return 2*(lnl1-lnl0)
 
     @staticmethod
-    def lnl_signal(ns,nc,mus,mub,alpha=None,data_axes=0):
+    def lnl_signal(ns,nc,mus,mub,alpha=None,data_axes=0,sum_lnl=True):
         """
         Log-likelihood for signal hypothesis.
 
@@ -184,17 +186,27 @@ class OnOffExperiment(object):
         nc: Vector of observed counts in control region(s).
         """       
 
-        lnls = np.sum(poisson_lnl(ns,mus+mub),axis=data_axes)
-        if alpha is None: return lnls
+        lnls = poisson_lnl(ns,mus+mub)
+        lnlc = np.zeros(nc.shape)
 
-        # model amplitude for counts in control region
-        muc = np.apply_over_axes(np.sum,mub,data_axes)/alpha
+        if alpha: 
+            # model amplitude for counts in control region
+            muc = np.apply_over_axes(np.sum,mub,data_axes)/alpha
+            lnlc = poisson_lnl(nc,muc)
 
-        lnlc = np.sum(poisson_lnl(nc,muc),axis=data_axes)
-        return lnls+lnlc
+        if sum_lnl: 
+            lnls = np.apply_over_axes(np.sum,lnls,data_axes)
+            lnls = np.squeeze(lnls,data_axes)
+
+            lnlc = np.apply_over_axes(np.sum,lnlc,data_axes)
+            lnlc = np.squeeze(lnlc,data_axes)
+
+            return lnls+lnlc
+        else:
+            return lnls
 
     @staticmethod
-    def lnl_null(ns,nc,mub,alpha=None,data_axes=0):
+    def lnl_null(ns,nc,mub,alpha=None,data_axes=0,sum_lnl=True):
         """
         Log-likelihood for null hypothesis.
 
@@ -204,17 +216,27 @@ class OnOffExperiment(object):
 
         nc: Vector of observed counts in control region(s).
         """       
-        lnls = np.sum(poisson_lnl(ns,mub),axis=data_axes)
-        if alpha is None: return lnls
+        lnls = poisson_lnl(ns,mub)
+        lnlc = np.zeros(nc.shape)
 
-        # model amplitude for counts in control region
-        muc = np.apply_over_axes(np.sum,mub,data_axes)/alpha
+        if alpha: 
+            # model amplitude for counts in control region
+            muc = np.apply_over_axes(np.sum,mub,data_axes)/alpha
+            lnlc = poisson_lnl(nc,muc)
 
-        lnlc = np.sum(poisson_lnl(nc,muc),axis=data_axes)
-        return lnls+lnlc
+        if sum_lnl: 
+            lnls = np.apply_over_axes(np.sum,lnls,data_axes)
+            lnls = np.squeeze(lnls,data_axes)
+
+            lnlc = np.apply_over_axes(np.sum,lnlc,data_axes)
+            lnlc = np.squeeze(lnlc,data_axes)
+            return lnls+lnlc
+        else:
+            return lnls
+
 
     @staticmethod
-    def ts(ns,nc,mus1,mub1,mub0,alpha,data_axis=0):
+    def ts(ns,nc,mus1,mub1,mub0,alpha,data_axis=0,sum_lnl=True):
         """
         Compute the TS (2 x delta log likelihood) between signal and
         null hypotheses given a number of counts and model amplitude
@@ -226,9 +248,9 @@ class OnOffExperiment(object):
 
         nc: Observed counts in control region.
         """
-
-        lnl1 = OnOffExperiment.lnl_signal(ns,nc,mus1,mub1,alpha,data_axis)
-        lnl0 = OnOffExperiment.lnl_null(ns,nc,mub0,alpha,data_axis)
+        
+        lnl1 = OnOffExperiment.lnl_signal(ns,nc,mus1,mub1,alpha,data_axis,sum_lnl)
+        lnl0 = OnOffExperiment.lnl_null(ns,nc,mub0,alpha,data_axis,sum_lnl)
 
         return 2*(lnl1-lnl0)
 

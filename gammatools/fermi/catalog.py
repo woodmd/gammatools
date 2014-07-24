@@ -150,19 +150,31 @@ class Catalog(object):
     def get(name='2fgl'):
 
         if not name in Catalog.cache:
-            Catalog.cache[name] = Catalog.create(Catalog.catalog_files[name])
+
+            filename = Catalog.catalog_files[name]
+
+            try:
+                Catalog.cache[name] = Catalog.create(filename)
+            except Exception, message:
+
+                print 'Exception ', message
+                # Retry loading fits
+                m = re.search('(.+)(\.P|\.P\.gz)',filename)
+                if m:
+                    fits_path = m.group(1) + '.fit'
+                    Catalog.cache[name] = Catalog.create(fits_path)
 
         return Catalog.cache[name]
     
     @staticmethod
     def create(filename):
 
-        if re.search('\.fits$',filename):        
+        if re.search('\.fits$',filename) or re.search('\.fit$',filename):        
             return Catalog.create_from_fits(filename)
         elif re.search('(\.P|\.P\.gz)',filename):
             return load_object(filename)
         else:
-            sys.exit(1)
+            raise Exception("Unrecognized suffix in catalog file: %s"%(filename))
 
     @staticmethod
     def create_from_fits(fitsfile=None):
@@ -225,7 +237,7 @@ class Catalog(object):
         fp.close()
 
     def plot(self,im,src_color='k',marker_threshold=0,
-             label_threshold=20., ax=None,**kwargs):
+             label_threshold=20., ax=None,radius_deg=10.0,**kwargs):
 
         if ax is None: ax = plt.gca()
         
@@ -235,7 +247,8 @@ class Catalog(object):
             ra, dec = im.lon, im.lat
 
         #srcs = cat.get_source_by_position(ra,dec,self._roi_radius_deg)
-        srcs = self.get_source_by_position(ra,dec,10.0)
+        # Try to determine the search radius from the input file
+        srcs = self.get_source_by_position(ra,dec,radius_deg)
 
         src_lon = []
         src_lat = []
@@ -348,8 +361,6 @@ if __name__ == '__main__':
 #        src = CatalogSource(cat.get_source_by_name(opts.source))
 
     if not args.output is None:
-
-        print 
         
         if re.search('\.P$',args.output):
             save_object(cat,args.output,compress=True)

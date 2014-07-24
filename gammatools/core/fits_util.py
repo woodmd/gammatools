@@ -454,7 +454,11 @@ class SkyImage(FITSImage):
         sigma /= np.abs(self._axes[0]._delta)
         
         from scipy import ndimage
-        im = copy.deepcopy(self)
+        im = SkyImage(copy.deepcopy(self.wcs),
+                      copy.deepcopy(self.axes()),
+                      copy.deepcopy(self._counts),
+                      self.roi_radius,
+                      copy.deepcopy(self._roi_msk))
 
         # Construct a kernel
         nk =41
@@ -501,7 +505,7 @@ class SkyImage(FITSImage):
         self._ax.set_ylim(self.axis(1).lo_edge(),self.axis(1).hi_edge())    
 
         
-    def plot(self,subplot=111,logz=False,show_catalog=False,
+    def plot(self,subplot=111,logz=False,catalog=None,
              cmap='jet',**kwargs):
 
         from matplotlib.colors import NoNorm, LogNorm, Normalize
@@ -566,9 +570,13 @@ class SkyImage(FITSImage):
 #                     fraction=0.05)
         ax.grid()
 
-        if show_catalog:
-            cat = Catalog.get()
-            cat.plot(self,ax=ax)
+        if catalog:
+            cat = Catalog.get(catalog)
+
+            kwargs_cat = {'src_color' : 'k' }
+            if cmap == 'ds9_b': kwargs_cat['src_color'] = 'w'
+
+            cat.plot(self,ax=ax,**kwargs_cat)
         
 #        ax.add_compass(loc=1)
 #        ax.set_display_coord_system("gal")       
