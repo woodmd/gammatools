@@ -15,12 +15,12 @@ __revision__ = "$Revision: 1.13 $, $Author: mdwood $"
 
 import numpy as np
 import sys
-import pyfits
 import os
 import yaml
 import copy
 import re
 
+import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
 
 import gammatools
@@ -268,7 +268,11 @@ class Catalog(object):
             src_lon, src_lat = eq2gal(src_lon,src_lat)
             
             
-        pixcrd = im.wcs.wcs_sky2pix(src_lon,src_lat, 0)
+#        pixcrd = im.wcs.wcs_sky2pix(src_lon,src_lat, 0)
+        pixcrd = im.wcs.wcs_world2pix(src_lon,src_lat, 0)
+
+#        ax.autoscale(enable=False, axis='both')
+#        ax.set_autoscale_on(False)
 
         for i in range(len(labels)):
 
@@ -283,8 +287,12 @@ class Catalog(object):
                                color='g', markerfacecolor = 'None',
                                markeredgecolor=src_color,clip_on=True)
         
-        plt.gca().set_xlim(im.axis(0).lo_edge(),im.axis(0).hi_edge())
-        plt.gca().set_ylim(im.axis(1).lo_edge(),im.axis(1).hi_edge())
+#        ax.autoscale(enable=True, axis='both')
+
+        plt.gca().set_xlim(im.axis(0).lo_edge()-0.5,
+                           im.axis(0).hi_edge()-0.5)
+        plt.gca().set_ylim(im.axis(1).lo_edge()-0.5,
+                           im.axis(1).hi_edge()-0.5)
         
     def save_to_yaml(self,outfile):
 

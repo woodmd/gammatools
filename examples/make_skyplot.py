@@ -9,11 +9,14 @@ SkyImage and SkyCube classes.
 #!/usr/bin/env python
 
 
+
+
 import os
 import sys
 import copy
 import argparse
-import pyfits
+#import pyfits
+from astropy.io import fits as pyfits
 
 import matplotlib.pyplot as plt
 
@@ -31,6 +34,15 @@ parser.add_argument('--hdu', default = 0, type=int,
                     help = 'Set the HDU number to plot.')
  
 args = parser.parse_args()
+
+hdulist = pyfits.open(args.files[0])
+
+
+#for k,v in hdulist[0].header.iteritems():
+
+#    print k,v 
+
+
 
 im = FITSImage.createFromFITS(args.files[0],args.hdu)
 if isinstance(im,SkyCube):

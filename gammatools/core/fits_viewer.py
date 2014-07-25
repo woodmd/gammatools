@@ -2,7 +2,7 @@ import wx
 import numpy as np
 import os
 import copy
-import pyfits
+import astropy.io.fits as pyfits
 
 from gammatools.core.stats import poisson_lnl
 from gammatools.core.histogram import Histogram, Axis

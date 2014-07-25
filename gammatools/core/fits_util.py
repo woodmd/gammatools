@@ -9,21 +9,22 @@
 __author__   = "Matthew Wood"
 __date__     = "01/01/2014"
 
+
+
 import re
 import copy
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import pywcsgrid2
 import pywcsgrid2.allsky_axes
-import pywcs
+from pywcsgrid2.allsky_axes import make_allsky_axes_from_header
+import astropy.wcs as pywcs
+from astropy.io.fits.header import Header
 import numpy as np
 from gammatools.core.algebra import Vector3D
 from gammatools.fermi.catalog import *
 from gammatools.core.util import *
 from gammatools.core.histogram import *
-
-
-from pywcsgrid2.allsky_axes import make_allsky_axes_from_header
 
 def load_ds9_cmap():
     # http://tdc-www.harvard.edu/software/saoimage/saoimage.color.html
@@ -159,7 +160,8 @@ class FITSImage(HistogramND):
         xpix = np.ravel(xpix)
         ypix = np.ravel(ypix)
         
-        self._pix_lon, self._pix_lat = self._wcs.wcs_pix2sky(xpix,ypix, 0)
+#        self._pix_lon, self._pix_lat = self._wcs.wcs_pix2sky(xpix,ypix, 0)
+        self._pix_lon, self._pix_lat = self._wcs.wcs_pix2world(xpix,ypix, 0)
 
         self.add_roi_msk(self._lon,self._lat,roi_radius_deg,True,
                          self.axis(1)._coordsys)
@@ -312,8 +314,11 @@ class SkyCube(FITSImage):
     @staticmethod
     def createFromHDU(hdu):
         
-        header = hdu.header
-        wcs = pywcs.WCS(header,naxis=[1,2],relax=True)
+#        
+        header = Header.fromstring(hdu.header.tostring())
+#        header = hdu.header
+
+        wcs = pywcs.WCS(header,naxis=[1,2])#,relax=True)
 #        wcs1 = pywcs.WCS(header,naxis=[3])
         axes = copy.deepcopy(FITSAxis.create_axes(header))
         return SkyCube(wcs,axes,copy.deepcopy(hdu.data.astype(float).T))
@@ -517,16 +522,10 @@ class SkyImage(FITSImage):
         kwargs_imshow = { 'interpolation' : 'nearest',
                           'origin' : 'lower','norm' : None,
                           'vmin' : None, 'vmax' : None }
-#               'extent' : [self.axis(0).edges()[0],
-#                           self.axis(0).edges()[-1],
-#                           self.axis(1).edges()[0],
-#                           self.axis(1).edges()[-1]] }
-#                   'vmin' : vmin }
-
         
         if logz: kwargs_imshow['norm'] = LogNorm()
         else: kwargs_imshow['norm'] = Normalize()
-        
+
         ax = pywcsgrid2.subplot(subplot, header=self._wcs.to_header())
 #        ax = pywcsgrid2.axes(header=self._wcs.to_header())
 
@@ -546,7 +545,7 @@ class SkyImage(FITSImage):
 
         update_dict(kwargs_imshow,kwargs)
         update_dict(kwargs_contour,kwargs)
-                   
+
         im = ax.imshow(counts.T,**kwargs_imshow)
         im.set_cmap(colormap)
 
