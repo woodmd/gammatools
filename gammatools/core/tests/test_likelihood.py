@@ -14,7 +14,7 @@ def setup_gauss_test():
     h = Histogram(Axis.create(-3.0,3.0,100))
     h.fill(h.axis().center(),fn.histogram(h.axis().edges()))
 
-    msk = h.counts() < 1.0
+    msk = h.counts < 1.0
     h._counts[msk] = 0.0
     h._var[msk] = 0.0
 

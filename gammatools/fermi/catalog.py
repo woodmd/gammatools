@@ -277,22 +277,17 @@ class Catalog(object):
         for i in range(len(labels)):
 
             if signif_avg[i] > label_threshold:             
-                plt.gca().text(pixcrd[0][i]+2.0,pixcrd[1][i]+2.0,labels[i],
-                               color=src_color,size=8,clip_on=True)
+                ax.text(pixcrd[0][i]+2.0,pixcrd[1][i]+2.0,labels[i],
+                        color=src_color,size=8,clip_on=True)
 
             if signif_avg[i] > marker_threshold:      
-#                print i, pixcrd[0][i],pixcrd[1][i]      
-                plt.gca().plot(pixcrd[0][i],pixcrd[1][i],
-                               linestyle='None',marker='+',
-                               color='g', markerfacecolor = 'None',
-                               markeredgecolor=src_color,clip_on=True)
+                ax.plot(pixcrd[0][i],pixcrd[1][i],
+                        linestyle='None',marker='+',
+                        color='g', markerfacecolor = 'None',
+                        markeredgecolor=src_color,clip_on=True)
         
-#        ax.autoscale(enable=True, axis='both')
-
-        plt.gca().set_xlim(im.axis(0).lo_edge()-0.5,
-                           im.axis(0).hi_edge()-0.5)
-        plt.gca().set_ylim(im.axis(1).lo_edge()-0.5,
-                           im.axis(1).hi_edge()-0.5)
+        plt.gca().set_xlim(im.axis(0).lims())
+        plt.gca().set_ylim(im.axis(1).lims())
         
     def save_to_yaml(self,outfile):
 

@@ -179,7 +179,7 @@ class ScaledHistogramModel(PDF):
         
         a = pset.array()
         if a.shape[1] > 1: a = a[...,np.newaxis]        
-        return a[0]**2*self._h.var()
+        return a[0]**2*self._h.var
 
     def counts(self,p):
 
@@ -188,7 +188,7 @@ class ScaledHistogramModel(PDF):
         
         a = pset.array()
         if a.shape[1] > 1: a = a[...,np.newaxis]        
-        return a[0]*self._h.counts()
+        return a[0]*self._h.counts
     
     def _eval_pdf(self,x,pset):
         
@@ -200,7 +200,7 @@ class ScaledHistogramModel(PDF):
         
         a = pset.array()
         if a.shape[1] > 1: a = a[...,np.newaxis]        
-        return a[0]*self._h.counts()
+        return a[0]*self._h.counts
     
 class ScaledModel(PDF):
     def __init__(self,model,pset,expr,name=None):

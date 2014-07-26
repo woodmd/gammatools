@@ -37,18 +37,12 @@ args = parser.parse_args()
 
 hdulist = pyfits.open(args.files[0])
 
-
-#for k,v in hdulist[0].header.iteritems():
-
-#    print k,v 
-
-
-
 im = FITSImage.createFromFITS(args.files[0],args.hdu)
 if isinstance(im,SkyCube):
 
     # Integrate over 3rd (energy) dimension
     im = im.marginalize(2)
+
 
 plt.figure()
 
@@ -61,5 +55,11 @@ im.smooth(0.2).plot(cmap='ds9_b')
 
 cat = Catalog.get('2fgl')
 cat.plot(im,ax=plt.gca(),label_threshold=5,src_color='w')
+
+# Make 1D projection on LON axis
+plt.figure()
+pim = im.project(0)
+pim.plot()
+plt.gca().grid(True)
 
 plt.show()

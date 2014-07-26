@@ -136,16 +136,16 @@ def clear_dict_by_vals(d,vals):
     for k in d.keys(): 
         if d[k] in vals: del d[k]
 
-def clear_dict_by_keys(d,keys,clear_if_present=True):
+def extract_dict_by_keys(d,keys,exclusive=False):
+    """Extract a subset of the input dictionary.  If exclusive==False
+    the output dictionary will contain all elements with keys in the
+    input key list.  If exclusive==True the output dictionary will
+    contain all elements with keys not in the key list."""
 
-    if not isinstance(keys,list): keys = [keys]
-
-    for k in d.keys(): 
-        if clear_if_present and k in keys: 
-            del d[k]
-        if not clear_if_present and not k in keys: 
-            del d[k]
-
+    if exclusive:
+        return dict((k, d[k]) for k in d.keys() if not k in keys)
+    else:
+        return dict((k, d[k]) for k in d.keys() if k in keys)
 
 def dispatch_jobs(exe,args,opts,queue=None,
                   resources='rhel60',skip=None,split_args=True):

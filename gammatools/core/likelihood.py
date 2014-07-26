@@ -118,7 +118,7 @@ class BinnedChi2Fn(ParamFnBase):
         pset.update(p)
 
         fv = self._model.histogram(self._h.axis().edges(),pset)
-        v = chi2(self._h.counts(),self._h.var(),fv)
+        v = chi2(self._h.counts,self._h.var,fv)
 
         if v.ndim == 2:
             s = np.sum(v,axis=1)
@@ -177,11 +177,11 @@ class Chi2HistFn(ParamFnBase):
         fv = self._model.counts(pset)
         fvar = self._model.var(pset)
 
-        var = self._h.var() + fvar
+        var = self._h.var + fvar
         ivar = np.zeros(shape=var.shape)
         ivar[var>0] = 1./var[var>0]
         
-        delta2 = (self._h.counts()-fv)**2
+        delta2 = (self._h.counts-fv)**2
         v = delta2*ivar
         
         if v.ndim == 2:

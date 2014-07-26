@@ -7,6 +7,14 @@ from matplotlib.ticker import FixedLocator, ScalarFormatter, MultipleLocator
 from matplotlib.ticker import LogLocator, AutoLocator
 import numpy as np
 
+class MPLUtil(object):
+
+    imshow_kwargs = ['interpolation','origin','vmin','vmax']
+    pcolormesh_kwargs = ['shading','origin','vmin','vmax']
+    contour_kwargs = ['levels','origin']
+    errorbar_kwargs = ['marker','markersize','color','markerfacecolor',
+                       'markeredgecolor','linestyle','linewidth','label']
+
 class SqrtScale(mscale.ScaleBase):
     """
     Scales data using the function x^{1/2}.

@@ -71,33 +71,48 @@ class FITSAxis(Axis):
         self._crval = crval
         self._delta = cdelt
         self._naxis = naxis
+        self._coordsys = None
+        self._sky_coord = False
         if logaxis:
             self._delta = np.log10((self._crval+self._delta)/self._crval)
             self._crval = np.log10(self._crval)
-
-#        xmin = self._crval+(self._crpix-offset)*self._delta
-#        xmax = self._crval+(self._crpix+self._naxis-offset)*self._delta
-#        if edges is None:
             
-        edges = np.linspace(0.0,self._naxis,self._naxis+1)
-        
-        if re.search('GLON',self._type) is None and \
-                re.search('GLAT',self._type) is None:
-            self._coordsys = 'cel'
+        if np.fmod(crpix,1.0):
+            edges = np.linspace(0.0,self._naxis,self._naxis+1) - 0.5
         else:
+            edges = np.linspace(0.0,self._naxis,self._naxis+1) 
+
+        if re.search('GLON',self._type) or re.search('GLAT',self._type):
             self._coordsys = 'gal'
+            self._sky_coord = True
+        elif re.search('RA',self._type) or re.search('DEC',self._type):
+            self._coordsys = 'cel'
+            self._sky_coord = True
 
         super(FITSAxis, self).__init__(edges,label=ctype)
             
-
+    @property
     def naxis(self):
         return self._naxis
     
-    def pix_to_coord(self,p):
-        return self._crval + (p-self._crpix)*self._delta
+    @property
+    def type(self):
+        return self._type
 
-    def coord_to_pix(self,x):
-        return self._crpix + (x-self._crval)/self._delta
+    def pix_to_coord(self,p,apply_crval=False):
+        """Convert from FITS pixel coordinates to projected sky
+        coordinates."""
+        if apply_crval:
+            return self._crval + (p-self._crpix)*self._delta
+        else:
+            return (p-self._crpix)*self._delta
+
+    def coord_to_pix(self,x,apply_crval=False):
+
+        if apply_crval:
+            return self._crpix + (x-self._crval)/self._delta 
+        else:
+            return self._crpix + x/self._delta 
 
     def coord_to_index(self,x):
         pix = self.coord_to_pix(x)
@@ -194,24 +209,20 @@ class FITSImage(HistogramND):
 
         h = HistogramND.slice(self,sdims,dim_index)
         if h.ndim() == 3:
-            return SkyCube(self._wcs,h.axes(),h.counts(),
+            return SkyCube(self._wcs,h.axes(),h.counts,
                            self._roi_radius_deg,self._roi_msk)
         elif h.ndim() == 2:        
-            return SkyImage(self._wcs,h.axes(),h.counts(),
-                            self._roi_radius_deg,self._roi_msk)
-        else:
-            return h
-
-    def project(self,pdims,bin_range=None):
-
-        h = HistogramND.project(self,pdims,bin_range)
-        if h.ndim() == 2:
-            return SkyImage(self._wcs,h.axes(),h.counts(),
+            return SkyImage(self._wcs,h.axes(),h.counts,
                             self._roi_radius_deg,self._roi_msk)
         else:
             h._axes[0] = Axis(h.axis().pix_to_coord(h.axis().edges()))
             return h
 
+    def project(self,pdims,bin_range=None):
+
+        h = HistogramND.project(self,pdims,bin_range)
+        return self.create(h)
+        
     def marginalize(self,mdims,bin_range=None):
 
         mdims = np.array(mdims,ndmin=1,copy=True)
@@ -234,6 +245,25 @@ class FITSImage(HistogramND):
     def wcs(self):
         return self._wcs
     
+    def create(self,h):
+        """Take an input HistogramND object and cast it into a
+        SkyImage if appropriate."""
+
+        if h.ndim() == 2:
+
+            if h.axis(0)._sky_coord and h.axis(1)._sky_coord:
+                return SkyImage(self._wcs,h.axes(),h.counts,
+                                self._roi_radius_deg,self._roi_msk)
+            else:
+                axis0 = Axis(h.axis(0).pix_to_coord(h.axis(0).edges()))
+                axis1 = Axis(h.axis(1).pix_to_coord(h.axis(1).edges()))
+                h._axes[0] = axis0
+                h._axes[1] = axis1
+                return h
+        else:
+            h._axes[0] = Axis(h.axis().pix_to_coord(h.axis().edges()))
+            return h
+
     @staticmethod
     def createFromHDU(hdu):
         """Create an SkyCube or SkyImage object from a FITS HDU."""
