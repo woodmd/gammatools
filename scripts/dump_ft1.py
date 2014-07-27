@@ -21,7 +21,7 @@ parser = argparse.ArgumentParser(usage=usage,description=description)
 
 parser.add_argument('files', nargs='+')
 
-parser.add_argument('--zenith_cut', default = 105, type=float,
+parser.add_argument('--nrow', default = 10, type=int,
                   help = 'Set the zenith angle cut.')
 
 args = parser.parse_args()
@@ -34,5 +34,5 @@ print hdulist[1].columns.names
 for c in hdulist[1].columns.names:
     print '%-25s %-6s %-10s'%(c, hdulist[1].data[c].dtype,
                               hdulist[1].data[c].shape),
-    print hdulist[1].data[c]
+    print hdulist[1].data[c][:args.nrow]
 
