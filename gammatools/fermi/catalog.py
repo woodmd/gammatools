@@ -20,7 +20,8 @@ import yaml
 import copy
 import re
 
-import astropy.io.fits as pyfits
+
+from gammatools.core.astropy_helper import pyfits
 import matplotlib.pyplot as plt
 
 import gammatools
@@ -113,7 +114,7 @@ class Catalog(object):
     catalog_files = { '2fgl' : os.path.join(gammatools.PACKAGE_ROOT,
                                             'data/gll_psc_v08.P.gz'),
                       '3fgl' : os.path.join(gammatools.PACKAGE_ROOT,
-                                            'data/gll_psc4yearsource_v12r3_assoc_v6r6p0_flags.P.gz'),
+                                            'data/gll_psc4yearsource_v12r3_assoc_v6r6p0_flags.fit'),
                       }
 
     src_name_cols = ['Source_Name',
@@ -185,7 +186,21 @@ class Catalog(object):
 
         cat = Catalog()
         hdulist = pyfits.open(fitsfile)
-        cols = hdulist[1].columns.names
+        table = hdulist[1]
+
+        cols = {}
+        for icol, col in enumerate(table.columns.names):
+
+            col_data = hdulist[1].data[col]
+
+            print icol, col, type(col_data)
+
+            if type(col_data[0]) == np.float32: 
+                cols[col] = np.array(col_data,dtype=float)
+            elif type(col_data[0]) == str: 
+                cols[col] = np.array(col_data,dtype=str)
+            elif type(col_data[0]) == np.int16: 
+                cols[col] = np.array(col_data,dtype=int)
 
         nsrc = len(hdulist[1].data)
 
@@ -195,10 +210,17 @@ class Catalog(object):
 
             src = {}
             for icol, col in enumerate(cols):
-                v = hdulist[1].data[i][icol]
-                if type(v) == np.float32: src[col] = float(v)
-                elif type(v) == str: src[col] = v
-                elif type(v) == np.int16: src[col] = int(v)
+
+                if not col in cols: continue
+
+                src[col] = cols[col][i]
+#                v = hdulist[1].data[col][i]
+
+#                continue
+
+#                if type(v) == np.float32: src[col] = float(v)
+#                elif type(v) == str: src[col] = v
+#                elif type(v) == np.int16: src[col] = int(v)
 
             cat.load_source(src,i)
 

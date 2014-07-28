@@ -175,7 +175,7 @@ class FigureSubplot(object):
             
         if isinstance(self._data[norm_index],Histogram):
             x = copy.deepcopy(self._data[norm_index].center())
-            y = copy.deepcopy(self._data[norm_index].counts())
+            y = copy.deepcopy(self._data[norm_index].counts)
         elif isinstance(self._data[norm_index],Series):
             x = copy.deepcopy(self._data[norm_index].x())
             y = copy.deepcopy(self._data[norm_index].y())

@@ -8,15 +8,11 @@ SkyImage and SkyCube classes.
 
 #!/usr/bin/env python
 
-
-
-
 import os
 import sys
 import copy
 import argparse
-#import pyfits
-from astropy.io import fits as pyfits
+from gammatools.core.astropy_helper import pyfits
 
 import matplotlib.pyplot as plt
 

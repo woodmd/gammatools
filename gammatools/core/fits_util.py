@@ -18,8 +18,10 @@ import matplotlib as mpl
 import pywcsgrid2
 import pywcsgrid2.allsky_axes
 from pywcsgrid2.allsky_axes import make_allsky_axes_from_header
-import astropy.wcs as pywcs
-from astropy.io.fits.header import Header
+#import astropy.wcs as pywcs
+from astropy_helper import pywcs
+from astropy_helper import pyfits
+#from astropy.io.fits.header import Header
 import numpy as np
 from gammatools.core.algebra import Vector3D
 from gammatools.fermi.catalog import *
@@ -344,8 +346,7 @@ class SkyCube(FITSImage):
     @staticmethod
     def createFromHDU(hdu):
         
-#        
-        header = Header.fromstring(hdu.header.tostring())
+        header = pyfits.Header.fromstring(hdu.header.tostring())
 #        header = hdu.header
 
         wcs = pywcs.WCS(header,naxis=[1,2])#,relax=True)

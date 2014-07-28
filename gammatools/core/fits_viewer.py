@@ -2,8 +2,9 @@ import wx
 import numpy as np
 import os
 import copy
-import astropy.io.fits as pyfits
+from astropy_helper import pyfits
 
+from gammatools.core.plot_util import *
 from gammatools.core.stats import poisson_lnl
 from gammatools.core.histogram import Histogram, Axis
 from gammatools.core.fits_util import SkyImage, SkyCube
@@ -47,8 +48,27 @@ class FITSPlotter(object):
 
         self.make_plots_skycube(model=True,**kwargs)
         
+    def make_energy_residual(self,suffix=''):
+
+        ft = FigTool()
+
+        h = self._im.project(2)
+        hm = self._im_mdl.project(2)
+
+        fig = ft.create('test',figstyle='residual2',yscale='log',
+                        ylabel='Counts')
+
+        fig[0].add_hist(hm,hist_style='line')
+        fig[0].add_hist(h,linestyle='None')
+
+        fig[1].set_style('ylim',[-0.25,0.25])
+
+
+        fig.plot()
+#        fig.savefig('%s_%s.png'%(self._prefix,suffix))
+
     def make_plots_skycube(self,delta_bin=None,paxis=None,plots_per_fig=None,
-                           smooth=False, residual=False,
+                           smooth=False, resid_type=None,
                            suffix='',model=False, **kwargs):
 
         if model: im = self._im_mdl
@@ -101,12 +121,13 @@ class FITSPlotter(object):
                 mc_resid = []
                 
                     
-                if residual:
+                if resid_type:
                     for k in range(3):
                         print k
                         mc_resid.append(self.make_residual_map(h,hm,
-                                                               smooth,mc=True))
-                    h = self.make_residual_map(h,hm,smooth)
+                                                               smooth,mc=True,
+                                                               resid_type=resid_type))
+                    h = self.make_residual_map(h,hm,smooth,resid_type=resid_type)
                 elif smooth: h = h.smooth(0.2,compute_var=True)
                 
 #                h = self.make_counts_map(im,ibin,ibin+delta_bin,
@@ -125,7 +146,8 @@ class FITSPlotter(object):
                 if paxis is None:
                     self.make_image_plot(subplot,h,fig,fig2,
                                          title,rpsf68,rpsf95,
-                                         residual,mc_resid=mc_resid,**kwargs)
+                                         resid_type=resid_type,
+                                         mc_resid=mc_resid,**kwargs)
                 else:
                     ax = fig.add_subplot(subplot)
                     hp = h.project(paxis)
@@ -142,9 +164,7 @@ class FITSPlotter(object):
         FITSPlotter.fignum += 1
         return fig
         
-    def make_residual_map(self,h,hm,smooth,mc=False):
-
-
+    def make_residual_map(self,h,hm,smooth,mc=False,resid_type='fractional'):
         
         if mc:
             h = copy.deepcopy(h)
@@ -155,22 +175,19 @@ class FITSPlotter(object):
             hm = hm.smooth(0.2,compute_var=True,summed=True)
             h = h.smooth(0.2,compute_var=True,summed=True)
 
-#            print '-----------------'
-#            print 'hm var ', np.median(np.ravel(hm.var()))
-#            print 'h var ', np.median(np.ravel(h.var()))
-#            print 'hm counts ', np.median(np.ravel(hm.counts))
-#            print 'h counts ', np.median(np.ravel(h.counts))
-
         ts = 2.0*(poisson_lnl(h.counts,h.counts) -
                   poisson_lnl(h.counts,hm.counts))
 
         s = h.counts - hm.counts
 
-        sigma = np.sqrt(ts)
-        sigma[s<0] *= -1
-
-        h._counts = sigma
-        h._var = np.zeros(sigma.shape)
+        if resid_type == 'fractional':
+            h._counts = s/hm.counts
+            h._var = np.zeros(s.shape)
+        else:
+            sigma = np.sqrt(ts)
+            sigma[s<0] *= -1
+            h._counts = sigma
+            h._var = np.zeros(sigma.shape)
         
 #        h._counts -= hm._counts
 #        h._counts /= np.sqrt(hm._var)
@@ -179,14 +196,23 @@ class FITSPlotter(object):
         
 
     def make_image_plot(self,subplot,h,fig,fig2,title,rpsf68,rpsf95,
-                        residual,mc_resid=None,**kwargs):
+                        resid_type=None,mc_resid=None,**kwargs):
 
         plt.figure(fig.get_label())
-        if residual:
+
+        cb_label='Counts'
+
+        if resid_type == 'significance':
             kwargs['vmin'] = -5
             kwargs['vmax'] = 5
             kwargs['levels'] = [-5.0,-3.0,3.0,5.0]
-                
+            cb_label = 'Significance [$\sigma$]'
+        elif resid_type == 'fractional':
+            kwargs['vmin'] = -1.0
+            kwargs['vmax'] = 1.0
+            kwargs['levels'] = [-1.0,-0.5,0.5,1.0]
+            cb_label = 'Fractional Residual'
+
         axim = h.plot(subplot=subplot,cmap='ds9_b',**kwargs)
         h.plot_circle(rpsf68,color='w')
         h.plot_circle(rpsf95,color='w',linestyle='--')
@@ -197,7 +223,7 @@ class FITSPlotter(object):
                           shrink=0.9,pad=0.15,
                           fraction=0.05)
 
-        if residual: cb.set_label('Significance [$\sigma$]')
+        cb.set_label(cb_label)
 
         cat = Catalog.get('3fgl')
         cat.plot(h,ax=ax,src_color='w',label_threshold=5.0)
@@ -206,12 +232,21 @@ class FITSPlotter(object):
         ax2 = fig2.add_subplot(subplot)
 
         z = h.counts[10:-10,10:-10]
-        hz = Histogram(Axis.create(-6,6,120))    
+
+        if resid_type == 'significance':
+            zproj_axis = Axis.create(-6,6,120)
+        elif resid_type == 'fractional':
+            zproj_axis = Axis.create(-1.0,1.0,120)
+        else:
+            zproj_axis = Axis.create(-10,10,120)
+
+
+        hz = Histogram(zproj_axis)
         hz.fill(np.ravel(z))
 
         nbin = np.prod(z.shape)
         
-        hz_mc = Histogram(Axis.create(-6,6,120))    
+        hz_mc = Histogram(zproj_axis)    
         
         if mc_resid:
             for mch in mc_resid:
@@ -225,9 +260,10 @@ class FITSPlotter(object):
         
         hz.plot(label='Data',linestyle='None')
 
-        plt.plot(hz.axis().center(),
-                 fn(hz.axis().center())*hz.axis().width()*nbin,
-                 color='k',label='Gaussian ($\sigma = 1$)')
+        if resid_type == 'significance':
+            plt.plot(hz.axis().center(),
+                     fn(hz.axis().center())*hz.axis().width()*nbin,
+                     color='k',label='Gaussian ($\sigma = 1$)')
         
         hz_mc.plot(label='MC',hist_style='line')
         plt.gca().grid(True)
@@ -237,8 +273,10 @@ class FITSPlotter(object):
         ax2.legend(loc='upper right',prop= {'size' : 10 })
 
         
-        ax2.set_xlabel('Significance [$\sigma$]')
+        ax2.set_xlabel(cb_label)
         ax2.set_title(title)
+        ax2.text(0.1,0.8,'Mean = %.2f\nRMS = %.2f'%(hz.mean(),hz.stddev()),
+                 transform=ax2.transAxes,fontsize=10)
 
         
         
