@@ -114,7 +114,7 @@ class FITSPlotter(object):
 
                 emin = im.axis(2).pix_to_coord(ibin)
                 emax = im.axis(2).pix_to_coord(ibin+delta_bin)
-
+                
                 rpsf68 = self._irf.quantile(10**emin,10**emax,0.68)
                 rpsf95 = self._irf.quantile(10**emin,10**emax,0.95)
                 
@@ -148,7 +148,7 @@ class FITSPlotter(object):
         
         if mc:
             h = copy.deepcopy(h)
-            h._counts = np.array(np.random.poisson(hm.counts()),
+            h._counts = np.array(np.random.poisson(hm.counts),
                                  dtype='float')
             
         if smooth:
@@ -158,13 +158,13 @@ class FITSPlotter(object):
 #            print '-----------------'
 #            print 'hm var ', np.median(np.ravel(hm.var()))
 #            print 'h var ', np.median(np.ravel(h.var()))
-#            print 'hm counts ', np.median(np.ravel(hm.counts()))
-#            print 'h counts ', np.median(np.ravel(h.counts()))
+#            print 'hm counts ', np.median(np.ravel(hm.counts))
+#            print 'h counts ', np.median(np.ravel(h.counts))
 
-        ts = 2.0*(poisson_lnl(h.counts(),h.counts()) -
-                  poisson_lnl(h.counts(),hm.counts()))
+        ts = 2.0*(poisson_lnl(h.counts,h.counts) -
+                  poisson_lnl(h.counts,hm.counts))
 
-        s = h.counts() - hm.counts()
+        s = h.counts - hm.counts
 
         sigma = np.sqrt(ts)
         sigma[s<0] *= -1
@@ -200,12 +200,12 @@ class FITSPlotter(object):
         if residual: cb.set_label('Significance [$\sigma$]')
 
         cat = Catalog.get('3fgl')
-        cat.plot(h,ax=axim,src_color='w',label_threshold=5.0)
+        cat.plot(h,ax=ax,src_color='w',label_threshold=5.0)
 
         plt.figure(fig2.get_label())        
         ax2 = fig2.add_subplot(subplot)
 
-        z = h.counts()[10:-10,10:-10]
+        z = h.counts[10:-10,10:-10]
         hz = Histogram(Axis.create(-6,6,120))    
         hz.fill(np.ravel(z))
 
@@ -215,7 +215,7 @@ class FITSPlotter(object):
         
         if mc_resid:
             for mch in mc_resid:
-                z = mch.counts()[10:-10,10:-10]
+                z = mch.counts[10:-10,10:-10]
                 hz_mc.fill(np.ravel(z))
 
             hz_mc /= float(len(mc_resid))
@@ -1009,7 +1009,7 @@ class ImagePanel(BasePanel):
         self._axim = im.plot()
 
         self.scf()
-        self._axim.set_data(im.counts().T)
+        self._axim.set_data(im.counts.T)
         self._axim.autoscale()
         self.canvas.draw()
         self._fig.canvas.draw()
@@ -1083,7 +1083,7 @@ class ImagePanel(BasePanel):
 
             return
 
-        self._axim[0].set_data(cm[0].counts().T)
+        self._axim[0].set_data(cm[0].counts.T)
         self._axim[0].autoscale()
 
         if self._style[0]['logz']:

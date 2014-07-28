@@ -99,7 +99,7 @@ class FITSAxis(Axis):
     def type(self):
         return self._type
 
-    def pix_to_coord(self,p,apply_crval=False):
+    def pix_to_coord(self,p,apply_crval=True):
         """Convert from FITS pixel coordinates to projected sky
         coordinates."""
         if apply_crval:
@@ -107,7 +107,7 @@ class FITSAxis(Axis):
         else:
             return (p-self._crpix)*self._delta
 
-    def coord_to_pix(self,x,apply_crval=False):
+    def coord_to_pix(self,x,apply_crval=True):
 
         if apply_crval:
             return self._crpix + (x-self._crval)/self._delta 
@@ -290,7 +290,7 @@ class SkyCube(FITSImage):
         
     def get_spectrum(self,lon,lat):
 
-        xy = self._wcs.wcs_sky2pix(lon,lat, 0)
+        xy = self._wcs.wcs_world2pix(lon,lat, 0)
         ilon = np.round(xy[0][0])
         ilat = np.round(xy[1][0])
 
@@ -337,7 +337,7 @@ class SkyCube(FITSImage):
 
     def fill(self,lon,lat,loge):
 
-        pixcrd = self._wcs.wcs_sky2pix(lon,lat, 0)
+        pixcrd = self._wcs.wcs_world2pix(lon,lat, 0)
         ecrd = self._axes[2].coord_to_pix(loge)
         super(SkyCube,self).fill(np.vstack((pixcrd[0],pixcrd[1],ecrd)))
 
@@ -450,14 +450,14 @@ class SkyImage(FITSImage):
         return im
 
 #        lon, lat = get_circle(ra,dec,roi_radius_deg)
-#        xy =  wcs.wcs_sky2pix(lon, lat, 0)
+#        xy =  wcs.wcs_world2pix(lon, lat, 0)
 
 #        xmin = np.min(xy[0])
 #        xmax = np.max(xy[0])
 
 #        if roi_radius_deg >= 90.:
-#            xypole0 = wcs.wcs_sky2pix(0.0, -90.0, 0)
-#            xypole1 = wcs.wcs_sky2pix(0.0, 90.0, 0)
+#            xypole0 = wcs.wcs_world2pix(0.0, -90.0, 0)
+#            xypole1 = wcs.wcs_world2pix(0.0, 90.0, 0)
 #            ymin = xypole0[1]
 #            ymax = xypole1[1]
 #        else:
@@ -470,12 +470,12 @@ class SkyImage(FITSImage):
         
     def fill(self,lon,lat,w=1.0):
 
-        pixcrd = self._wcs.wcs_sky2pix(lon,lat, 0)
+        pixcrd = self._wcs.wcs_world2pix(lon,lat, 0)
         super(SkyImage,self).fill(np.vstack((pixcrd[0],pixcrd[1])),w)
 
     def interpolate(self,lon,lat):
         
-        pixcrd = self._wcs.wcs_sky2pix(lon, lat, 0)
+        pixcrd = self._wcs.wcs_world2pix(lon, lat, 0)
         return interpolate2d(self._xedge,self._yedge,self._counts,
                              *pixcrd)
 
@@ -522,7 +522,7 @@ class SkyImage(FITSImage):
     def plot_marker(self,lonlat=None,**kwargs):
 
         if lonlat is None: lon, lat = (self._lon,self._lat)
-        xy =  self._wcs.wcs_sky2pix(lon,lat, 0)
+        xy =  self._wcs.wcs_world2pix(lon,lat, 0)
         self._ax.plot(xy[0],xy[1],**kwargs)
 
         plt.gca().set_xlim(self.axis(0).lo_edge(),self.axis(0).hi_edge())
@@ -533,7 +533,7 @@ class SkyImage(FITSImage):
         if radec is None: radec = (self._lon,self._lat)
 
         lon,lat = get_circle(radec[0],radec[1],rad_deg)
-        xy =  self._wcs.wcs_sky2pix(lon,lat, 0)
+        xy =  self._wcs.wcs_world2pix(lon,lat, 0)
         self._ax.plot(xy[0],xy[1],**kwargs)
 
         self._ax.set_xlim(self.axis(0).lo_edge(),self.axis(0).hi_edge())
