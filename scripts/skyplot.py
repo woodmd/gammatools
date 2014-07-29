@@ -69,10 +69,13 @@ if args.model_file:
     irf_version = get_irf_version(model_hdu.header)
 
     
-irf = IRFManager.create(irf_version, True,
-                        irf_dir='/u/gl/mdwood/ki10/analysis/custom_irfs/')
+irf_dir = '/u/gl/mdwood/ki10/analysis/custom_irfs/'
+if 'CUSTOM_IRF_DIR' in os.environ:
+    irf_dir = os.environ['CUSTOM_IRF_DIR']
 
-ltfile = '/nfs/slac/g/ki/ki20/cta/mdwood/fermi/data/P8_P301/ltcube_5years_zmax100.fits'
+irf = IRFManager.create(irf_version, True,irf_dir=irf_dir)
+
+ltfile = '/Users/mdwood/fermi/data/p301/ltcube_5years_zmax100.fits'
 
 m = PSFModelLT(ltfile, irf,
                cth_range=[0.2,1.0],
@@ -132,6 +135,11 @@ else:
 
         #        make_plots_skycube(im,4,logz=True)
 
+
+#        fp.make_energy_residual(suffix='_eresid')
+
+#        sys.exit(0)
+
         fp.make_plots_skycube(smooth=True,
                               suffix='_data_map_smooth')
         
@@ -140,11 +148,17 @@ else:
 
         fp.make_mdl_plots_skycube(suffix='_mdl_map')
         
-        fp.make_plots_skycube(None,smooth=True,residual=True,
-                              suffix='_data_map_resid')
+        fp.make_plots_skycube(None,smooth=True,resid_type='fractional',
+                              suffix='_data_map_resid_sigma')
 
-        fp.make_plots_skycube(4,smooth=True,residual=True,
-                              suffix='_data_map_slice_resid')
+        fp.make_plots_skycube(4,smooth=True,resid_type='fractional',
+                              suffix='_data_map_slice_resid_sigma')
+
+        fp.make_plots_skycube(None,smooth=True,resid_type='significance',
+                              suffix='_data_map_resid_frac')
+
+        fp.make_plots_skycube(4,smooth=True,resid_type='significance',
+                              suffix='_data_map_slice_resid_frac')
         
         sys.exit(0)
         
