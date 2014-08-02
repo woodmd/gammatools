@@ -2,7 +2,7 @@
 import os
 import copy
 import re
-import pyfits
+from gammatools.core.astropy_helper import pyfits
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import UnivariateSpline
@@ -254,8 +254,8 @@ class AeffIRF(IRFComponent):
         self.setup_axes(hdulist[1].data)
         self._aeff = np.array(hdulist[1].data[0][4])
 
-        nx = self._cth_axis.nbins()
-        ny = self._energy_axis.nbins()
+        nx = self._cth_axis.nbins
+        ny = self._energy_axis.nbins
 
         self._aeff.resize((nx,ny))
         self._aeff_hist = Histogram2D(self._cth_axis,self._energy_axis,
@@ -321,9 +321,8 @@ class EDispIRF(IRFComponent):
         
         self._hdulist = pyfits.open(fits_file)
         hdulist = self._hdulist
-        hdulist.info()
-
-        
+#        hdulist.info()
+       
         self._elo = np.log10(np.array(hdulist[1].data[0][0]))
         self._ehi = np.log10(np.array(hdulist[1].data[0][1]))
         self._cthlo = np.array(hdulist[1].data[0][2])
@@ -377,8 +376,8 @@ class PSFIRF(IRFComponent):
         else: self._ct = 'none'
         
         self.setup_axes(hdulist[1].data)
-        nx = self._cth_axis.nbins()
-        ny = self._energy_axis.nbins()
+        nx = self._cth_axis.nbins
+        ny = self._energy_axis.nbins
 
         ncore = np.array(hdulist[1].data[0][4]).reshape(nx,ny)
         ntail = np.array(hdulist[1].data[0][5]).reshape(nx,ny)
@@ -407,20 +406,19 @@ class PSFIRF(IRFComponent):
         self._cback = hdulist[2].data[0][0][2:4]
         self._beta = hdulist[2].data[0][0][4]
 
-
-        print 'Scaling Functions ', self._cfront, self._cback
+#        print 'Scaling Functions ', self._cfront, self._cback
         
         self._theta_axis = Axis(np.linspace(-3.0,np.log10(90.0),101))
         self._psf_hist = HistogramND([self._cth_axis,
                                       self._energy_axis,
                                       self._theta_axis])
                                      
-        th = self._theta_axis.center()
+        th = self._theta_axis.center
 
         for i in range(nx):
             for j in range(ny):
-                x = self._cth_axis.center()[i]
-                y = self._energy_axis.center()[j]                
+                x = self._cth_axis.center[i]
+                y = self._energy_axis.center[j]                
                 z = self.eval(10**th,y,x)
                 self._psf_hist._counts[i,j] = self.eval(10**th,y,x)
 
@@ -428,8 +426,8 @@ class PSFIRF(IRFComponent):
         return
         plt.figure()
 
-        egy0 = self._energy_axis.center()[10]
-        cth0 = self._cth_axis.center()[5]
+        egy0 = self._energy_axis.center[10]
+        cth0 = self._cth_axis.center[5]
 
         y0 = self.eval2(10**th,egy0,cth0)
         y1 = self.eval(10**th,egy0,cth0)

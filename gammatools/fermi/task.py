@@ -4,9 +4,7 @@ import shutil
 import copy
 from tempfile import mkdtemp
 import re
-#from uw.like.pointspec import SpectralAnalysis,DataSpecification
-#from uw.like.pointspec_helpers import get_default_diffuse, PointSource, FermiCatalog, get_diffuse_source
-
+import glob
 from GtApp import GtApp
 #from uw.like.roi_catalogs import SourceCatalog, Catalog2FGL, Catalog3Y
 #from BinnedAnalysis import BinnedObs,BinnedAnalysis
@@ -14,8 +12,8 @@ from GtApp import GtApp
 #from pyLikelihood import ParameterVector
 
 from gammatools.fermi.catalog import Catalog, CatalogSource
-from gammatools.core.util import Configurable
-
+from gammatools.core.config import Configurable
+from gammatools.core.util import extract_dict_by_keys
 
 class TaskDispatcher(Configurable):
 
@@ -26,23 +24,41 @@ class TaskDispatcher(Configurable):
         
 class Task(Configurable):
 
-    default_config = { 'scratchdir'   : '/scratch',
-                       'verbose'      : 0,
-                       'overwrite'    : False,
-                       'stage_inputs' : False }
+    default_config = {
+        'scratchdir'   : ('/scratch','Set the path under which temporary '
+                          'working directories will be created.'),
+        'workdir'      : (None,'Define the working directory.'),
+        'verbose'      : 1,
+        'overwrite'    : True,
+        'stage_inputs' : False }
     
     def __init__(self,config=None,**kwargs):       
         super(Task,self).__init__(config,**kwargs)
 
         self._input_files = []
         self._output_files = []
+        
+        if self.config['scratchdir'] is None:
+            self._scratchdir = os.getcwd()
+        else:
+            self._scratchdir = self.config['scratchdir']
 
-        if self.config('scratchdir') is None: self._scratchdir = os.getcwd()
-        else: self._scratchdir = self.config('scratchdir')
+        
+        if self.config['workdir'] is None:
+            self._savedata=False
+            self._workdir=mkdtemp(prefix=os.environ['USER'] + '.',
+                                  dir=self._scratchdir)
 
-        self._workdir=mkdtemp(prefix=os.environ['USER'] + '.',
-                              dir=self._scratchdir)
+            if self.config['verbose']:
+                print 'Created workdir: ', self._workdir
+            
+        else:
+            self._savedata=False
+            self._workdir= self.config['workdir']
 
+            if self.config['verbose']:
+                print 'Using workdir: ', self._workdir
+                            
     def register_output_file(self,outfile):
         self._output_files.append(outfile)
         
@@ -53,9 +69,13 @@ class Task(Configurable):
         os.chdir(self._workdir)
 
     def run(self):
+
+        import pprint
+        pprint.pprint(self.config)
         
-        if os.path.isfile(self._output_files[0]) and \
-                not self.config('overwrite'):
+        if len(self._output_files) and \
+                os.path.isfile(self._output_files[0]) and \
+                not self.config['overwrite']:
             print 'Output file exists: ', self._output_files[0]
             return
         
@@ -69,18 +89,18 @@ class Task(Configurable):
 
         for f in self._output_files:
             
-            if self.config('verbose'):
+            if self.config['verbose']:
                 print 'cp %s %s'%(os.path.basename(f),f)                
             os.system('cp %s %s'%(os.path.basename(f),f))
 
         os.chdir(self._cwd)
             
-        if os.path.exists(self._workdir):
+        if not self._savedata and os.path.exists(self._workdir):
             shutil.rmtree(self._workdir)
 
     def __del__(self):
-        if os.path.exists(self._workdir):
-            if self.config('verbose'):
+        if not self._savedata and os.path.exists(self._workdir):
+            if self.config['verbose']:
                 print 'Deleting working directory ', self._workdir
             shutil.rmtree(self._workdir)
 
@@ -125,18 +145,19 @@ class LTCubeTask(Task):
 
 class SrcModelTask(Task):
 
-    default_config = { 'srcmaps'    : None,
-                       'srcmdl'     : None,
-                       'expcube'    : None,
-                       'bexpmap'    : None,
-                       'srcmdl'     : None,
-                       'chatter'    : 2,
-                       'irfs'       : 'P7REP_CLEAN_V15',
-                       'outtype'    : 'ccube' }
+    default_config = {
+        'srcmaps'    : None,
+        'srcmdl'     : None,
+        'expcube'    : None,
+        'bexpmap'    : None,
+        'srcmdl'     : None,
+        'chatter'    : 2,
+        'irfs'       : 'P7REP_CLEAN_V15',
+        'outtype'    : 'ccube' }
 
     
-    def __init__(self,outfile,config=None,**kwargs):
-        super(SrcModelTask,self).__init__(config,**kwargs)
+    def __init__(self,outfile,config=None,opts=None,**kwargs):
+        super(SrcModelTask,self).__init__(config,opts=opts,**kwargs)
 
         self._outfile = os.path.abspath(outfile)
         self.register_output_file(self._outfile)
@@ -160,7 +181,7 @@ class SrcMapTask(Task):
                        'resample' : 'yes',
                        'rfactor'  : 2,
                        'minbinsz' : 0.1 }
-    
+
     def __init__(self,outfile,config=None,**kwargs):
         super(SrcMapTask,self).__init__()
         self.update_default_config(SrcMapTask)
@@ -173,7 +194,7 @@ class SrcMapTask(Task):
 
     def run_task(self):
 
-        config = self.config()
+        config = self.config
         outfile = os.path.basename(self._output_files[0])        
         self._gtapp.run(outfile=outfile,emapbnds='no',**config)
 
@@ -203,7 +224,7 @@ class BExpTask(Task):
         self.update_default_config(BExpTask)
         self.configure(config,subsection='gtexpcube',**kwargs)
 
-        if self.config('allsky'):
+        if self.config['allsky']:
             self.set_config('nxpix',360)
             self.set_config('nypix',180)
             self.set_config('xref',0.0)
@@ -226,7 +247,7 @@ class BExpTask(Task):
 
         
     
-class BinnerTask(Task):
+class BinTask(Task):
 
     default_config = { 'npix' : 140,
                        'xref' : 0.0,
@@ -238,12 +259,12 @@ class BinnerTask(Task):
                        'proj' : 'AIT',
                        'enumbins' : 16,
                        'algorithm' : 'ccube',
-                       'binsz' : 0.1 }
+                       'binsz' : 0.1,
+                       'coordsys' : 'CEL'}
     
-    def __init__(self,infile,outfile,config=None,**kwargs):
-        super(BinnerTask,self).__init__()
-        self.update_default_config(BinnerTask)
-        self.configure(config,subsection='gtbin',**kwargs)
+    def __init__(self,infile,outfile,config=None,opts=None,**kwargs):
+        super(BinTask,self).__init__()
+        self.configure(config,opts=opts,subsection='gtbin',**kwargs)
         
         self._infile = os.path.abspath(infile)
         self._outfile = os.path.abspath(outfile)
@@ -254,7 +275,7 @@ class BinnerTask(Task):
 
     def run_task(self):
 
-        config = self.config()
+        config = self.config
 
         outfile = os.path.basename(self._output_files[0])
         
@@ -273,7 +294,7 @@ class BinnerTask(Task):
                         emin=config['emin'],
                         emax=config['emax'],
                         enumbins=config['enumbins'],
-                        coordsys='CEL',
+                        coordsys=config['coordsys'],
                         chatter=config['chatter'])
 
     
@@ -281,23 +302,21 @@ class SelectorTask(Task):
 
     default_config = { 'ra' : 0.0,
                        'dec' : 0.0,
-                       'radius' : 10.0,
-                       'tmin' : 239557414,
-                       'tmax' : 365787814,
+                       'radius' : 180.0,
+                       'tmin' : 0.0,
+                       'tmax' : 0.0,
                        'zmax' : 100.,
-                       'emin' : 1000.,
-                       'emax' : 100000.,
+                       'emin' : 10.,
+                       'emax' : 1000000.,
                        'chatter' : 2,
                        'evclsmin' : 'INDEF',
-                       'evclass' : 3,
+                       'evclass' : 'INDEF',
                        'evtype'  : 'INDEF',
                        'convtype' : -1 }               
     
-    def __init__(self,infile,outfile,config=None,**kwargs):
+    def __init__(self,infile,outfile,config=None,opts=None,**kwargs):
         super(SelectorTask,self).__init__()
-        self.update_default_config(SelectorTask)
-        self.configure(config,subsection='gtselect',**kwargs)
-
+        self.configure(config,opts=opts,**kwargs)
         
         self._infile = os.path.abspath(infile)
         self._outfile = os.path.abspath(outfile)
@@ -311,7 +330,7 @@ class SelectorTask(Task):
 
     def run_task(self):
         
-        config = self.config()
+        config = self.config
 
         outfile = os.path.basename(self._output_files[0])
 
@@ -362,3 +381,51 @@ class MkTimeTask(Task):
                         filter=config['filter'],
                         roicut=config['roicut'],
                         scfile=config['scfile'])
+
+class ObsSimTask(Task):
+
+    default_config = {
+        'infile'     : None, 
+        'srclist'    : None,
+        'scfile'     : None,
+        'ra'         : None,
+        'dec'        : None,
+        'radius'     : None,
+        'emin'       : None,
+        'emax'       : None,
+        'irfs'       : None,
+        'simtime'    : None,
+        'evroot'     : 'sim',
+        'use_ac'     : False,
+        'seed'       : 1,
+        'rockangle'  : 'INDEF'
+        }
+
+    
+    def __init__(self,config=None,opts=None,**kwargs):
+        super(ObsSimTask,self).__init__(config,opts=opts,**kwargs)
+
+#        self._outfile = os.path.abspath(outfile)
+#        self.register_output_file(self._outfile)
+        
+        self._gtapp = GtApp('gtobssim')
+    
+    def run_task(self):
+
+        config = extract_dict_by_keys(self.config,
+                                      ObsSimTask.default_config.keys())
+#        outfile = os.path.basename(self._output_files[0])        
+        self._gtapp.run(**config)
+
+
+    def cleanup(self):
+
+        # Copy files
+        outfiles = glob.glob('sim*fits')
+
+        for f in outfiles:
+
+            print f
+            
+#            if os.path.dirname(f) != self._cwd:            
+#                os.system('cp %s %s'%(f,self._cwd))

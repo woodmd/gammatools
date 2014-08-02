@@ -12,17 +12,16 @@ import copy
 import numpy as np
 import matplotlib.pyplot as plt
 from util import *
+from gammatools.core.mpl_util import MPLUtil
 
 class Band(object):
 
-    default_draw_style = { 'marker' : None,
-                           'facecolor' : None,                           
-                           'linestyle' : None,
-                           'linewidth' : None,
-                           'alpha' : 0.4,
-                           'label' : None }
-
-    default_style = { }
+    default_style = { 'marker' : None,
+                      'facecolor' : None,                           
+                      'linestyle' : None,
+                      'linewidth' : None,
+                      'alpha' : 0.4,
+                      'label' : None }
 
     def __init__(self,x,ylo,yhi,style=None):
 
@@ -47,17 +46,6 @@ class Band(object):
         ax.fill_between(self._x,self._ylo,self._yhi,**style)
 
 class Series(object):
-
-    errorbar_kwargs = [ 'marker',
-                        'color',
-                        'markersize', 
-                        'markerfacecolor',
-                        'markeredgecolor',
-                        'linestyle',
-                        'linewidth',
-                        'label' ]
-
-    scatter_kwargs = ['marker','color','edgecolor','label']
 
     default_style = { 'marker' : None,
                       'color' : None,
@@ -122,13 +110,13 @@ class Series(object):
         if style['msk'] is None: msk = self._msk
         else: msk = style['msk']
         
-        clear_dict_by_keys(style,Series.errorbar_kwargs,False)
-        clear_dict_by_vals(style,None)
+        kw = extract_dict_by_keys(style,MPLUtil.errorbar_kwargs)
+#        clear_dict_by_vals(style,None)
 
         if not self._yerr is None: yerr = self._yerr[msk]
         else: yerr = self._yerr
 
-        ax.errorbar(self._x[msk],self._y[msk],yerr,**style)
+        ax.errorbar(self._x[msk],self._y[msk],yerr,**kw)
 
     def _scatter(self,ax=None,**kwargs):
 
@@ -140,13 +128,13 @@ class Series(object):
         if style['msk'] is None: msk = self._msk
         else: msk = style['msk']
         
-        clear_dict_by_keys(style,Series.scatter_kwargs,False)
-        clear_dict_by_vals(style,None)
+        kw = extract_dict_by_keys(style,MPLUtil.scatter_kwargs)
+#        clear_dict_by_vals(style,None)
 
         if not self._yerr is None: yerr = self._yerr[msk]
         else: yerr = self._yerr
 
-        ax.scatter(self._x[msk],self._y[msk],**style)
+        ax.scatter(self._x[msk],self._y[msk],**kw)
 
 
     @staticmethod

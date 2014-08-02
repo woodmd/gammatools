@@ -9,6 +9,7 @@ import numpy as np
 
 class MPLUtil(object):
 
+    scatter_kwargs = ['marker','color','edgecolor','label']    
     imshow_kwargs = ['interpolation','origin','vmin','vmax']
     pcolormesh_kwargs = ['shading','origin','vmin','vmax']
     contour_kwargs = ['levels','origin']

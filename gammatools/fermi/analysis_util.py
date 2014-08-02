@@ -65,3 +65,10 @@ def parse_phases(on_phase,off_phase):
 
 
     
+class ModelBuilder(object):
+
+    default_config = { 'xml' : (None) }
+    
+    def __init__(self):
+
+        pass

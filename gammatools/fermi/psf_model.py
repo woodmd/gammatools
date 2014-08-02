@@ -41,7 +41,7 @@ class PSFModel(object):
         hdulist = pyfits.open(file)
         self._dtheta = np.array(hdulist[2].data.field(0))
         self._energy = np.array(hdulist[1].data.field(0))
-        self._atau = np.array(hdulist[1].data.field(1))
+        self._exps = np.array(hdulist[1].data.field(1))
         self._psf = np.array(hdulist[1].data.field(2))
 
     def deltafn(self,e):
@@ -118,14 +118,14 @@ class PSFModel(object):
 
         idx = ((self._energy - emin) >= 0) & ((self._energy - emax) <= 0)
         weights = \
-            self._energy[idx]*self._atau[idx]*self._wfn(self._energy[idx])
+            self._energy[idx]*self._exps[idx]*self._wfn(self._energy[idx])
 
         if self._edisp is not None:
         
             idx = ((self._erec_center - np.log10(emin)) >= 0) & \
                 ((self._erec_center - np.log10(emax)) <= 0)
 
-            weights = (self._energy*self._atau* 
+            weights = (self._energy*self._exps* 
                        self._wfn(self._energy)*self._edisp.T).T
             
             # PSF vs. reconstructed energy
@@ -144,7 +144,7 @@ class PSFModel(object):
         else:
             idx = ((self._energy - emin) >= 0) & ((self._energy - emax) <= 0)
             weights = \
-                self._energy[idx]*self._atau[idx]*self._wfn(self._energy[idx])
+                self._energy[idx]*self._exps[idx]*self._wfn(self._energy[idx])
             wsum = np.sum(weights)
             psf = np.sum(self._psf[idx].T*weights,axis=1)
             psf *= (1./wsum)
@@ -152,13 +152,14 @@ class PSFModel(object):
 
 class PSFModelLT(PSFModel):
     
-    def __init__(self,ltfile,irf,nbin=600,
+    def __init__(self,irf,nbin=600,
                  ebins_per_decade=16,
                  cth_range=(0.4,1.0), 
-                 src_type='isodec',
+                 src_type='iso',
                  spectrum='powerlaw',
                  spectrum_pars=[2.0],
                  build_model=True,
+                 ltfile=None,
                  edisp_table=None):
 
         PSFModel.__init__(self,model=spectrum,sp_param=spectrum_pars)
@@ -174,73 +175,77 @@ class PSFModelLT(PSFModel):
             cat = Catalog()
             src = cat.get_source_by_name(src_type)
             self._lonlat = (src['RAJ2000'], src['DEJ2000'])
-
-        print self._lonlat
-            
         
         loge_step = 1./float(ebins_per_decade)
         emin = 1.0+loge_step/2.
-        emax = 6.0-loge_step/2.        
-        self._log_energy = np.linspace(emin,emax,
-                                       int((emax-emin)/loge_step)+1)
-#        self._log_energy += loge_step/2.
+        emax = 6.0-loge_step/2.
+        nbin = int((emax-emin)/loge_step)+1
+        self._loge_axis = Axis.create(emin,emax,nbin)
         
-        self._energy = np.power(10,self._log_energy)
+        self._energy = np.power(10,self._loge_axis.center)
+        self._exps = np.zeros(self._loge_axis.nbins)
+        self._psf = np.zeros((self._loge_axis.nbins,self._nbin_dtheta))
 
-        self._psf = np.zeros((self._log_energy.shape[0],self._nbin_dtheta))
+        self._dtheta = np.array([self._dtheta_max_deg*
+                                 (float(i)/float(self._nbin_dtheta))**2 
+                                 for i in range(self._nbin_dtheta)])
 
+
+        self._dtheta_axis = Axis(self._dtheta)
+        self._ctheta_axis = Axis.create(0.2,1.0,40)
+        self._tau = np.zeros(self._ctheta_axis.nbins)
+        
         self.loadLTCube(ltfile)
+        self.fillLivetime()
 
-        self._gx, self._gy = \
-            np.meshgrid(np.log10(self._energy),self._ctheta_center) 
-
-        self._gx = np.ravel(self._gx.T)
-        self._gy = np.ravel(self._gy.T)
+        
 
         if build_model: self.buildModel()
 
     def buildModel(self):
         """Build a model for the exposure-weighted PSF averaged over
         instrument inclination angle."""
+
+        gx, gy = np.meshgrid(np.log10(self._energy),
+                             self._ctheta_axis.center) 
+
+        gx = gx.T
+        gy = gy.T
         
-        self._psf = np.zeros((self._log_energy.shape[0],self._nbin_dtheta))
+        self._psf = np.zeros((self._loge_axis.nbins,self._nbin_dtheta))
         self._edisp = None
 
-        shape = (self._log_energy.shape[0],self._ctheta_center.shape[0])
+        shape = (self._loge_axis.nbins,
+                 self._ctheta_axis.nbins)
 
-        print self._gx, self._gx.shape
+
+        print gx.shape, gy.shape
         
-        aeff = self._irf.aeff(self._gx.flat,self._gy.flat)
+        aeff = self._irf.aeff(np.ravel(gx),np.ravel(gy))
         aeff = aeff.reshape(shape)
         aeff[aeff < 0] = 0
         aeff[np.isnan(aeff)] = 0
 
         dtheta = self._dtheta.reshape(self._dtheta.shape + (1,))
-        gx = self._gx.reshape((1,) + self._gx.shape)
-        gy = self._gy.reshape((1,) + self._gy.shape)
         
         self._exp = self._tau*aeff
-        self._atau = np.sum(self._exp,axis=1)        
-        psf = self._irf.psf(dtheta,gx,gy)
+        self._exps = np.sum(self._exp,axis=1)
+
+        print 'shape: ', self._exp.shape
+
+        
+        psf = self._irf.psf(self._dtheta[...,np.newaxis],
+                            np.ravel(gx)[np.newaxis,...],
+                            np.ravel(gy)[np.newaxis,...])
+
+        print 'shape: ', psf.shape, gx.shape
+        
         psf[psf<0] = 0
         psf[np.isnan(psf)] = 0
         psf = psf.reshape((self._nbin_dtheta,) + shape)
-        psf /= self._atau[np.newaxis,:,np.newaxis]
+        psf /= self._exps[np.newaxis,:,np.newaxis]
         psf = np.sum(psf*self._exp,axis=2).T
         self._psf = psf
-        
-
-        #   edisp_hist = Histogram2D(log_egy_edges,len(log_egy_edges)-1,
-        #                            self._erec_edges,len(self._erec_edges)-1)
-        #
-        #        edisp_hist._counts = edisp_data['edisp'][0,:,:]
-        #
-        #        edisp_hist.plot()
-        #
-        #        plt.show()
-        #        
-        #        sys.exit(0)
-
         
         if self._edisp_table is not None:
         
@@ -259,7 +264,7 @@ class PSFModelLT(PSFModel):
                                         self._nbin_dtheta))
 
             self._edisp = np.sum(edisp_data['edisp'].T*self._tau*aeff,axis=2).T
-            self._edisp = (self._edisp.T/self._atau).T
+            self._edisp = (self._edisp.T/self._exps).T
 
             
             self._edisp[np.isnan(self._edisp)] = 0
@@ -270,38 +275,28 @@ class PSFModelLT(PSFModel):
                 
     def loadLTCube(self,ltcube_file):
 
-#        print 'loadLTCube: ', ltcube_file
-        
+        if ltcube_file is None: return
         hdulist = pyfits.open(ltcube_file)
 
         self._ltmap = hdulist[1].data.field(0)
-        self._ctheta = np.array(hdulist[3].data.field(0))
-        self._ctheta = np.concatenate(([1],self._ctheta))
-        self._dtheta = \
-            np.array([self._dtheta_max_deg*
-                      (float(i)/float(self._nbin_dtheta))**2 
-                      for i in range(self._nbin_dtheta)])
+        ctheta = np.array(hdulist[3].data.field(0))
+        self._ctheta_axis = Axis(np.concatenate(([1],ctheta)))
+        
+#        self._ctheta_center = \
+#            np.array([1-(0.5*(np.sqrt(1-self._ctheta[i]) + 
+#                              np.sqrt(1-self._ctheta[i+1])))**2 
+#                      for i in range(len(self._ctheta)-1)])
+#        self._dcostheta = np.array([self._ctheta[i]-self._ctheta[i+1]
+#                                    for i in range(len(self._ctheta)-1)])
+#        self._theta_center = np.arccos(self._ctheta_center)*180/np.pi  
+        
+        self._tau = np.zeros(self._ctheta_axis.nbins)
 
+    def fillLivetime(self):
+        
+        for i, cth in enumerate(self._ctheta_axis.center):
 
-        self._dtheta_axis = Axis(self._dtheta)
-        self._ctheta_center = \
-            np.array([1-(0.5*(np.sqrt(1-self._ctheta[i]) + 
-                              np.sqrt(1-self._ctheta[i+1])))**2 
-                      for i in range(len(self._ctheta)-1)])
-        self._dcostheta = np.array([self._ctheta[i]-self._ctheta[i+1]
-                                    for i in range(len(self._ctheta)-1)])
-
-
-        self._theta_center = np.arccos(self._ctheta_center)*180/np.pi  
-
-        self._atau = np.zeros(len(self._energy))
-        self._tau = np.zeros(len(self._ctheta_center))
-
-        for i, cth in enumerate(self._ctheta_center):
-
-            dcostheta = self._dcostheta[i]            
-            theta = self._theta_center[i]
-
+            dcostheta = self._ctheta_axis.width[i]
             
             if cth < self._cth_range[0] or cth > self._cth_range[1]:
                 continue
@@ -311,16 +306,13 @@ class PSFModelLT(PSFModel):
             elif self._src_type == 'isodec':
                 sinlat = np.linspace(-1,1,48)
 
-                m = hdulist[1].data.field(0)[:,i]
+                m = self._ltmap[:,i]
 
                 self._tau[i] = 0
-                for s in sinlat:
-                    
+                for s in sinlat:                    
                     lat = np.arcsin(s)
                     th = np.pi/2. - lat                    
                     ipix = healpy.ang2pix(64,th,0,nest=True)
-
-#                    print s, lat, th, ipix
                     self._tau[i] += m[ipix]
                                        
             else:

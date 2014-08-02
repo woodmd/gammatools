@@ -68,18 +68,19 @@ if args.model_file:
     model_hdu = pyfits.open(args.model_file)[0]
     irf_version = get_irf_version(model_hdu.header)
 
-    
+        
 irf_dir = '/u/gl/mdwood/ki10/analysis/custom_irfs/'
 if 'CUSTOM_IRF_DIR' in os.environ:
     irf_dir = os.environ['CUSTOM_IRF_DIR']
 
-irf = IRFManager.create(irf_version, True,irf_dir=irf_dir)
 
-ltfile = '/Users/mdwood/fermi/data/p301/ltcube_5years_zmax100.fits'
+irf = None
+m = None
 
-m = PSFModelLT(ltfile, irf,
-               cth_range=[0.2,1.0],
-               src_type='iso')
+if irf_version:
+    irf = IRFManager.create(irf_version, True,irf_dir=irf_dir)
+    ltfile = '/Users/mdwood/fermi/data/p301/ltcube_5years_zmax100.fits'
+    m = PSFModelLT(irf,cth_range=[0.2,1.0],src_type='iso')
 
 
 
@@ -136,9 +137,7 @@ else:
         #        make_plots_skycube(im,4,logz=True)
 
 
-#        fp.make_energy_residual(suffix='_eresid')
-
-#        sys.exit(0)
+        fp.make_energy_residual(suffix='_eresid')
 
         fp.make_plots_skycube(smooth=True,
                               suffix='_data_map_smooth')
@@ -149,16 +148,16 @@ else:
         fp.make_mdl_plots_skycube(suffix='_mdl_map')
         
         fp.make_plots_skycube(None,smooth=True,resid_type='fractional',
-                              suffix='_data_map_resid_sigma')
-
-        fp.make_plots_skycube(4,smooth=True,resid_type='fractional',
-                              suffix='_data_map_slice_resid_sigma')
-
-        fp.make_plots_skycube(None,smooth=True,resid_type='significance',
                               suffix='_data_map_resid_frac')
 
-        fp.make_plots_skycube(4,smooth=True,resid_type='significance',
+        fp.make_plots_skycube(4,smooth=True,resid_type='fractional',
                               suffix='_data_map_slice_resid_frac')
+
+        fp.make_plots_skycube(None,smooth=True,resid_type='significance',
+                              suffix='_data_map_resid_sigma')
+
+        fp.make_plots_skycube(4,smooth=True,resid_type='significance',
+                              suffix='_data_map_slice_resid_sigma')
         
         sys.exit(0)
         

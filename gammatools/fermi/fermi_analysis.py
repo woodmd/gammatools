@@ -13,98 +13,125 @@ from uw.like.pointspec_helpers import get_default_diffuse, PointSource, FermiCat
 from GtApp import GtApp
 from uw.like.roi_catalogs import SourceCatalog, Catalog2FGL, Catalog3Y
 
-from BinnedAnalysis import BinnedObs,BinnedAnalysis
+from BinnedAnalysis import BinnedObs, BinnedAnalysis 
 from UnbinnedAnalysis import UnbinnedObs, UnbinnedAnalysis
 from pyLikelihood import ParameterVector
 
 from catalog import Catalog, CatalogSource
 
-from gammatools.core.util import Configurable
+from gammatools.core.config import Configurable
 from gammatools.fermi.task import *
 from Composite2 import *
 
-class BinnedAnalysisTool(Configurable):
+class BinnedGtlike(Configurable):
 
-    default_config = { 'convtype'   : -1,
-                       'binsperdec' : 4,
-                       'savedir'    : None,
-                       'scratchdir' : None,
-                       'target'     : None,
-                       'evfile'     : None,
-                       'scfile'     : None,
-                       'srcmdl'     : None,
-                       'ltfile'     : None,
-                       'galdiff'    : None,
-                       'isodiff'    : None,
-                       'gtbin'      : None,
-                       'gtexpcube'  : None,
-                       'gtselect'   : None,
-                       'gtsrcmap'   : None,
-                       'catalog'    : '2FGL',
-                       'optimizer'  : 'MINUIT',
-                       'irfs'       : 'P7REP_CLEAN_V10' }
+    default_config = {
+        'savedir'    : None,
+        'scratchdir' : None,
+        'target'     : None,
+        'evfile'     : None,
+        'scfile'     : None,
+        'ft1file'    : (None,'Set the FT1 file.'),
+        'srcmdl'     : (None,'Set the srcmdl XML file.'),
+        'bexpfile'   : (None,'Set the binned exposure map file.'),
+        'srcmapfile' : (None,''),
+        'srcmdlfile' : (None,''),
+        'ccubefile'  : (None,''),
+        'ltfile'     : None,
+        'galdiff'    : None,
+        'isodiff'    : None,
+#        'gtbin'      : None,
+#        'gtexpcube'  : None,
+#        'gtselect'   : None,
+#        'gtsrcmap'   : None,
+        'catalog'    : '2FGL',
+        'optimizer'  : 'MINUIT',
+        'irfs'       : 'P7REP_CLEAN_V10' }
     
-    def __init__(self,src,target_name,config,**kwargs):
-        super(BinnedAnalysisTool,self).__init__()
+    def __init__(self,target_name,config=None,**kwargs):
+        super(BinnedGtlike,self).__init__()
 
-        self.update_default_config(BinnedAnalysisTool)
-        self.update_default_config(SelectorTask)
-        self.update_default_config(BinnerTask)
-        self.update_default_config(SrcMapTask)
-        self.update_default_config(BExpTask)
+        self.update_default_config(SelectorTask,group='gtselect')
+        self.update_default_config(BinTask,group='gtbin')
+        self.update_default_config(SrcMapTask,group='gtsrcmap')
+        self.update_default_config(BExpTask,group='gtexpcube')
         
         self.configure(config,**kwargs)
 
-        savedir = self.config('savedir')
+        savedir = self.config['savedir']
+        if savedir is None: savedir = os.getcwd()
         
-        self.ft1file = os.path.join(savedir,"%s_ft1.fits"%target_name)
-        self.binfile = os.path.join(savedir,"%s_binfile.fits"%target_name)
-        self.ccubefile = os.path.join(savedir,"%s_ccube.fits"%target_name)
-        self.bexpfile = os.path.join(savedir,"%s_bexp.fits"%target_name)
-        self.srcmdl = os.path.join(savedir,"%s_srcmdl_fit.xml"%target_name)
-        
-        self.srcmapfile = os.path.join(savedir,"%s_srcmap.fits"%target_name)
-        self.srcmdlfile = os.path.join(savedir,"%s_srcmdl.fits"%target_name)
-        
-        self.skydir = SkyDir(src.ra(),src.dec())
-        self.src = src
-        
-    def setup_gtlike(self):
+        outfile_dict = {
+            'ft1file'    : 'ft1.fits',
+            'ccubefile'  : 'ccube.fits',
+            'bexpfile'   : 'bexp.fits',
+            'srcmdl'     : 'srcmdl.xml',
+            'srcmapfile' : 'srcmap.fits',
+            'srcmdlfile' : 'srcmdl.fits' }
 
-        config = self.config()
+        for k, v in outfile_dict.iteritems():
+            if not self.config[k]:
+                self.__dict__[k] = os.path.join(savedir,
+                                                "%s_%s"%(target_name,v))
+            else:
+                self.__dict__[k] = self.config[k]
+                
+#        self.ft1file = os.path.join(savedir,"%s_ft1.fits"%target_name)
+#        self.ccubefile = os.path.join(savedir,"%s_ccube.fits"%target_name)
+#        self.bexpfile = os.path.join(savedir,"%s_bexp.fits"%target_name)
+#        self.srcmdl = os.path.join(savedir,"%s_srcmdl_fit.xml"%target_name)
+#        self.srcmapfile = os.path.join(savedir,"%s_srcmap.fits"%target_name)
+#        self.srcmdlfile = os.path.join(savedir,"%s_srcmdl.fits"%target_name)
+        
+#        self.skydir = SkyDir(src.ra(),src.dec())
+#        self.src = src
+
+    @property
+    def like(self):
+        return self._like
+
+    @property
+    def logLike(self):
+        return self._like.logLike
+    
+    def setup_inputs(self):
+        
+        config = self.config
         
         sel_task = SelectorTask(config['evfile'],self.ft1file,
                                 ra=self.src.ra(),dec=self.src.dec(),
-                                config=config)
+                                config=config['gtselect'])
         sel_task.run()
 
-        bin_task = BinnerTask(self.ft1file,self.ccubefile,config,
-                              xref=self.src.ra(),yref=self.src.dec())
+        bin_task = BinTask(self.ft1file,self.ccubefile,config,
+                           xref=self.src.ra(),yref=self.src.dec())
 
         bin_task.run()
 
         
-        bexp_task = BExpTask(self.bexpfile,infile=config['ltcube'],
-                             config=config)
+        bexp_task = BExpTask(self.bexpfile,infile=config['ltfile'],
+                             config=config['gtexpcube'])
             
         bexp_task.run()
 
         srcmap_task = SrcMapTask(self.srcmapfile,bexpmap=self.bexpfile,
                                  srcmdl=config['srcmdl'],
                                  cmap=self.ccubefile,
-                                 expcube=config['ltcube'],
+                                 expcube=config['ltfile'],
                                  config=config)
 
         srcmap_task.run()
 
-        self.obs = BinnedObs(srcMaps=self.srcmapfile,
-                             expCube=config['ltcube'],
-                             binnedExpMap=self.bexpfile,
-                             irfs=config['irfs'])
+    def setup_gtlike(self):
         
-        self.like = BinnedAnalysis(binnedData=self.obs,
-                                   srcModel=config['srcmdl'],
-                                   optimizer=config['optimizer'])
+        self._obs = BinnedObs(srcMaps=self.srcmapfile,
+                             expCube=self.config['ltfile'],
+                             binnedExpMap=self.bexpfile,
+                             irfs=self.config['irfs'])
+        
+        self._like = BinnedAnalysis(binnedData=self._obs,
+                                   srcModel=self.config['srcmdl'],
+                                   optimizer=self.config['optimizer'])
 
     def make_srcmodel(self,srcmdl=None):
 
@@ -114,8 +141,8 @@ class BinnedAnalysisTool(Configurable):
                                    srcmaps=self.srcmapfile,
                                    bexpmap=self.bexpfile,
                                    srcmdl=srcmdl,
-                                   expcube=self.config('ltcube'),
-                                   config=self.config())
+                                   expcube=self.config['ltfile'],
+                                   config=self.config)
             
         srcmdl_task.run()
 
@@ -143,7 +170,6 @@ class AnalysisManager(Configurable):
     
     def __init__(self,config,opts,**kwargs):
         super(AnalysisManager,self).__init__()
-        
         self.update_default_config(AnalysisManager)
         self.update_default_config(SelectorTask)
         
@@ -284,7 +310,7 @@ class AnalysisManager(Configurable):
 
         if os.path.isfile(self.srcmdl): return
         
-        config = self.config()
+        config = self.config
         
         self._ds = DataSpecification(ft1files = self.ft1file,
                                      ft2files = config['scfile'],

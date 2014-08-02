@@ -37,12 +37,13 @@ class FITSPlotter(object):
     
     def __init__(self,im,im_mdl,irf=None,prefix=None,outdir='plots'):
 
+        self._ft = FigTool(fig_dir=outdir)
         self._im = im
         self._im_mdl = im_mdl
         self._irf = irf
         self._prefix = prefix
         if self._prefix is None: self._prefix = 'fig'
-        if outdir: self._prefix = os.path.join(outdir,self._prefix)
+        if outdir: self._prefix_path = os.path.join(outdir,self._prefix)
         
     def make_mdl_plots_skycube(self,**kwargs):
 
@@ -50,18 +51,19 @@ class FITSPlotter(object):
         
     def make_energy_residual(self,suffix=''):
 
-        ft = FigTool()
-
         h = self._im.project(2)
         hm = self._im_mdl.project(2)
 
-        fig = ft.create('test',figstyle='residual2',yscale='log',
-                        ylabel='Counts')
+        fig = self._ft.create(self._prefix + suffix,
+                              figstyle='residual2',
+                              yscale='log',
+                              ylabel='Counts',
+                              xlabel='Energy [log$_{10}$(E/MeV)]')
 
-        fig[0].add_hist(hm,hist_style='line')
-        fig[0].add_hist(h,linestyle='None')
+        fig[0].add_hist(hm,hist_style='line',label='Model')
+        fig[0].add_hist(h,linestyle='None',label='Data')
 
-        fig[1].set_style('ylim',[-0.25,0.25])
+        fig[1].set_style('ylim',[-0.3,0.3])
 
 
         fig.plot()
@@ -74,7 +76,7 @@ class FITSPlotter(object):
         if model: im = self._im_mdl
         else: im = self._im
         
-        nbins = im.axis(2).nbins()
+        nbins = im.axis(2).nbins
         if delta_bin is None: delta_bin = nbins
     
         nplots = nbins/delta_bin
@@ -122,7 +124,7 @@ class FITSPlotter(object):
                 
                     
                 if resid_type:
-                    for k in range(3):
+                    for k in range(10):
                         print k
                         mc_resid.append(self.make_residual_map(h,hm,
                                                                smooth,mc=True,
@@ -156,8 +158,8 @@ class FITSPlotter(object):
                 
 #                ax.set_ylim(0)
 
-        fig.savefig('%s_%i%s.png'%(self._prefix,i,suffix))
-        fig2.savefig('%s_%i%s_zproj.png'%(self._prefix,i,suffix))
+        fig.savefig('%s_%i%s.png'%(self._prefix_path,i,suffix))
+        fig2.savefig('%s_%i%s_zproj.png'%(self._prefix_path,i,suffix))
 
     def create_figure(self,**kwargs):
         fig = plt.figure('Figure %i'%FITSPlotter.fignum,**kwargs)
@@ -261,8 +263,8 @@ class FITSPlotter(object):
         hz.plot(label='Data',linestyle='None')
 
         if resid_type == 'significance':
-            plt.plot(hz.axis().center(),
-                     fn(hz.axis().center())*hz.axis().width()*nbin,
+            plt.plot(hz.axis().center,
+                     fn(hz.axis().center)*hz.axis().width*nbin,
                      color='k',label='Gaussian ($\sigma = 1$)')
         
         hz_mc.plot(label='MC',hist_style='line')
@@ -272,10 +274,15 @@ class FITSPlotter(object):
 
         ax2.legend(loc='upper right',prop= {'size' : 10 })
 
+        data_stats = 'Mean = %.2f\nRMS = %.2f'%(hz.mean(),hz.stddev())
+        mc_stats = 'MC Mean = %.2f\nMC RMS = %.2f'%(hz_mc.mean(),
+                                                    hz_mc.stddev())
         
         ax2.set_xlabel(cb_label)
         ax2.set_title(title)
-        ax2.text(0.1,0.8,'Mean = %.2f\nRMS = %.2f'%(hz.mean(),hz.stddev()),
+        ax2.text(0.05,0.95,
+                 '%s\n%s'%(data_stats,mc_stats),
+                 verticalalignment='top',
                  transform=ax2.transAxes,fontsize=10)
 
         
@@ -284,7 +291,7 @@ class FITSPlotter(object):
             
 def make_projection_plots_skycube(im,paxis,delta_bin=2):
 
-    nbins = im.axis(2).nbins()
+    nbins = im.axis(2).nbins
     nfig = nbins/(8*delta_bin)
     
     for i in range(nfig):
@@ -778,11 +785,11 @@ class FITSViewerFrame(wx.Frame):
             if image_window: image_window.add(im,style)
             self.projx_window.add(im,style)
             self.projy_window.add(im,style)
-            self.ctrl_slice.init(0,im.axis(2).nbins()-1)
-            self.ctrl_nbins.init(1,im.axis(2).nbins())
+            self.ctrl_slice.init(0,im.axis(2).nbins-1)
+            self.ctrl_nbins.init(1,im.axis(2).nbins)
 
-            self.nbinx = im.axis(0).nbins()
-            self.nbiny = im.axis(1).nbins()
+            self.nbinx = im.axis(0).nbins
+            self.nbiny = im.axis(1).nbins
 
             self._projx_center = self.nbinx/2.
             self._projx_width = 10.0
@@ -1107,7 +1114,7 @@ class ImagePanel(BasePanel):
 
             axim = cm[0].plot(**self._style[0])
 
-            cat.plot(cm[0],ax=axim,src_color='w')
+            cat.plot(cm[0],src_color='w')
             
             self._axim.append(axim)
             self._ax = plt.gca()
@@ -1214,7 +1221,7 @@ class PlotPanel(BasePanel):
         style.setdefault('linestyle','None')
 
         if self._proj_range is None:
-            self._proj_range = [0,im.axis(self._pindex).nbins()]
+            self._proj_range = [0,im.axis(self._pindex).nbins]
         
         self._im.append(im)
         self._style.append(style)

@@ -192,8 +192,7 @@ class Catalog(object):
         for icol, col in enumerate(table.columns.names):
 
             col_data = hdulist[1].data[col]
-
-            print icol, col, type(col_data)
+#            print icol, col, type(col_data)
 
             if type(col_data[0]) == np.float32: 
                 cols[col] = np.array(col_data,dtype=float)

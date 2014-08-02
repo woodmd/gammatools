@@ -9,6 +9,7 @@ import numpy as np
 from histogram import *
 from series import *
 from util import update_dict
+from config import Configurable
 
 __author__   = "Matthew Wood (mdwood@slac.stanford.edu)"
 __abstract__ = ""
@@ -202,11 +203,9 @@ class FigureSubplot(object):
                                     
             elif isinstance(d,Histogram):                    
                 if style['norm_interpolation'] == 'log':
-                    ynorm = 10**fn(d.axis().center())
-                else: ynorm = fn(d.axis().center())
-                self._data[i]._counts /= ynorm
-                self._data[i]._var /= ynorm**2
-                
+                    ynorm = 10**fn(d.axis().center)
+                else: ynorm = fn(d.axis().center)
+                self._data[i] /= ynorm
                 if style['norm_style'] == 'residual':
                     self._data[i]._counts -= 1.0
 
@@ -299,6 +298,8 @@ class RatioSubplot(FigureSubplot):
         
 
 class Figure(object):
+
+    fignum = 100
     
     style = { 'show_ratio_args' : None,
               'mask_ratio_args' : None,
@@ -321,8 +322,9 @@ class Figure(object):
         figsize[0] *= self._style['figscale']
         figsize[1] *= self._style['figscale']
         
-        self._fig = plt.figure(figsize=figsize)
-
+        self._fig = plt.figure('Figure %i'%Figure.fignum,figsize=figsize)
+        Figure.fignum += 1
+        
         self._figlabel = figlabel
         self._subplots = []        
         self.add_subplot(nsubplot)        
@@ -514,48 +516,36 @@ class TwoPaneRatioFigure(Figure):
         self._subplots.append(fp1)
 
 
-class FigTool(object):
+class FigTool(Configurable):
 
-    opts = {
-        'format' :
-            ( 'png', str,
-              'Set the output image format.' ),
+    default_config = {
+        'format' :( 'png', 'Set the output image format.' ),
+        'marker' : ['s','o','d','^','v','<','>'],
+        'color'  : ['b','g','r','m','c','grey','brown'],
+        'linestyle' : ['-','--','-.','-','--','-.','-'],
+        'linewidth' : [1.0],
+        'markersize' : [6.0],
+        'figsize' : [8.0,6.0],
+        'hist_style' : 'errorbar',
+        'norm_index'  : None,
+        'legend_loc' : 'best',        
         'fig_dir' :
-            ( './', str,
-              'Set the output directory.' ),
+            ( './', 'Set the output directory.' ),
         'fig_prefix'   :
-            ( None,  str,
-              'Set the common prefix for output image files.') }
+            ( None, 'Set the common prefix for image files.') }
 
     
-    def __init__(self,opts=None,**kwargs):
-
-        style = { 'marker' : ['s','o','d','^','v','<','>'],
-                  'color' : ['b','g','r','m','c','grey','brown'],
-                  'linestyle' : ['-','--','-.','-','--','-.','-'],
-                  'linewidth' : [1.0],
-                  'markersize' : [6.0],
-                  'figsize' : [8.0,6.0],
-                  'hist_style' : 'errorbar',
-                  'norm_index'  : None,
-                  'legend_loc' : 'lower right',
-                  'format' : 'png',
-                  'fig_prefix' : None,
-                  'fig_dir' : './' }
-
-        if not opts is None:
-            update_dict(style,opts.__dict__)        
-        update_dict(style,kwargs)
-        
-        self._fig_dir = style['fig_dir']
-        self._fig_prefix = style['fig_prefix']
-        self._style = style
-
+    def __init__(self,config=None,opts=None,**kwargs):
+        super(FigTool,self).__init__()
+        self.configure(opts=opts,**kwargs)
+ 
     @staticmethod
     def add_arguments(parser):
         
-        for k, v in FigTool.opts.iteritems():
+        for k, v in FigTool.default_config.iteritems():
 
+            continue
+            
             if isinstance(v[0],bool):
                 parser.add_argument('--' + k,default=v[0],
                                     action='store_true',
@@ -567,22 +557,22 @@ class FigTool(object):
         
     def create(self,figlabel,figstyle=None,nax=1,**kwargs):
 
-        if not self._fig_prefix is None:
-            figlabel = self._fig_prefix + '_' + figlabel
+        if self.config['fig_prefix']:
+            figlabel = self.config['fig_prefix'] + '_' + figlabel
 
-        style = copy.deepcopy(self._style)
+        style = copy.deepcopy(self.config)
         style.update(kwargs)
-
+        
         if figstyle == 'twopane':
             return TwoPaneFigure(figlabel,**style)
         elif figstyle == 'ratio2':
             return TwoPaneRatioFigure(figlabel,**style)
         elif figstyle == 'residual2':
-            style['norm_style'] = 'residual'
-            return TwoPaneRatioFigure(figlabel,**style)
+            return TwoPaneRatioFigure(figlabel,
+                                      norm_style='residual',**style)
         elif figstyle == 'ratio':
-            style['figstyle'] = 'ratio'
-            return Figure(figlabel,nax,**style)
+            return Figure(figlabel,nax,figstyle='ratio',
+                          **style)
         else:
             return Figure(figlabel,nax,**style)
 

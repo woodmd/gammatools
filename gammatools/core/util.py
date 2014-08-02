@@ -110,8 +110,8 @@ def string_to_array(x,delimiter=',',dtype=float):
     return np.array([t for t in x.split(delimiter)],dtype=dtype)
 
 def update_dict(d0,d1,add_new_keys=False,append=False):
-    """Recursively update the contents of python dictionary d1 with
-    the contents of python dictionary d0."""
+    """Recursively update the contents of python dictionary d0 with
+    the contents of python dictionary d1."""
 
     if d0 is None or d1 is None: return
     

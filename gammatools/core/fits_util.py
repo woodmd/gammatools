@@ -123,7 +123,7 @@ class FITSAxis(Axis):
 
     @staticmethod
     def create_from_axis(ctype,axis):
-        return FITSAxis(ctype,0,axis.lo_edge(),axis.width()[0],axis.nbins())
+        return FITSAxis(ctype,0,axis.lo_edge(),axis.width[0],axis.nbins)
     
     @staticmethod
     def create_from_header(header,iaxis,logaxis=False,offset=0.0):
@@ -173,7 +173,7 @@ class FITSImage(HistogramND):
         
         if not roi_msk is None: self._roi_msk |= roi_msk
         
-        xpix, ypix = np.meshgrid(self.axis(0).center(),self.axis(1).center())
+        xpix, ypix = np.meshgrid(self.axis(0).center,self.axis(1).center)
         xpix = np.ravel(xpix)
         ypix = np.ravel(ypix)
         
@@ -257,13 +257,13 @@ class FITSImage(HistogramND):
                 return SkyImage(self._wcs,h.axes(),h.counts,
                                 self._roi_radius_deg,self._roi_msk)
             else:
-                axis0 = Axis(h.axis(0).pix_to_coord(h.axis(0).edges()))
-                axis1 = Axis(h.axis(1).pix_to_coord(h.axis(1).edges()))
+                axis0 = Axis(h.axis(0).pix_to_coord(h.axis(0).edges))
+                axis1 = Axis(h.axis(1).pix_to_coord(h.axis(1).edges))
                 h._axes[0] = axis0
                 h._axes[1] = axis1
                 return h
         else:
-            h._axes[0] = Axis(h.axis().pix_to_coord(h.axis().edges()))
+            h._axes[0] = Axis(h.axis().pix_to_coord(h.axis().edges))
             return h
 
     @staticmethod
@@ -300,7 +300,7 @@ class SkyCube(FITSImage):
         ilat = min(max(0,ilat),self._axes[1]._naxis-1)
 
         c = self._counts.T[ilon,ilat,:]
-        edges = self._axes[2].edges()
+        edges = self._axes[2].edges
         return Histogram.createFromArray(edges,c)
 
     def plot_energy_slices(self,rebin=4,logz=False):
@@ -323,7 +323,7 @@ class SkyCube(FITSImage):
                         
     def get_integrated_map(self,emin,emax):
         
-        ebins = self._axes[2].edges()
+        ebins = self._axes[2].edges
 
         loge = 0.5*(ebins[1:] + ebins[:-1])
         dloge = ebins[1:] - ebins[:-1]
