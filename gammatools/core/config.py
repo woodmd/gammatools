@@ -36,7 +36,7 @@ class Option(object):
         """Create an instance of an option from a tuple or a scalar."""
 
         if len(name.split('.')) > 1:        
-            name, group = name.split('.')
+            group, name = name.split('.')
             
         #isinstance(x,list): return Option(x[0],x[1])
         if isinstance(x,Option): return x
@@ -121,8 +121,9 @@ class Configurable(object):
         this configuration will be nested in a dictionary with that
         key."""
         if default_dict is None: return
-        
-        if not isinstance(default_dict,dict) and issubclass(default_dict,Configurable):
+
+        if not isinstance(default_dict,dict) and \
+                issubclass(default_dict,Configurable):
             default_dict = default_dict.default_config
         elif not isinstance(default_dict,dict):
             raise Exception('Wrong type for default dict.')
@@ -136,14 +137,16 @@ class Configurable(object):
         update_dict(default_config,default_dict,True)
         for k in default_dict.keys():
 #            if not isinstance(self._default_config[k],Option):
-            option = Option.create(k,default_dict[k],group=group)                
-            default_config[k] = option
+            option = Option.create(k,default_dict[k],group=group) 
+            default_config[option.name] = option
+
+            print k, group, option.name, option.group
 
             if option.group:
-                self._config.setdefault(group,{})
-                self._config[group][k] = option.value
+                self._config.setdefault(option.group,{})
+                self._config[option.group][option.name] = option.value
             else:
-                self._config[k] = self._default_config[k].value
+                self._config[option.name] = self._default_config[k].value
        
     def print_config(self):
         
@@ -157,7 +160,7 @@ class Configurable(object):
         return self._config
 
     def config_docstring(self,key):
-        return self._default_config[key].docstring()
+        return self._default_config[key].docstring
 
     def set_config(self,key,value):
         self._config[key] = value

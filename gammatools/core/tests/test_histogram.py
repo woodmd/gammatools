@@ -15,10 +15,10 @@ class TestHistogram(unittest.TestCase):
         # Initialize from python dictionary
 
         axis = Axis.createFromDict({'edges' : edges})
-        assert_almost_equal(axis.edges(),edges)
+        assert_almost_equal(axis.edges,edges)
 
         axis = Axis.createFromDict({'lo' : 0.0, 'hi' : 1.0, 'nbin' : 10})
-        assert_almost_equal(axis.edges(),edges)
+        assert_almost_equal(axis.edges,edges)
         
     def test_histogram_init(self):
 
@@ -30,16 +30,16 @@ class TestHistogram(unittest.TestCase):
         assert_almost_equal(h.var,2.0)
         
         # Initialize with vector of values
-        h = Histogram(axis,counts=axis.center(),var=2.0*axis.center())
-        assert_almost_equal(h.counts,axis.center())
-        assert_almost_equal(h.var,2.0*axis.center())
+        h = Histogram(axis,counts=axis.center,var=2.0*axis.center)
+        assert_almost_equal(h.counts,axis.center)
+        assert_almost_equal(h.var,2.0*axis.center)
 
     def test_histogram2d_slice(self):
 
         xaxis = Axis(np.linspace(0,1,6))
         yaxis = Axis(np.linspace(0,2,9))
 
-        c = np.outer(np.cos(xaxis.center()),np.sin(yaxis.center()))
+        c = np.outer(np.cos(xaxis.center),np.sin(yaxis.center))
         v = c**2
 
         h = Histogram2D(xaxis,yaxis,counts=c,var=v)
@@ -48,28 +48,28 @@ class TestHistogram(unittest.TestCase):
         
         hsx = h.slice(0,2)
 
-        cx = np.cos(xaxis.center()[2])*np.sin(yaxis.center())
+        cx = np.cos(xaxis.center[2])*np.sin(yaxis.center)
 
         assert_almost_equal(hsx.counts,cx)
         assert_almost_equal(hsx.var,cx**2)
         
         hsy = h.slice(1,2)
 
-        cy = np.cos(xaxis.center())*np.sin(yaxis.center()[2])
+        cy = np.cos(xaxis.center)*np.sin(yaxis.center[2])
 
         assert_almost_equal(hsy.counts,cy)
         assert_almost_equal(hsy.var,cy**2)
 
         hsx = h.slice(0,-2)
 
-        cx = np.cos(xaxis.center()[-2])*np.sin(yaxis.center())
+        cx = np.cos(xaxis.center[-2])*np.sin(yaxis.center)
 
         assert_almost_equal(hsx.counts,cx)
         assert_almost_equal(hsx.var,cx**2)
         
         hsy = h.slice(1,-2)
 
-        cy = np.cos(xaxis.center())*np.sin(yaxis.center()[-2])
+        cy = np.cos(xaxis.center)*np.sin(yaxis.center[-2])
 
         assert_almost_equal(hsy.counts,cy)
         assert_almost_equal(hsy.var,cy**2)
@@ -78,45 +78,45 @@ class TestHistogram(unittest.TestCase):
         
         hsx = h.slice(0,[[2,4]])
 
-        cx = np.cos(xaxis.center()[2:4,np.newaxis])*np.sin(yaxis.center())
+        cx = np.cos(xaxis.center[2:4,np.newaxis])*np.sin(yaxis.center)
 
         assert_almost_equal(hsx.counts,cx)
         assert_almost_equal(hsx.var,cx**2)
         
         hsy = h.slice(1,[[2,4]])
 
-        cy = np.cos(xaxis.center()[:,np.newaxis])* \
-            np.sin(yaxis.center()[np.newaxis,2:4])
+        cy = np.cos(xaxis.center[:,np.newaxis])* \
+            np.sin(yaxis.center[np.newaxis,2:4])
 
         assert_almost_equal(hsy.counts,cy)
         assert_almost_equal(hsy.var,cy**2)
 
         hsx = h.slice(0,[[2,None]])
 
-        cx = np.cos(xaxis.center()[2:,np.newaxis])*np.sin(yaxis.center())
+        cx = np.cos(xaxis.center[2:,np.newaxis])*np.sin(yaxis.center)
 
         assert_almost_equal(hsx.counts,cx)
         assert_almost_equal(hsx.var,cx**2)
         
         hsy = h.slice(1,[[2,None]])
 
-        cy = np.cos(xaxis.center()[:,np.newaxis])* \
-            np.sin(yaxis.center()[np.newaxis,2:])
+        cy = np.cos(xaxis.center[:,np.newaxis])* \
+            np.sin(yaxis.center[np.newaxis,2:])
 
         assert_almost_equal(hsy.counts,cy)
         assert_almost_equal(hsy.var,cy**2)
 
         hsx = h.slice(0,[[-2,None]])
 
-        cx = np.cos(xaxis.center()[-2:,np.newaxis])*np.sin(yaxis.center())
+        cx = np.cos(xaxis.center[-2:,np.newaxis])*np.sin(yaxis.center)
 
         assert_almost_equal(hsx.counts,cx)
         assert_almost_equal(hsx.var,cx**2)
         
         hsy = h.slice(1,[[-2,None]])
 
-        cy = np.cos(xaxis.center()[:,np.newaxis])* \
-            np.sin(yaxis.center()[np.newaxis,-2:])
+        cy = np.cos(xaxis.center[:,np.newaxis])* \
+            np.sin(yaxis.center[np.newaxis,-2:])
 
         assert_almost_equal(hsy.counts,cy)
         assert_almost_equal(hsy.var,cy**2)
@@ -125,14 +125,14 @@ class TestHistogram(unittest.TestCase):
         
         hsx = h.sliceByValue(0,0.5)
 
-        cx = np.cos(xaxis.center()[2])*np.sin(yaxis.center())
+        cx = np.cos(xaxis.center[2])*np.sin(yaxis.center)
 
         assert_almost_equal(hsx.counts,cx)
         assert_almost_equal(hsx.var,cx**2)
         
         hsy = h.sliceByValue(1,0.6)
 
-        cy = np.cos(xaxis.center())*np.sin(yaxis.center()[2])
+        cy = np.cos(xaxis.center)*np.sin(yaxis.center[2])
 
         assert_almost_equal(hsy.counts,cy)
         assert_almost_equal(hsy.var,cy**2)
@@ -142,7 +142,7 @@ class TestHistogram(unittest.TestCase):
         xaxis = Axis(np.linspace(0,1,6))
         yaxis = Axis(np.linspace(0,2,8))
 
-        c = np.outer(np.cos(xaxis.center()),np.sin(yaxis.center()))
+        c = np.outer(np.cos(xaxis.center),np.sin(yaxis.center))
         v = c**2
 
         h = Histogram2D(xaxis,yaxis,counts=c,var=v)
@@ -174,7 +174,7 @@ class TestHistogram(unittest.TestCase):
         xaxis = Axis(np.linspace(0,1,6))
         yaxis = Axis(np.linspace(0,2,8))
 
-        c = np.outer(np.cos(xaxis.center()),np.sin(yaxis.center()))
+        c = np.outer(np.cos(xaxis.center),np.sin(yaxis.center))
         v = c**2
 
         h = Histogram2D(xaxis,yaxis,counts=c,var=v)
@@ -196,9 +196,9 @@ class TestHistogram(unittest.TestCase):
         # Test filling from scalar, list, and array input
 
         xs = 0.1
-        xv = h.axis().center()
+        xv = h.axis().center
         xl = xv.tolist()
-        unitw = np.ones(h.axis().nbins())
+        unitw = np.ones(h.axis().nbins)
 
         # Scalar w/ unit weight
         for x in xv: h.fill(x)
@@ -280,10 +280,10 @@ class TestHistogram(unittest.TestCase):
 
         h = Histogram2D(np.linspace(0,1,6),np.linspace(0,1,6))
 
-        unitw = np.ones((h.xaxis().nbins(),h.yaxis().nbins()))
+        unitw = np.ones((h.xaxis().nbins,h.yaxis().nbins))
 
-        xv, yv = np.meshgrid(h.xaxis().center(), 
-                             h.yaxis().center(),indexing='ij')
+        xv, yv = np.meshgrid(h.xaxis().center, 
+                             h.yaxis().center,indexing='ij')
         xv = np.ravel(xv)
         yv = np.ravel(yv)
 
@@ -331,16 +331,16 @@ class TestHistogram(unittest.TestCase):
         h0 = Histogram2D(xaxis,yaxis)
         h1 = Histogram2D(xaxis,yaxis)
 
-        xv, yv = np.meshgrid(h0.xaxis().center(), 
-                             h0.yaxis().center(),indexing='ij')
+        xv, yv = np.meshgrid(h0.xaxis().center, 
+                             h0.yaxis().center,indexing='ij')
         xv = np.ravel(xv)
         yv = np.ravel(yv)
 
         w0 = 1.0+np.cos(xv)**2
         w1 = 1.0+np.sin(yv)**2
 
-        h0.fill(xv,yv,w0,np.ones(xaxis.nbins()*yaxis.nbins()))
-        h1.fill(xv,yv,w1,np.ones(xaxis.nbins()*yaxis.nbins()))
+        h0.fill(xv,yv,w0,np.ones(xaxis.nbins*yaxis.nbins))
+        h1.fill(xv,yv,w1,np.ones(xaxis.nbins*yaxis.nbins))
 
         h2 = h0 + h1 + 1.0
 
@@ -352,15 +352,15 @@ class TestHistogram(unittest.TestCase):
     def test_histogram_operators(self):
 
         axis = Axis(np.linspace(0,1,11))
-        xc = axis.center()
+        xc = axis.center
 
         # Addition
         h0 = Histogram(axis)
         h1 = Histogram(axis)
 
 
-        h0.fill(xc,1.0+np.cos(xc)**2,np.ones(axis.nbins()))
-        h1.fill(xc,1.0+np.sin(xc)**2,np.ones(axis.nbins()))
+        h0.fill(xc,1.0+np.cos(xc)**2,np.ones(axis.nbins))
+        h1.fill(xc,1.0+np.sin(xc)**2,np.ones(axis.nbins))
 
         h2 = h0 + h1 + 1.0
 
@@ -418,7 +418,7 @@ class TestHistogram(unittest.TestCase):
 
         h = Histogram(np.linspace(-4,4,1000))
 
-        x = h.axis().center()
+        x = h.axis().center
         
         s2 = 0.1**2
         mu = 0.1
@@ -434,7 +434,7 @@ class TestHistogram(unittest.TestCase):
 
         h = Histogram(np.linspace(-3,3,2000))
 
-        x = h.axis().center()
+        x = h.axis().center
 
         sigma = 0.15
         s2 = sigma**2
