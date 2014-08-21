@@ -12,44 +12,44 @@ class IRFModel(object):
         self._bkg = bkg
         self._bkg_ptsrc = bkg_ptsrc
 
-        self._bkg /= self._bkg.axis().width()
-        self._bkg_ptsrc /= self._bkg_ptsrc.axis().width()
+        self._bkg /= self._bkg.axis().width
+        self._bkg_ptsrc /= self._bkg_ptsrc.axis().width
         
         self._psf = psf_r68
         self._edisp = edisp_r68
 
         
 
-        msk = ((self._aeff.counts() > 0)&
-               (self._aeff.axis().center()>4.0))
+        msk = ((self._aeff.counts > 0)&
+               (self._aeff.axis().center>4.0))
 
-        aeff_err = np.log10(1.0 + self._aeff.err()[msk]/
-                            self._aeff.counts()[msk])
+        aeff_err = np.log10(1.0 + self._aeff.err[msk]/
+                            self._aeff.counts[msk])
 
-        self._aeff_fn = BSpline.fit(self._aeff.axis().center()[msk],
-                                    np.log10(self._aeff.counts()[msk]),
+        self._aeff_fn = BSpline.fit(self._aeff.axis().center[msk],
+                                    np.log10(self._aeff.counts[msk]),
                                     aeff_err,
                                     np.linspace(4.2,8.0,8),4)
 
         
 
-        msk = ((self._aeff_ptsrc.counts() > 0)&
-               (self._aeff_ptsrc.axis().center()>4.0))
+        msk = ((self._aeff_ptsrc.counts > 0)&
+               (self._aeff_ptsrc.axis().center>4.0))
 
 
-        if np.sum(self._aeff_ptsrc.err()[msk]) < 1E-4:
+        if np.sum(self._aeff_ptsrc.err[msk]) < 1E-4:
             err = np.ones(np.sum(msk))
         else:
-            err = self._aeff_ptsrc.err()[msk]
+            err = self._aeff_ptsrc.err[msk]
 
 
-        self._aeff_ptsrc_fn = BSpline.fit(self._aeff_ptsrc.axis().center()[msk],
-                                          self._aeff_ptsrc.counts()[msk],err,
+        self._aeff_ptsrc_fn = BSpline.fit(self._aeff_ptsrc.axis().center[msk],
+                                          self._aeff_ptsrc.counts[msk],err,
                                           np.linspace(4.0,8.0,16),4)
 
         
 #        plt.figure()
-#        x = self._aeff_ptsrc.axis().center()
+#        x = self._aeff_ptsrc.axis().center
 #        plt.plot(x,10**self._aeff_fn(x))
 #        plt.plot(x,self._aeff_ptsrc_fn(x))
 #        self._aeff.plot()
@@ -57,23 +57,23 @@ class IRFModel(object):
 #        plt.show()
 
 
-        msk = ((self._bkg_ptsrc.counts() > 0)&
-               (self._bkg_ptsrc.axis().center()>4.0))
+        msk = ((self._bkg_ptsrc.counts > 0)&
+               (self._bkg_ptsrc.axis().center>4.0))
         bkg_err = np.log10(1.0 + 
-                           self._bkg_ptsrc.err()[msk]/
-                           self._bkg_ptsrc.counts()[msk])
+                           self._bkg_ptsrc.err[msk]/
+                           self._bkg_ptsrc.counts[msk])
         
         self._log_bkg_ptsrc_fn = \
-            BSpline.fit(self._bkg_ptsrc.axis().center()[msk],
-                        np.log10(self._bkg_ptsrc.counts()[msk]),
+            BSpline.fit(self._bkg_ptsrc.axis().center[msk],
+                        np.log10(self._bkg_ptsrc.counts[msk]),
                         bkg_err,
                         np.linspace(4.0,8.0,8),4)
 
-        msk = (self._bkg.counts() > 0)&(self._bkg.axis().center()>4.0)
-        bkg_err = np.log10(1.0 + self._bkg.err()[msk]/self._bkg.counts()[msk])
+        msk = (self._bkg.counts > 0)&(self._bkg.axis().center>4.0)
+        bkg_err = np.log10(1.0 + self._bkg.err[msk]/self._bkg.counts[msk])
 
-        self._log_bkg_fn = BSpline.fit(self._bkg.axis().center()[msk],
-                                       np.log10(self._bkg.counts()[msk]),
+        self._log_bkg_fn = BSpline.fit(self._bkg.axis().center[msk],
+                                       np.log10(self._bkg.counts[msk]),
                                        bkg_err,
                                        np.linspace(4.0,8.0,8),4)
 
@@ -91,11 +91,11 @@ class IRFModel(object):
 
         self._ematrix = Histogram2D(self._eaxis,self._eaxis)
 
-        for i in range(self._eaxis.nbins()):
+        for i in range(self._eaxis.nbins):
             
-            ec = self._eaxis.center()[i]
+            ec = self._eaxis.center[i]
             p = [1.0,ec,self._edisp.interpolate(ec)[0]]
-            self._ematrix._counts[i] = GaussFn.evals(self._eaxis.center(),p)
+            self._ematrix._counts[i] = GaussFn.evals(self._eaxis.center,p)
 
 
         return
@@ -128,19 +128,19 @@ class IRFModel(object):
 
         axis = self._eaxis
         
-#        x0, y0 = np.meshgrid(axis.center(),axis.center(),ordering='ij')
+#        x0, y0 = np.meshgrid(axis.center,axis.center,ordering='ij')
         
 #        m = self._ematrix.interpolate(np.ravel(x0),np.ravel(y0))
 #        lobin = axis.valToBinBounded(self._ematrix.axis(0).edges()[0])
 
-#        m = m.reshape((axis.nbins(),axis.nbins()))
+#        m = m.reshape((axis.nbins,axis.nbins))
 #        m[:lobin,:] = 0
 
-        m = self._ematrix.counts()
+        m = self._ematrix.counts
 
-        cc = fn(axis.center())
-        cm = np.dot(m,cc)*axis.width()
-        return interpolate(axis.center(),cm,x)
+        cc = fn(axis.center)
+        cm = np.dot(m,cc)*axis.width
+        return interpolate(axis.center,cm,x)
 
     def aeff(self,x):
         return 10**self._aeff_fn(x)
@@ -157,8 +157,8 @@ class IRFModel(object):
     def fill_bkg_histogram(self,axis,livetime):
 
         h = Histogram(axis)
-        h.fill(axis.center(),
-               10**self._log_bkg_fn(axis.center())*axis.width()*livetime)
+        h.fill(axis.center,
+               10**self._log_bkg_fn(axis.center)*axis.width*livetime)
 
         return h
         
@@ -241,15 +241,15 @@ class CountsSpectrumModel(PDF):
 
     def e2flux(self,h):
 
-        exp = self._irf.aeff(h.axis().center())*self._livetime
+        exp = self._irf.aeff(h.axis().center)*self._livetime
         exp[exp<0] = 0
 
-        msk = h.axis().center() < 4.5
+        msk = h.axis().center < 4.5
 
         delta = 10**h.axis().edges()[1:]-10**h.axis().edges()[:-1]
 
         hf = copy.deepcopy(h)
-        hf *= 10**(2*h.axis().center())/delta
+        hf *= 10**(2*h.axis().center)/delta
         hf /= exp
 
         hf._counts[msk] = 0
@@ -259,20 +259,20 @@ class CountsSpectrumModel(PDF):
 
     def e2flux2(self,h):
 
-#        exp = self._irf.aeff(h.axis().center())*self._livetime
+#        exp = self._irf.aeff(h.axis().center)*self._livetime
 #        exp[exp<0] = 0
 
         exp_fn = lambda t: self._irf.aeff(t)*self._livetime*self._spfn(t)
         
-        exp2 = self._irf.smooth_fn(h.axis().center(),exp_fn)
-        flux = self._spfn(h.axis().center())
+        exp2 = self._irf.smooth_fn(h.axis().center,exp_fn)
+        flux = self._spfn(h.axis().center)
         
-        msk = h.axis().center() < 4.5
+        msk = h.axis().center < 4.5
 
         delta = 10**h.axis().edges()[1:]-10**h.axis().edges()[:-1]
 
         hf = copy.deepcopy(h)
-        hf *= 10**(2*h.axis().center())/delta
+        hf *= 10**(2*h.axis().center)/delta
 
         hf *= flux
         hf /= exp2

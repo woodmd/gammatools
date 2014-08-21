@@ -94,11 +94,11 @@ class ConvolvedHaloModel(object):
         self._irf = irf
 
         self._loge_axis = self._irf._psf.axis()
-        th68 = self._irf._psf.counts()
+        th68 = self._irf._psf.counts
 
-        self._psi_axis = Axis(np.linspace(0,np.radians(3.0),401))
-        self._psi = self._psi_axis.center()
-        self._loge = self._loge_axis.center()+Units.log10_mev
+        self._psi_axis = Axis(np.linspace(0,np.radians(10.0),401))
+        self._psi = self._psi_axis.center
+        self._loge = self._loge_axis.center+Units.log10_mev
 
         self._z = np.zeros(shape=(len(self._loge),len(self._psi)))
 
@@ -107,7 +107,8 @@ class ConvolvedHaloModel(object):
         for i in range(len(self._loge)):
             self._z[i] = convolve2d_gauss(hm._jp,self._psi,
                                           np.radians(th68[i]/1.50959),
-                                          self._psi[-1])
+                                          self._psi[-1]+np.radians(0.5),
+                                          nstep=1000)
         self._h._counts = self._z
 
     def jval(self,loge,psi):
@@ -287,21 +288,23 @@ class DMFluxModel(object):
 
 class DMLimitCalc(object):
 
-    def __init__(self,irf,alpha,min_fsig=0.0,redge=0.0):
+    def __init__(self,irf,alpha,min_fsig=0.0,redge='0.0/1.0'):
 
         self._irf = irf
-#        self._th68 = self._irf._psf.counts()        
+#        self._th68 = self._irf._psf.counts        
 #        self._bkg_rate = (self._det.proton_wcounts_density + 
 #                          self._det.electron_wcounts_density)/(50.0*Units.hr*
 #                                                               Units.deg2)
 
         self._loge_axis = Axis.create(np.log10(Units.gev)+1.4,
-                                      np.log10(Units.gev)+3.2,18)
-        self._loge = self._loge_axis.center()        
-        self._dloge = self._loge_axis.width()
+                                      np.log10(Units.gev)+3.6,22)
+        self._loge = self._loge_axis.center        
+        self._dloge = self._loge_axis.width
+
+        rmin, rmax = [float(t) for t in redge.split('/')]
 
         self._psi_axis = Axis(np.linspace(np.radians(0.0),np.radians(1.0),101))
-        self._psi = self._psi_axis.center()
+        self._psi = self._psi_axis.center
         self._domega = np.pi*(np.power(self._psi_axis.edges()[1:],2)-
                               np.power(self._psi_axis.edges()[:-1],2))
 
@@ -309,10 +312,8 @@ class DMLimitCalc(object):
         self._bkg_rate = irf.bkg(self._loge - Units.log10_mev)*self._dloge
 
 
-        self._redge = [np.radians(redge),np.radians(1.0)]
+        self._redge = [np.radians(rmin),np.radians(rmax)]
         self._msk = (self._psi > self._redge[0]) & (self._psi < self._redge[1])
-
-
         
 
         self._domega_sig = np.sum(self._domega[self._msk])
@@ -484,45 +485,51 @@ class DMLimitCalc(object):
         dmmodel._sigmav = np.power(10.,-28.)
 
         sc = self.counts(dmmodel,tau)
-        onoff = OnOffExperiment(np.ravel(sc[:,self._msk]),
-                                np.ravel(bc[:,self._msk]),
+        
+        sc_msk = copy.copy(sc); sc_msk[:,~self._msk] = 0
+        bc_msk = copy.copy(bc); bc_msk[:,~self._msk] = 0
+
+        onoff = OnOffExperiment(np.ravel(sc_msk),
+                                np.ravel(bc_msk),
                                 self._alpha)
 
         t0, t0_err = onoff.asimov_mu_ts0(sthresh**2)
 
         sc0 = sc*t0
-        dlnl = poisson_median_ts(sc0,bc,self._alpha_bin[np.newaxis,:])
-        dlnl[:,~self._msk] = 0
+        ts = onoff.asimov_ts0_signal(t0,sum_lnl=False)
+        ts = ts.reshape(sc.shape)
 
-        iarg = np.argsort(np.ravel(dlnl))[::-1]
-        dlnl_sort = dlnl.flat[iarg]
+        iarg = np.argsort(np.ravel(ts))[::-1]
+        ts_sort = ts.flat[iarg]
 
         i0 = int(percentile(np.linspace(0,len(iarg),len(iarg)),
-                            np.cumsum(dlnl_sort)/np.sum(dlnl),0.5))
+                            np.cumsum(ts_sort)/np.sum(ts),0.5))
 
-        msk = np.empty(shape=dlnl_sort.shape,dtype=bool); msk.fill(False)
+        msk = np.empty(shape=ts_sort.shape,dtype=bool); msk.fill(False)
         msk[iarg[:i0]] = True
-        msk = msk.reshape(dlnl.shape)
-
-#            print iarg[:i0]
-#            print sc0.flat[iarg[:i0]]/bc.flat[iarg[:i0]]
+        msk = msk.reshape(ts.shape)
             
+        scounts = np.sum(sc0[msk])
+        bcounts = np.sum(bc[msk])
         sfrac = np.sum(sc0[msk])/np.sum(bc[msk])
 
-        print sfrac, self._min_fsig
+        if sfrac < self._min_fsig:
+            t0 *= self._min_fsig/sfrac
+            ts = onoff.asimov_ts0_signal(t0,sum_lnl=False)
+            ts = ts.reshape(sc.shape)
+
+        print t0, sfrac, self._min_fsig, np.sum(ts[msk])
 
         axis0 = Axis(self._loge_axis.edges()-np.log10(Units.gev))
         axis1 = Axis(np.degrees(self._psi_axis.edges()))
 
         o['sigmav_ul'] = np.power(10,-28.)*t0
-        o['sc_hist'] = Histogram2D(axis0,axis1,counts=sc0)
+        o['sc_hist'] = Histogram2D(axis0,axis1,counts=sc*t0)
         o['bc_hist'] = Histogram2D(axis0,axis1,counts=bc)
+        o['ts_hist'] = Histogram2D(axis0,axis1,counts=ts)
         o['msk_sfrac'] = msk
-
-        if sfrac < self._min_fsig:
-            print np.log10(self._min_fsig/sfrac)
-            o['sigmav_ul'] *= np.log10(self._min_fsig/sfrac)
-
+        o['scounts_msk'] = scounts
+        o['bcounts_msk'] = bcounts
 
         return o
 

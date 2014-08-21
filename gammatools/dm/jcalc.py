@@ -408,7 +408,7 @@ class ROIIntegrator(object):
         nbin_thetagc = 720
         thetagc_max = 180.
 
-        self._phi_edges = np.linspace(0.,360.,721)
+        self._phi_edges = np.linspace(0.,360.,720+1)
         self._theta_edges = np.linspace(0.,thetagc_max,nbin_thetagc+1)
 
         self._sources = None

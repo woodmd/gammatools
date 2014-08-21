@@ -46,7 +46,7 @@ class Units(object):
     hr = 3600.
     deg = np.pi/180.
     _deg = deg**(-1)
-    deg2 = np.power(np.pi/180.,2)
+    deg2 = deg**2
     _deg2 = deg2**(-1)
 
     msun_pc3 = msun*np.power(pc,-3) 
