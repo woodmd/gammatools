@@ -10,6 +10,12 @@ class Option(object):
         self._docstring = docstring
         self._option_type = option_type
         self._group = group
+
+        if option_type == list and len(value):
+            self._list_type = type(value[0])
+        else:
+            self._list_type = str
+        
         
     @property
     def name(self):
@@ -26,6 +32,10 @@ class Option(object):
     @property
     def type(self):
         return self._option_type
+
+    @property
+    def list_type(self):
+        return self._list_type
 
     @property
     def group(self):
@@ -107,8 +117,12 @@ class Configurable(object):
                                     action='store_true',
                                     help=v.docstring + ' [default: %s]'%v.value)
             else:
-                parser.add_argument('--' + k,default=v.value,
-                                    type=v.type,
+
+                if isinstance(v.value,list):
+                    value=','.join(map(str,v.value))
+                else: value = v.value
+                parser.add_argument('--' + k,default=value,
+                                    type=type(value),
                                     help=v.docstring + ' [default: %s]'%v.value)
         
                 
@@ -181,17 +195,21 @@ class Configurable(object):
 #                update_dict(self._config,config[group])
 #            else:
             
-
+                
         if not opts is None:
             for k,v in opts.__dict__.iteritems():
                 if k in self._config and not v is None:
-                    if isinstance(self._config[k],list):
-                        self.set_config(k,v.split(','))
+                    if isinstance(self._config[k],list) and \
+                            not isinstance(v,list):
+
+                        value = v.split(',')
+                        value = map(self._default_config[k].list_type,value)
+                        self.set_config(k,value)
                     else:
                         self.set_config(k,v)
                 
         update_dict(self._config,kwargs)
-
+        
         for k, v in self._config.iteritems():
 
             if v is None or not isinstance(v,str): continue            

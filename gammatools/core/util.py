@@ -7,6 +7,8 @@ import cPickle as pickle
 import gzip
 import bisect
 import inspect
+from collections import OrderedDict
+
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import brentq
 
@@ -60,7 +62,8 @@ class Units(object):
     erg_cm2 = erg
     g_cm3 = 1.0
     cm3_s = 1.0
-
+        
+    
     @classmethod
     def parse(cls,s):
 
@@ -71,12 +74,33 @@ class Units(object):
         if m is None: return s
 
         v = float(m.group(1))
+        units = m.group(4)
+        
         if not m.group(4) is None:
-            v *= cls.__dict__[m.group(4)]
+            v *= cls.__dict__[units]
 
         return v
 
+    @classmethod
+    def convert(cls,x,from_units,to_units):
 
+        u0 = from_units.lower()
+        u1 = to_units.lower()
+
+        u0 = cls.__dict__[u0]
+        
+        
+
+def prettify_xml(elem):
+    """Return a pretty-printed XML string for the Element.
+    """
+    from xml.dom import minidom
+    import xml.etree.cElementTree as et
+
+    rough_string = et.tostring(elem, 'utf-8')
+    reparsed = minidom.parseString(rough_string)
+    return reparsed.toprettyxml(indent="  ")  
+    
 def format_error(v, err, nsig=1, latex=False):
     if err > 0:
         logz = math.floor(math.log10(err)) - (nsig - 1)
@@ -108,6 +132,75 @@ def common_prefix(strings):
 
 def string_to_array(x,delimiter=',',dtype=float):
     return np.array([t for t in x.split(delimiter)],dtype=dtype)
+
+def tolist(x):
+    """
+    convenience function that takes in a 
+    nested structure of lists and dictionaries
+    and converts everything to its base objects.
+    This is useful for dupming a file to yaml.
+    
+        (a) numpy arrays into python lists
+
+            >>> type(tolist(np.asarray(123))) == int
+            True
+            >>> tolist(np.asarray([1,2,3])) == [1,2,3]
+            True
+
+        (b) numpy strings into python strings.
+
+            >>> tolist([np.asarray('cat')])==['cat']
+            True
+
+        (c) an ordered dict to a dict
+
+            >>> ordered=OrderedDict(a=1, b=2)
+            >>> type(tolist(ordered)) == dict
+            True
+
+        (d) converts unicode to regular strings
+
+            >>> type(u'a') == str
+            False
+            >>> type(tolist(u'a')) == str
+            True
+
+        (e) converts numbers & bools in strings to real represntation,
+            (i.e. '123' -> 123)
+
+            >>> type(tolist(np.asarray('123'))) == int
+            True
+            >>> type(tolist('123')) == int
+            True
+            >>> tolist('False') == False
+            True
+    """
+    if isinstance(x,list):
+        return map(tolist,x)
+    elif isinstance(x,dict):
+        return dict((tolist(k),tolist(v)) for k,v in x.items())
+    elif isinstance(x,np.ndarray) or \
+            isinstance(x,np.number):
+        # note, call tolist again to convert strings of numbers to numbers
+        return tolist(x.tolist())
+#    elif isinstance(x,PhaseRange):
+#        return x.tolist(dense=True)
+    elif isinstance(x,OrderedDict):
+        return dict(x)
+    elif isinstance(x,basestring) or isinstance(x,np.str):
+        x=str(x) # convert unicode & numpy strings 
+        try:
+            return int(x)
+        except:
+            try:
+                return float(x)
+            except:
+                if x == 'True': return True
+                elif x == 'False': return False
+                else: return x
+    else:
+        return x
+
 
 def update_dict(d0,d1,add_new_keys=False,append=False):
     """Recursively update the contents of python dictionary d0 with

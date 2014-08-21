@@ -539,20 +539,20 @@ class FigTool(Configurable):
         super(FigTool,self).__init__()
         self.configure(opts=opts,**kwargs)
  
-    @staticmethod
-    def add_arguments(parser):
-        
-        for k, v in FigTool.default_config.iteritems():
+#    @staticmethod
+#    def add_arguments(parser):
+#        
+#        for k, v in FigTool.default_config.iteritems():
 
-            continue
-            
-            if isinstance(v[0],bool):
-                parser.add_argument('--' + k,default=v[0],
-                                    action='store_true',
-                                    help=v[2] + ' [default: %s]'%v[0])
-            else:
-                parser.add_argument('--' + k,default=v[0],type=v[1],
-                                    help=v[2] + ' [default: %s]'%v[0])
+#            continue
+#            
+#            if isinstance(v[0],bool):
+#                parser.add_argument('--' + k,default=v[0],
+#                                    action='store_true',
+#                                    help=v[2] + ' [default: %s]'%v[0])
+#            else:
+#                parser.add_argument('--' + k,default=v[0],type=v[1],
+#                                    help=v[2] + ' [default: %s]'%v[0])
         
         
     def create(self,figlabel,figstyle=None,nax=1,**kwargs):

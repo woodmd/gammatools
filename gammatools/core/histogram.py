@@ -738,7 +738,6 @@ class Axis(object):
         ibin[ibin > self.nbins-1] = self.nbins-1
         return ibin
 
-
 class Histogram(HistogramND):
     """One-dimensional histogram class.  Each bin is assigned both a
     content value and an error.  Non-equidistant bin edges can be
@@ -1493,7 +1492,7 @@ class Histogram2D(HistogramND):
         style = {}
         style['label'] = label
 
-        h = Histogram2D(xaxis,yaxis,label,counts=counts,var=var,style=style)
+        h = Histogram2D(xaxis,yaxis,counts=counts,var=var,style=style)
 
         return h
 
