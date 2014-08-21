@@ -12,7 +12,7 @@ def setup_gauss_test():
     pset = ParameterSet()        
     fn = GaussFn.create(100.0,0.0,0.1,pset)
     h = Histogram(Axis.create(-3.0,3.0,100))
-    h.fill(h.axis().center(),fn.histogram(h.axis().edges()))
+    h.fill(h.axis().center,fn.histogram(h.axis().edges))
 
     msk = h.counts < 1.0
     h._counts[msk] = 0.0
@@ -118,10 +118,10 @@ class TestLikelihood(unittest.TestCase):
         fn1 = GaussFn.create(50.0,1.0,0.1,pset0)
 
         hm0 = Histogram(Axis.create(-3.0,3.0,100))
-        hm0.fill(hm0.axis().center(),fn0(hm0.axis().center()))
+        hm0.fill(hm0.axis().center,fn0(hm0.axis().center))
 
         hm1 = Histogram(Axis.create(-3.0,3.0,100))
-        hm1.fill(hm1.axis().center(),fn1(hm1.axis().center()))
+        hm1.fill(hm1.axis().center,fn1(hm1.axis().center))
         
         hm2 = hm0*0.9 + hm1*0.8
         

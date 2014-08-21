@@ -15,8 +15,7 @@ class HaloModelFactory(object):
         halo_model_lib = yaml.load(open(model_file,'r'))
         
         if not src_name in halo_model_lib:
-            print 'Could not find ', src_name
-            sys.exit(1)
+            raise Exception('Could not find profile: ' + src_name)
 
         src = halo_model_lib[src_name]
 

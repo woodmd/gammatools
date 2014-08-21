@@ -115,7 +115,7 @@ gc_einasto:
   type : einasto
 
 gc_isothermal:
-  rs : 20.0
+  rs : 5.0
   dist : 8.5
   rmax : 100.0
   rhos : null
