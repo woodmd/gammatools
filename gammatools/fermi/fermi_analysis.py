@@ -6,6 +6,11 @@ import copy
 import glob
 import numpy as np
 from tempfile import mkdtemp
+
+import xml.etree.cElementTree as ElementTree
+
+from gammatools.core.util import prettify_xml
+
 from skymaps import SkyDir
 from uw.like.pointspec import SpectralAnalysis,DataSpecification
 from uw.like.pointspec_helpers import get_default_diffuse, PointSource, FermiCatalog, get_diffuse_source
@@ -16,12 +21,16 @@ from uw.like.roi_catalogs import SourceCatalog, Catalog2FGL, Catalog3Y
 from BinnedAnalysis import BinnedObs, BinnedAnalysis 
 from UnbinnedAnalysis import UnbinnedObs, UnbinnedAnalysis
 from pyLikelihood import ParameterVector
+import pyLikelihood
 
 from catalog import Catalog, CatalogSource
 
 from gammatools.core.config import Configurable
 from gammatools.fermi.task import *
+from gammatools.fermi.pylike_tools import *
+
 from Composite2 import *
+from SummedLikelihood import *
 
 class BinnedGtlike(Configurable):
 
@@ -32,12 +41,12 @@ class BinnedGtlike(Configurable):
         'evfile'     : None,
         'scfile'     : None,
         'ft1file'    : (None,'Set the FT1 file.'),
-        'srcmdl'     : (None,'Set the srcmdl XML file.'),
+        'srcmdl'     : (None,'Set the ROI model XML file.'),
         'bexpfile'   : (None,'Set the binned exposure map file.'),
         'srcmapfile' : (None,''),
         'srcmdlfile' : (None,''),
         'ccubefile'  : (None,''),
-        'ltfile'     : None,
+        'ltcube'     : None,
         'galdiff'    : None,
         'isodiff'    : None,
 #        'gtbin'      : None,
@@ -46,9 +55,9 @@ class BinnedGtlike(Configurable):
 #        'gtsrcmap'   : None,
         'catalog'    : '2FGL',
         'optimizer'  : 'MINUIT',
-        'irfs'       : 'P7REP_CLEAN_V10' }
+        'irfs'       :  None }
     
-    def __init__(self,target_name,config=None,**kwargs):
+    def __init__(self,src,target_name,config=None,**kwargs):
         super(BinnedGtlike,self).__init__()
 
         self.update_default_config(SelectorTask,group='gtselect')
@@ -66,25 +75,40 @@ class BinnedGtlike(Configurable):
             'ccubefile'  : 'ccube.fits',
             'bexpfile'   : 'bexp.fits',
             'srcmdl'     : 'srcmdl.xml',
+            'srcmdl_fit' : 'srcmdl_fit.xml',
             'srcmapfile' : 'srcmap.fits',
             'srcmdlfile' : 'srcmdl.fits' }
 
         for k, v in outfile_dict.iteritems():
-            if not self.config[k]:
-                self.__dict__[k] = os.path.join(savedir,
-                                                "%s_%s"%(target_name,v))
-            else:
-                self.__dict__[k] = self.config[k]
+            self.__dict__[k] = os.path.join(savedir,
+                                            "%s_%s"%(target_name,v))
+            
+            if k in self.config and self.config[k]:
+                os.system('cp %s %s'%(self.config[k],self.__dict__[k]))
                 
-#        self.ft1file = os.path.join(savedir,"%s_ft1.fits"%target_name)
-#        self.ccubefile = os.path.join(savedir,"%s_ccube.fits"%target_name)
-#        self.bexpfile = os.path.join(savedir,"%s_bexp.fits"%target_name)
-#        self.srcmdl = os.path.join(savedir,"%s_srcmdl_fit.xml"%target_name)
-#        self.srcmapfile = os.path.join(savedir,"%s_srcmap.fits"%target_name)
-#        self.srcmdlfile = os.path.join(savedir,"%s_srcmdl.fits"%target_name)
-        
+#                self.__dict__[k] = os.path.join(savedir,
+#                                                "%s_%s"%(target_name,v))
+#            else:
+#                self.__dict__[k] = self.config[k]
+
+        if self.config['isodiff']:
+            et = ElementTree.ElementTree(file=self.srcmdl)
+            root = et.getroot()
+            
+            for c in root.findall('source'):
+                if not c.attrib['name'] == 'isodiff': continue
+
+                c.attrib['name'] = os.path.basename(self.config['isodiff'])
+                c.attrib['name'] = os.path.splitext(c.attrib['name'])[0]
+                
+                sm = c.findall('spectrum')[0]
+                sm.attrib['file'] = self.config['isodiff']
+
+            output_file = open(self.srcmdl,'w')
+            output_file.write(ElementTree.tostring(root))
+                        
 #        self.skydir = SkyDir(src.ra(),src.dec())
-#        self.src = src
+        self.src = src
 
     @property
     def like(self):
@@ -99,55 +123,86 @@ class BinnedGtlike(Configurable):
         config = self.config
         
         sel_task = SelectorTask(config['evfile'],self.ft1file,
-                                ra=self.src.ra(),dec=self.src.dec(),
-                                config=config['gtselect'])
+                                ra=self.src.ra,dec=self.src.dec,
+                                config=config['gtselect'],
+                                overwrite=False)
         sel_task.run()
 
-        bin_task = BinTask(self.ft1file,self.ccubefile,config,
-                           xref=self.src.ra(),yref=self.src.dec())
+        bin_task = BinTask(self.ft1file,self.ccubefile,
+                           config=config['gtbin'],
+                           xref=self.src.ra,yref=self.src.dec,
+                           overwrite=False)
 
         bin_task.run()
 
-        
-        bexp_task = BExpTask(self.bexpfile,infile=config['ltfile'],
-                             config=config['gtexpcube'])
+        bexp_task = BExpTask(self.bexpfile,infile=config['ltcube'],
+                             config=config['gtexpcube'],
+                             irfs=config['irfs'],
+                             overwrite=False)
             
         bexp_task.run()
 
         srcmap_task = SrcMapTask(self.srcmapfile,bexpmap=self.bexpfile,
-                                 srcmdl=config['srcmdl'],
+                                 srcmdl=self.srcmdl,
                                  cmap=self.ccubefile,
-                                 expcube=config['ltfile'],
-                                 config=config)
+                                 expcube=config['ltcube'],
+                                 config=config,
+                                 irfs=config['irfs'],
+                                 overwrite=False)
 
         srcmap_task.run()
 
     def setup_gtlike(self):
         
         self._obs = BinnedObs(srcMaps=self.srcmapfile,
-                             expCube=self.config['ltfile'],
+                             expCube=self.config['ltcube'],
                              binnedExpMap=self.bexpfile,
                              irfs=self.config['irfs'])
         
         self._like = BinnedAnalysis(binnedData=self._obs,
-                                   srcModel=self.config['srcmdl'],
-                                   optimizer=self.config['optimizer'])
+                                    srcModel=self.srcmdl,
+                                    optimizer=self.config['optimizer'])
 
     def make_srcmodel(self,srcmdl=None):
 
-        if srcmdl is None: srcmdl = self.srcmdl
+        if srcmdl is None: srcmdl = self.srcmdl_fit
         
         srcmdl_task = SrcModelTask(self.srcmdlfile,
                                    srcmaps=self.srcmapfile,
                                    bexpmap=self.bexpfile,
                                    srcmdl=srcmdl,
-                                   expcube=self.config['ltfile'],
-                                   config=self.config)
+                                   expcube=self.config['ltcube'],
+                                   config=self.config,
+                                   overwrite=False)
             
         srcmdl_task.run()
 
     def write_model(self):
-        self.like.writeXml(self.srcmdl)
+        self.like.writeXml(self.srcmdl_fit)
+
+    def createModelMap(self):
+
+        ll = self._like.logLike
+
+        fv = pyLikelihood.FloatVector()
+        ll.computeModelMap(fv)
+
+        shape = GetCountsMapShape(ll.countsMap())
+        print shape
+
+        v = np.zeros(shape)
+
+        
+        
+#        shape = GetCountsMapShape()
+        
+        #        v = numpy.ndarray((30,100,100),'f')
+        v.flat = fv
+
+        v = v.reshape(shape[::-1]).T
+
+        
+        return v
 
 
 class AnalysisManager(Configurable):
@@ -159,44 +214,61 @@ class AnalysisManager(Configurable):
                        'target'     : None,
                        'evfile'     : None,
                        'scfile'     : None,
-                       'ltfile'     : None,
+                       'ltcube'     : None,
                        'galdiff'    : None,
                        'isodiff'    : None,
                        'event_types': None,
                        'gtbin'      : None,
                        'catalog'    : '2FGL',
                        'optimizer'  : 'MINUIT',
-                       'irfs'       : 'P7REP_CLEAN_V10' }
+                       'joint'      : None,
+                       'irfs'       : None }
     
-    def __init__(self,config,opts,**kwargs):
+    def __init__(self,config=None,**kwargs):
         super(AnalysisManager,self).__init__()
-        self.update_default_config(AnalysisManager)
-        self.update_default_config(SelectorTask)
+        self.update_default_config(SelectorTask,group='select')
         
-        self.configure(config,opts,**kwargs)
+        self.configure(config,**kwargs)
 
+        import pprint
+
+        pprint.pprint(self.config)
+
+        self._like = SummedLikelihood()
+        
+    
+    @property
+    def like(self):
+        return self._like
+
+    @property
+    def logLike(self):
+        return self._like.logLike
+        
     def setup_roi(self,**kwargs):
 
-        target_name = self.config('target')
+        target_name = self.config['target']
         
-        cat = Catalog()
-        src = CatalogSource(cat.get_source_by_name(target_name))
+        cat = Catalog.get('2fgl')
+        self.src = CatalogSource(cat.get_source_by_name(target_name))
 
-        if self.config('savedir') is None:
+        
+        if self.config['savedir'] is None:
             self.set_config('savedir',target_name)
 
-        if not os.path.exists(self.config('savedir')):
-            os.makedirs(self.config('savedir'))
+        if not os.path.exists(self.config['savedir']):
+            os.makedirs(self.config['savedir'])
         
-        config = self.config()
+        config = self.config
 
         self.savestate = os.path.join(config['savedir'],
                                     "%s_savestate.P"%target_name)
         
         self.ft1file = os.path.join(config['savedir'],
                                     "%s_ft1.fits"%target_name)
-        self.ltcube = os.path.join(config['savedir'],
-                                    "%s_ltcube.fits"%target_name)
+
+        
+            
         self.binfile = os.path.join(config['savedir'],
                                     "%s_binfile.fits"%target_name)
         self.srcmdl = os.path.join(config['savedir'],
@@ -205,68 +277,88 @@ class AnalysisManager(Configurable):
         self.srcmdl_fit = os.path.join(config['savedir'],
                                        "%s_srcmdl_fit.xml"%target_name)
         
-        self.evfile = sorted(glob.glob(config['evfile']))
-        self.ltfile = sorted(glob.glob(config['ltfile']))
 
-        
-        
-        if len(self.evfile) > 1:
-            evfile_list = os.path.join(self.config('savedir'),'evfile.txt')
-            np.savetxt(evfile_list,self.evfile,fmt='%s')
-            self.evfile = os.path.abspath(evfile_list)
+        if os.path.isfile(config['ltcube']) and \
+                re.search('\.fits?',config['ltcube']):
+            self.ltcube = config['ltcube']
         else:
-            self.evfile = self.evfile[0]
+            ltcube = sorted(glob.glob(config['ltcube']))
+
             
-        if len(self.ltfile) > 1:
-            ltfile_list = os.path.join(self.config('savedir'),'ltfile.txt')
-            np.savetxt(ltfile_list,self.ltfile,fmt='%s')
-            self.ltfile = os.path.abspath(ltfile_list)
-        else:
-            self.ltfile = self.ltfile[0]
-            
+            self.ltcube = os.path.join(config['savedir'],
+                                       "%s_ltcube.fits"%target_name)
 
-        print self.evfile
-        print self.ltfile
-        
-        self.skydir = SkyDir(src.ra(),src.dec())
-
-        lt_task = LTSumTask(self.ltcube,infile1=self.ltfile,
-                            config=config)
-
-        lt_task.run()
-
-        self.set_config('ltcube',self.ltcube)
-        
-        sel_task = SelectorTask(self.evfile,self.ft1file,
-                                ra=src.ra(),dec=src.dec(),
+            lt_task = LTSumTask(self.ltcube,infile1=ltcube,
                                 config=config)
+
+            lt_task.run()
+
+        
+        self.evfile = config['evfile']#sorted(glob.glob(config['evfile']))
+#        if len(self.evfile) > 1:
+#            evfile_list = os.path.join(self.config('savedir'),'evfile.txt')
+#            np.savetxt(evfile_list,self.evfile,fmt='%s')
+#            self.evfile = os.path.abspath(evfile_list)
+#        else:
+#            self.evfile = self.evfile[0]
+            
+#        if len(self.ltfile) > 1:
+#            ltfile_list = os.path.join(self.config('savedir'),'ltfile.txt')
+#            np.savetxt(ltfile_list,self.ltfile,fmt='%s')
+#            self.ltfile = os.path.abspath(ltfile_list)
+#        else:
+#            self.ltfile = self.ltfile[0]
+            
+#        print self.evfile
+#        print self.ltfile
+        
+        self.skydir = SkyDir(self.src.ra,self.src.dec)
+
+        sel_task = SelectorTask(self.evfile,self.ft1file,
+                                ra=self.src.ra,dec=self.src.dec,
+                                config=config['select'],overwrite=False)
         sel_task.run()
 
-        self.setup_pointlike()
+        cat.create_roi(self.src.ra,self.src.dec,
+                       config['isodiff'],
+                       config['galdiff'],                       
+                       self.srcmdl,radius=5.0)
+        
+#        self.setup_pointlike()
 
         self.components = []
-        self.comp_like = Composite2()
-        
-        for i, t in enumerate(self.config('event_types')):
+                
+        for i, t in enumerate(self.config['joint']):
 
             print 'Setting up binned analysis ', i
-            
-            analysis = BinnedAnalysisTool(src,target_name + '_%02i'%(i),
-                                          config,
-                                          evfile=self.ft1file,
-                                          srcmdl=self.srcmdl,
-                                          evclass=t['evclass'],
-                                          convtype=t['convtype'],
-                                          irfs=t['irfs'])
 
+#            kw = dict(irfs=None,isodiff=None)
+#            kw.update(t)
+            
+            analysis = BinnedGtlike(self.src,
+                                    target_name + '_%02i'%(i),
+                                    config,
+                                    evfile=self.ft1file,
+                                    srcmdl=self.srcmdl,
+                                    gtselect=dict(evclass=t['evclass'],
+                                                  evtype=t['evtype']),
+#                                    convtype=t['convtype'],
+                                    irfs=t['irfs'],
+                                    isodiff=t['isodiff'])
+
+            analysis.setup_inputs()
             analysis.setup_gtlike()
             
             self.components.append(analysis)
-            self.comp_like.addComponent(analysis.like)
+            self._like.addComponent(analysis.like)
 
 #        for i, p in self.tied_pars.iteritems():
 #            print 'Tying parameters ', i, p            
 #            self.comp_like.tieParameters(p)
+
+        self._like.energies = self.components[0].like.energies
+            
+        return
             
         for i, p in enumerate(self.components[0].like.params()):
 
@@ -293,15 +385,51 @@ class AnalysisManager(Configurable):
 #                self.norm_pars.append([x.like,s,p.getName()])
 #            self.norm_pars.append([self.analysis1.like,src,p.getName()])
 
-    def run_gtlike(self):
+    def fit(self):
+
+        saved_state = LikelihoodState(self.like)
         
-        config = self.config()        
         print 'Fitting model'
-        self.comp_like.fit(verbosity=2, covar=True)
+        self.like.fit(verbosity=2, covar=True)
+
+        source_dict = gtlike_source_dict(self.like,self.src.name) 
+
+        import pprint
+        pprint.pprint(source_dict)
+
+    def write_xml_model(self):        
+        
         for c in self.components:
             c.write_model()
-            c.make_srcmodel()
+#            c.make_srcmodel()
 
+    def make_source_model(self):
+
+        for c in self.components:
+            c.make_srcmodel()
+            
+#    def gtlike_results(self, **kwargs):
+#        from lande.fermi.likelihood.save import source_dict
+#        return source_dict(self.like, self.name, **kwargs)
+
+#    def gtlike_summary(self):
+#        from lande.fermi.likelihood.printing import gtlike_summary
+#        return gtlike_summary(self.like,maxdist=self.config['radius'])
+        
+    def free_source(self,name,free=True):
+        """ Free a source in the ROI 
+            source : string or pointlike source object
+            free   : boolean to free or fix parameter
+        """
+        freePars = self.like.freePars(name)
+        normPar = self.like.normPar(name).getName()
+        idx = self.like.par_index(name, normPar)
+        if not free:
+            self.like.setFreeFlag(name, freePars, False)
+        else:
+            self.like[idx].setFree(True)
+        self.like.syncSrcParams(name)
+        
     def save(self):
         from util import save_object
         save_object(self,self.savestate)
@@ -314,7 +442,7 @@ class AnalysisManager(Configurable):
         
         self._ds = DataSpecification(ft1files = self.ft1file,
                                      ft2files = config['scfile'],
-                                     ltcube   = config['ltcube'],
+                                     ltcube   = self.ltcube,
                                      binfile  = self.binfile)
 
         

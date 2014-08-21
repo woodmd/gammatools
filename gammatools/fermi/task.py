@@ -152,7 +152,7 @@ class SrcModelTask(Task):
         'bexpmap'    : None,
         'srcmdl'     : None,
         'chatter'    : 2,
-        'irfs'       : 'P7REP_CLEAN_V15',
+        'irfs'       : None,
         'outtype'    : 'ccube' }
 
     
@@ -177,7 +177,7 @@ class SrcMapTask(Task):
                        'cmap'    : None,
                        'srcmdl'  : None,
                        'chatter' : 2,
-                       'irfs'     : 'P7REP_CLEAN_V15',
+                       'irfs'     : None,
                        'resample' : 'yes',
                        'rfactor'  : 2,
                        'minbinsz' : 0.1 }
@@ -213,7 +213,7 @@ class BExpTask(Task):
                        'proj' : 'CAR',
                        'enumbins' : 16,
                        'infile'   : None,
-                       'irfs'     : 'P7REP_CLEAN_V15',
+                       'irfs'     : None,
                        'cmap' : 'none',
                        'coordsys' : 'CEL',
                        'ebinalg'  : 'LOG',
@@ -240,7 +240,7 @@ class BExpTask(Task):
 
     def run_task(self):
 
-        config = copy.deepcopy(self.config())
+        config = copy.deepcopy(self.config)
         del(config['allsky'])        
         outfile = os.path.basename(self._output_files[0])        
         self._gtapp.run(outfile=outfile,**config)

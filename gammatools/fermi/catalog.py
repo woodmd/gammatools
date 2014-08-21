@@ -20,11 +20,13 @@ import yaml
 import copy
 import re
 
+import xml.etree.cElementTree as et
 
 from gammatools.core.astropy_helper import pyfits
 import matplotlib.pyplot as plt
 
 import gammatools
+from gammatools.core.util import prettify_xml
 from gammatools.core.util import save_object, load_object, gal2eq, eq2gal
 from gammatools.core.algebra import Vector3D
 
@@ -56,22 +58,32 @@ class CatalogSource(object):
         self._names = []
         for k in Catalog.src_name_cols:
 
-            name = self.__dict__[k].lower().replace(' ','')
-            if name != '': 
-                self._names.append(name)
+            name = self.__dict__[k]
+            if name != '':  self._names.append(name)
+            
+#            name = self.__dict__[k].lower().replace(' ','')
+#            if name != '': 
+
 
     def names(self):
         return self._names
 
+    @property
+    def name(self):
+        return self._names[0]
+    
+    @property
     def ra(self):
         return self.RAJ2000
 
+    @property
     def dec(self):
         return self.DEJ2000
     
     def match_name(self,name):
 
         match_string = name.lower().replace(' ','')
+        
         if name in self._names: return True
         else: return False
 
@@ -86,7 +98,7 @@ class CatalogSource(object):
         cut += '*cos(%.8f-FT1Ra*%.8f))'%(ra,np.pi/180.)
         cut += ' < %.8f)'%(np.radians(radius))
         return cut
-
+    
     def __str__(self):
 
         s = 'Name: %s\n'%(self._names[0])
@@ -105,14 +117,17 @@ class CatalogSource(object):
 
 #        return False
 
+def create_xml_element(root,name,attrib):
+    el = et.SubElement(root,name)
+    for k, v in attrib.iteritems(): el.set(k,v)
+    return el
 
 class Catalog(object):
-
 
     cache = {}
     
     catalog_files = { '2fgl' : os.path.join(gammatools.PACKAGE_ROOT,
-                                            'data/gll_psc_v08.P.gz'),
+                                            'data/gll_psc_v08.fit'),
                       '3fgl' : os.path.join(gammatools.PACKAGE_ROOT,
                                             'data/gll_psc4yearsource_v12r3_assoc_v6r6p0_flags.fit'),
                       }
@@ -128,6 +143,9 @@ class Catalog(object):
 
     def get_source_by_name(self,name):
 
+#        import pprint
+#        pprint.pprint(self._src_index)
+        
         if name in self._src_index:
             return self._src_data[self._src_index[name]]
         else:
@@ -147,6 +165,257 @@ class Catalog(object):
     def sources(self):
         return self._src_data
 
+    def create_roi(self,ra,dec,isodiff,galdiff,xmlfile,radius=180.0):
+
+        root = et.Element('source_library')
+        root.set('title','source_library')
+
+        srcs = self.get_source_by_position(ra,dec,radius)
+
+        for s in srcs:
+            
+            source_element = create_xml_element(root,'source',
+                                                dict(name=s['Source_Name'],
+                                                     type='PointSource'))
+
+            spec_element = et.SubElement(source_element,'spectrum')
+
+            stype = s['SpectrumType'].strip()            
+            spec_element.set('type',stype)
+
+            if stype == 'PowerLaw':
+                Catalog.create_powerlaw(s,spec_element)
+            elif stype == 'LogParabola':
+                Catalog.create_logparabola(s,spec_element)
+            elif stype == 'PLSuperExpCutoff':
+                Catalog.create_plsuperexpcutoff(s,spec_element)
+                
+            spat_el = et.SubElement(source_element,'spatialModel')
+            spat_el.set('type','SkyDirFunction')
+
+            create_xml_element(spat_el,'parameter',
+                               dict(name = 'RA',
+                                    value = str(s['RAJ2000']),
+                                    free='0',
+                                    min='-360.0',
+                                    max='360.0',
+                                    scale='1.0'))
+
+            create_xml_element(spat_el,'parameter',
+                               dict(name = 'DEC',
+                                    value = str(s['DEJ2000']),
+                                    free='0',
+                                    min='-90.0',
+                                    max='90.0',
+                                    scale='1.0'))
+            
+        isodiff_el = Catalog.create_isotropic(root,isodiff)
+        galdiff_el = Catalog.create_galactic(root,galdiff)
+        
+        output_file = open(xmlfile,'w')
+        output_file.write(prettify_xml(root))
+
+    @staticmethod
+    def create_isotropic(root,filefunction,name='isodiff'):
+
+        el = create_xml_element(root,'source',
+                                dict(name=name,
+                                     type='DiffuseSource'))
+        
+        spec_el = create_xml_element(el,'spectrum',
+                                     dict(file=filefunction,
+                                          type='FileFunction',
+                                          ctype='-1'))
+
+        create_xml_element(spec_el,'parameter',
+                           dict(name='Normalization',
+                                value='1.0',
+                                free='1',
+                                max='10000.0',
+                                min='0.0001',
+                                scale='1.0'))
+                        
+        spat_el = create_xml_element(el,'spatialModel',
+                                     dict(type='ConstantValue'))
+
+        create_xml_element(spat_el,'parameter',
+                           dict(name='Value',
+                                value='1.0',
+                                free='0',
+                                max='10.0',
+                                min='0.0',
+                                scale='1.0'))
+
+        return el
+
+    @staticmethod
+    def create_galactic(root,mapcube,name='galdiff'):
+
+        el = create_xml_element(root,'source',
+                                dict(name=name,
+                                     type='DiffuseSource'))
+
+        spec_el = create_xml_element(el,'spectrum',
+                                     dict(type='PowerLaw'))
+        
+                
+        create_xml_element(spec_el,'parameter',
+                           dict(name='Prefactor',
+                                value='1.0',
+                                free='1',
+                                max='10.0',
+                                min='0.1',
+                                scale='1.0'))
+        
+        create_xml_element(spec_el,'parameter',
+                           dict(name='Index',
+                                value='0.0',
+                                free='0',
+                                max='1.0',
+                                min='-1.0',
+                                scale='-1.0'))
+
+        create_xml_element(spec_el,'parameter',
+                           dict(name='Scale',
+                                value='1000.0',
+                                free='0',
+                                max='1000.0',
+                                min='1000.0',
+                                scale='1.0'))
+
+        spat_el = create_xml_element(el,'spatialModel',
+                                     dict(type='MapCubeFunction',
+                                          file=mapcube))
+                
+        create_xml_element(spat_el,'parameter',
+                           dict(name='Normalization',
+                                value='1.0',
+                                free='0',
+                                max='1E3',
+                                min='1E-3',
+                                scale='1.0'))
+
+        return el
+    
+        
+    @staticmethod
+    def create_powerlaw(src,root):
+
+        if src['Flux_Density'] > 0:        
+            scale = np.round(np.log10(1./src['Flux_Density']))
+        else:
+            scale = 0.0
+            
+        value = src['Flux_Density']*10**scale
+                
+        create_xml_element(root,'parameter',
+                           dict(name='Prefactor',
+                                free='0',
+                                min='0.01',
+                                max='100.0',
+                                value=str(value),
+                                scale=str(10**-scale)))
+
+        create_xml_element(root,'parameter',
+                           dict(name='Index',
+                                free='0',
+                                min='-5.0',
+                                max='5.0',
+                                value=str(src['Spectral_Index']),
+                                scale=str(-1.0)))
+        
+        create_xml_element(root,'parameter',
+                           dict(name='Scale',
+                                free='0',
+                                min=str(src['Pivot_Energy']),
+                                max=str(src['Pivot_Energy']),
+                                value=str(src['Pivot_Energy']),
+                                scale=str(1.0)))
+
+    @staticmethod
+    def create_logparabola(src,root):
+
+        norm_scale = np.round(np.log10(1./src['Flux_Density']))
+        norm_value = src['Flux_Density']*10**norm_scale
+
+        eb_scale = np.round(np.log10(1./src['Pivot_Energy']))
+        eb_value = src['Pivot_Energy']*10**eb_scale
+        
+        create_xml_element(root,'parameter',
+                           dict(name='norm',
+                                free='0',
+                                min='0.01',
+                                max='100.0',
+                                value=str(norm_value),
+                                scale=str(10**-norm_scale)))
+
+        create_xml_element(root,'parameter',
+                           dict(name='alpha',
+                                free='0',
+                                min='-5.0',
+                                max='5.0',
+                                value=str(src['Spectral_Index']),
+                                scale=str(1.0)))
+
+        create_xml_element(root,'parameter',
+                           dict(name='beta',
+                                free='0',
+                                min='0.0',
+                                max='5.0',
+                                value=str(src['beta']),
+                                scale=str(1.0)))
+
+        
+        create_xml_element(root,'parameter',
+                           dict(name='Eb',
+                                free='0',
+                                min='0.01',
+                                max='100.0',
+                                value=str(eb_value),
+                                scale=str(10**-eb_scale)))
+        
+    @staticmethod
+    def create_plsuperexpcutoff(src,root):
+
+        norm_scale = np.round(np.log10(1./src['Flux_Density']))
+        norm_value = src['Flux_Density']*10**norm_scale
+
+        eb_scale = np.round(np.log10(1./src['Pivot_Energy']))
+        eb_value = src['Pivot_Energy']*10**eb_scale
+        
+        create_xml_element(root,'parameter',
+                           dict(name='norm',
+                                free='0',
+                                min='0.01',
+                                max='100.0',
+                                value=str(norm_value),
+                                scale=str(10**-norm_scale)))
+
+        create_xml_element(root,'parameter',
+                           dict(name='alpha',
+                                free='0',
+                                min='-5.0',
+                                max='5.0',
+                                value=str(src['Spectral_Index']),
+                                scale=str(1.0)))
+
+        create_xml_element(root,'parameter',
+                           dict(name='beta',
+                                free='0',
+                                min='0.0',
+                                max='5.0',
+                                value=str(src['beta']),
+                                scale=str(1.0)))
+
+        
+        create_xml_element(root,'parameter',
+                           dict(name='Eb',
+                                free='0',
+                                min='0.01',
+                                max='100.0',
+                                value=str(eb_value),
+                                scale=str(10**-eb_scale)))
+        
     @staticmethod
     def get(name='2fgl'):
 
@@ -220,11 +489,12 @@ class Catalog(object):
 #                if type(v) == np.float32: src[col] = float(v)
 #                elif type(v) == str: src[col] = v
 #                elif type(v) == np.int16: src[col] = int(v)
-
+            src['Source_Name'] = src['Source_Name'].strip()
+                
             cat.load_source(src,i)
 
         return cat
-
+    
     def load_source(self,src,i):
         src_name = src['Source_Name']
 
@@ -240,6 +510,7 @@ class Catalog(object):
             if s in src and src[s] != '':
                 self._src_index[src[s]] = i
                 self._src_index[src[s].replace(' ','')] = i
+                self._src_index[src[s].replace(' ','').lower()] = i
 
     def save(self,outfile,format='pickle'):
 
