@@ -27,10 +27,10 @@ class Task(Configurable):
     default_config = {
         'scratchdir'   : ('/scratch','Set the path under which temporary '
                           'working directories will be created.'),
-        'workdir'      : (None,'Define the working directory.'),
+        'workdir'      : (None,'Set the working directory.'),
         'verbose'      : 1,
-        'overwrite'    : True,
-        'stage_inputs' : False }
+        'overwrite'    : (True,'Overwrite the output file if it exists.'),
+        'stage_inputs' : (False,'Copy input files to temporary working directory.') }
     
     def __init__(self,config=None,**kwargs):       
         super(Task,self).__init__(config,**kwargs)
@@ -126,12 +126,16 @@ class LTCubeTask(Task):
     default_config = { 'dcostheta' : 0.025,
                        'binsz' : 1.0,
                        'evfile' : None,
-                       'scfile' : None,
-                       'zmax' : 105.0 }
+                       'scfile' : (None, 'spacecraft file'),
+                       'tmin'   : 0.0,
+                       'tmax'   : 0.0,
+                       'zmax' : (100.0,'Set the maximum zenith angle.') }
 
-    def __init__(self,outfile,config=None,**kwargs):
-        super(LTCubeTask,self).__init__(config,**kwargs)
+    def __init__(self,outfile,config=None,opts=None,**kwargs):
+        super(LTCubeTask,self).__init__(config,opts=opts,**kwargs)
 
+        self._config['scfile'] = os.path.abspath(self._config['scfile'])
+        
         self._outfile = os.path.abspath(outfile)
         self.register_output_file(self._outfile)
         

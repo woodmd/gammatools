@@ -59,13 +59,20 @@ class PSFModel(object):
 
         return e**(-self._sp_param[0])*np.exp(-e/self._sp_param[1])        
 
-    def histogram(self,emin,emax,edges):
-        y = self.thetasq(emin,emax,edges)
+    def histogram(self,emin,emax,cthmin,cthmax,edges):
+        y = self.thetasq(emin,emax,cthmin,cthmax,edges)
         return Histogram(edges,counts=y)
-    
-    def thetasq(self,emin,emax, x_theta):
 
-        x,y = self.psf(emin,emax)
+    def pdf(self,emin,emax,cthmin,cthmax,theta):
+
+        x,y = self.psf(emin,emax,cthmin,cthmax)
+        
+        f = UnivariateSpline(x,y,s=0)
+        return f(theta)
+    
+    def thetasq(self,emin,emax,cthmin,cthmax,x_theta):
+
+        x,y = self.psf(emin,emax,cthmin,cthmax)
 
         f = UnivariateSpline(x,y,s=0)
 
@@ -83,12 +90,12 @@ class PSFModel(object):
 
         return np.array(y_thsq)
 
-    def quantile(self,emin,emax,frac=0.68,xmax=None):
+    def quantile(self,emin,emax,cthmin,cthmax,frac=0.68,xmax=None):
         
         radii = np.logspace(-3.0,np.log10(self._dtheta_max_deg),300)
         radii = np.concatenate(([0],radii))
 
-        x,y = self.psf(emin,emax)
+        x,y = self.psf(emin,emax,cthmin,cthmax)
 
         f = UnivariateSpline(x,y,s=0)
 
@@ -112,7 +119,34 @@ class PSFModel(object):
                 *(radii[indx+1] - radii[indx]) + radii[indx])
 
 
-    def psf(self,emin,emax):
+    def psf(self,emin,emax,cthmin,cthmax):
+        """Return energy- and livetime-weighted PSF density vector as
+        a function of angular offset for a bin in energy and
+        inclination angle."""
+        
+        logemin = np.log10(emin)
+        logemax = np.log10(emax)
+
+        ilo = np.argwhere(self._energy > emin)[0,0]
+        ihi = np.argwhere(self._energy < emax)[-1,0]+1
+        
+        jlo = np.argwhere(self._ctheta_axis.center > cthmin)[0,0]
+        jhi = np.argwhere(self._ctheta_axis.center < cthmax)[-1,0] +1
+        
+        weights = (self._energy[ilo:ihi,np.newaxis]*
+                   self._exp[ilo:ihi,jlo:jhi]*
+                   self._wfn(self._energy[ilo:ihi,np.newaxis]))
+        
+        wsum = np.sum(weights)
+        psf = np.apply_over_axes(np.sum,
+                                 self._psf[:,ilo:ihi,jlo:jhi]*
+                                 weights[np.newaxis,...],
+                                 [1,2])
+        psf = np.squeeze(psf)                   
+        psf *= (1./wsum)
+        return self._dtheta, psf
+    
+    def psf2(self,emin,emax):
         """Return energy-weighted PSF density vector as a function of
         angular offset for the given energy bin."""
 
@@ -154,7 +188,6 @@ class PSFModelLT(PSFModel):
     
     def __init__(self,irf,nbin=600,
                  ebins_per_decade=16,
-                 cth_range=(0.4,1.0), 
                  src_type='iso',
                  spectrum='powerlaw',
                  spectrum_pars=[2.0],
@@ -165,14 +198,13 @@ class PSFModelLT(PSFModel):
         PSFModel.__init__(self,model=spectrum,sp_param=spectrum_pars)
 
         self._src_type = src_type
-        self._cth_range = cth_range
         self._nbin_dtheta = nbin
         self._irf = irf
         self._edisp_table = edisp_table
 
         self._lonlat = (0, 0)
         if src_type != 'iso' and src_type != 'isodec':
-            cat = Catalog()
+            cat = Catalog.get()
             src = cat.get_source_by_name(src_type)
             self._lonlat = (src['RAJ2000'], src['DEJ2000'])
         
@@ -184,6 +216,7 @@ class PSFModelLT(PSFModel):
         
         self._energy = np.power(10,self._loge_axis.center)
         self._exps = np.zeros(self._loge_axis.nbins)
+        
         self._psf = np.zeros((self._loge_axis.nbins,self._nbin_dtheta))
 
         self._dtheta = np.array([self._dtheta_max_deg*
@@ -197,8 +230,6 @@ class PSFModelLT(PSFModel):
         
         self.loadLTCube(ltfile)
         self.fillLivetime()
-
-        
 
         if build_model: self.buildModel()
 
@@ -215,11 +246,7 @@ class PSFModelLT(PSFModel):
         self._psf = np.zeros((self._loge_axis.nbins,self._nbin_dtheta))
         self._edisp = None
 
-        shape = (self._loge_axis.nbins,
-                 self._ctheta_axis.nbins)
-
-
-        print gx.shape, gy.shape
+        shape = (self._loge_axis.nbins, self._ctheta_axis.nbins)
         
         aeff = self._irf.aeff(np.ravel(gx),np.ravel(gy))
         aeff = aeff.reshape(shape)
@@ -230,22 +257,18 @@ class PSFModelLT(PSFModel):
         
         self._exp = self._tau*aeff
         self._exps = np.sum(self._exp,axis=1)
-
-        print 'shape: ', self._exp.shape
-
         
         psf = self._irf.psf(self._dtheta[...,np.newaxis],
                             np.ravel(gx)[np.newaxis,...],
                             np.ravel(gy)[np.newaxis,...])
-
-        print 'shape: ', psf.shape, gx.shape
         
         psf[psf<0] = 0
         psf[np.isnan(psf)] = 0
-        psf = psf.reshape((self._nbin_dtheta,) + shape)
-        psf /= self._exps[np.newaxis,:,np.newaxis]
-        psf = np.sum(psf*self._exp,axis=2).T
-        self._psf = psf
+
+        self._psf = psf.reshape((self._nbin_dtheta,) + shape)
+#        psf /= self._exps[np.newaxis,:,np.newaxis]
+#        psf = np.sum(psf*self._exp,axis=2).T
+#        self._psf = psf
         
         if self._edisp_table is not None:
         
@@ -278,9 +301,10 @@ class PSFModelLT(PSFModel):
         if ltcube_file is None: return
         hdulist = pyfits.open(ltcube_file)
 
-        self._ltmap = hdulist[1].data.field(0)
+        self._ltmap = hdulist[1].data.field(0)[:,::-1]
+        
         ctheta = np.array(hdulist[3].data.field(0))
-        self._ctheta_axis = Axis(np.concatenate(([1],ctheta)))
+        self._ctheta_axis = Axis(np.concatenate(([1],ctheta))[::-1])
         
 #        self._ctheta_center = \
 #            np.array([1-(0.5*(np.sqrt(1-self._ctheta[i]) + 
@@ -298,9 +322,6 @@ class PSFModelLT(PSFModel):
 
             dcostheta = self._ctheta_axis.width[i]
             
-            if cth < self._cth_range[0] or cth > self._cth_range[1]:
-                continue
-
             if self._src_type == 'iso':
                 self._tau[i] = dcostheta
             elif self._src_type == 'isodec':
@@ -318,7 +339,7 @@ class PSFModelLT(PSFModel):
             else:
                 th = np.pi/2. - self._lonlat[1]*np.pi/180.
                 phi = self._lonlat[0]*np.pi/180.
-                m = hdulist[1].data.field(0)[:,i]
+                m = self._ltmap[:,i]
                 ipix = healpy.ang2pix(64,th,phi,nest=True)
 #            tau = healpy.get_interp_val(m,th,phi,nest=True)
                 self._tau[i] = m[ipix]

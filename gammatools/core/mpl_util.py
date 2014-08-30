@@ -1,6 +1,8 @@
 __author__ = 'Matthew Wood <mdwood@slac.stanford.edu>'
 __date__ = '11/14/13'
 
+import matplotlib
+
 from matplotlib import scale as mscale
 from matplotlib import transforms as mtransforms
 from matplotlib.ticker import FixedLocator, ScalarFormatter, MultipleLocator
@@ -14,8 +16,18 @@ class MPLUtil(object):
     pcolormesh_kwargs = ['shading','origin','vmin','vmax']
     contour_kwargs = ['levels','origin']
     errorbar_kwargs = ['marker','markersize','color','markerfacecolor',
-                       'markeredgecolor','linestyle','linewidth','label']
+                       'markeredgecolor','linestyle','linewidth','label',
+                       'drawstyle']
 
+class PowerNormalize(matplotlib.colors.Normalize):
+    def __init__(self, vmin=None, vmax=None, power=2., clip=False):
+        self.power = power
+        matplotlib.colors.Normalize.__init__(self, vmin, vmax, clip)
+
+    def __call__(self, value, clip=None):
+        return np.ma.masked_array(np.power((value-self.vmin)/self.vmax,
+                                  1./self.power))
+    
 class SqrtScale(mscale.ScaleBase):
     """
     Scales data using the function x^{1/2}.

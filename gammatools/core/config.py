@@ -120,9 +120,13 @@ class Configurable(object):
 
                 if isinstance(v.value,list):
                     value=','.join(map(str,v.value))
-                else: value = v.value
+                    opt_type = str
+                else:
+                    value = v.value
+                    opt_type = v.type
+                
                 parser.add_argument('--' + k,default=value,
-                                    type=type(value),
+                                    type=opt_type,
                                     help=v.docstring + ' [default: %s]'%v.value)
         
                 
@@ -154,8 +158,6 @@ class Configurable(object):
             option = Option.create(k,default_dict[k],group=group) 
             default_config[option.name] = option
 
-            print k, group, option.name, option.group
-
             if option.group:
                 self._config.setdefault(option.group,{})
                 self._config[option.group][option.name] = option.value
@@ -183,7 +185,7 @@ class Configurable(object):
         """Update the configuration of this object with the contents
         of 'config'.  When the same option is defined in multiple
         inputs the order of precedence is config -> opts -> kwargs."""
-        
+
         if not config is None:
 
             if group and not group in config:
@@ -193,10 +195,6 @@ class Configurable(object):
                 update_dict(self._config,config[group])
             else:
                 update_dict(self._config,config)
-#            if not group is None and group in config and not \
-#                    config[group] is None:                
-#                update_dict(self._config,config[group])
-#            else:
             
                 
         if not opts is None:

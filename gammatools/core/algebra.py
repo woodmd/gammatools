@@ -37,18 +37,23 @@ class Vector3D(object):
         self._x *= 1./self.norm()
 
     def rotatey(self,angle):
-        yaxis = Vector3D(angle*np.array([0.,1.,0.]))
+#        yaxis = Vector3D(angle*np.array([0.,1.,0.]))
+
+        angle = np.array(angle,ndmin=1)
+        yaxis = Vector3D(angle[np.newaxis,:]*np.array([0.,1.,0.]).reshape(3,1))
         self.rotate(yaxis)
 
     def rotatez(self,angle):
-        zaxis = Vector3D(angle*np.array([0.,0.,1.]))
+
+        angle = np.array(angle,ndmin=1)        
+        zaxis = Vector3D(angle[np.newaxis,:]*np.array([0.,0.,1.]).reshape(3,1))
         self.rotate(zaxis)
         
     def rotate(self,axis):
 
         angle = axis.norm()
 
-        if np.abs(angle) == 0: return
+#        if np.abs(angle) == 0: return
         
         tmp = np.zeros(self._x.shape) + axis._x
         eaxis = Vector3D(tmp)

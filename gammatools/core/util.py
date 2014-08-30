@@ -255,7 +255,10 @@ def dispatch_jobs(exe,args,opts,queue=None,
     for k, v in opts.__dict__.iteritems():
         if k in skip_keywords: continue                
         if isinstance(v,list): continue
-        if not v is None: cmd_opts += ' --%s=\"%s\" '%(k,v)
+
+        if isinstance(v,bool) and v: cmd_opts += ' --%s '%(k)
+        elif isinstance(v,bool): continue
+        elif not v is None: cmd_opts += ' --%s=\"%s\" '%(k,v)
         
     if split_args:
 

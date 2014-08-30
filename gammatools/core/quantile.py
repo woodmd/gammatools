@@ -15,8 +15,8 @@ class HistBootstrap(object):
 
         self._fn = fn
         self._hist = hist
-        self._x = np.array(hist.edges(),copy=True)
-        self._ncounts = copy.copy(hist._counts)
+        self._x = np.array(hist.edges,copy=True)
+        self._ncounts = copy.copy(hist.counts)
 
     def bootstrap(self,niter=1000,**kwargs):
 
@@ -30,7 +30,7 @@ class HistBootstrap(object):
 
         fval = []
         for i in range(niter):
-            self._hist._counts = ncounts_tmp[:,i]
+            self._hist.counts = ncounts_tmp[:,i]
             #fn = self._fn(self._hist)            
             fval.append(self._fn(self._hist,**kwargs))
 
@@ -63,8 +63,8 @@ class HistQuantileBkgFn(object):
     """
     def __init__(self,hcounts,bkg_fn,nbkg):
 
-        self._xedge = np.array(hcounts.axis().edges())
-        self._ncounts = copy.copy(hcounts.counts())
+        self._xedge = np.array(hcounts.axis().edges)
+        self._ncounts = copy.copy(hcounts.counts)
         self._ncounts = np.concatenate(([0],self._ncounts))
         self._bkg_fn = bkg_fn
         self._nbkg = nbkg
@@ -105,7 +105,7 @@ class HistQuantileBkgFn(object):
         
         h = Histogram.createHistModel(xedge,self._ncounts[1:nedge])
         nbkg = np.random.poisson(self._nbkg,niter)
-        ncounts = np.random.poisson(np.concatenate(([0],h._counts)),
+        ncounts = np.random.poisson(np.concatenate(([0],h.counts)),
                                     (niter,nedge))
         
         xq = []
@@ -136,9 +136,9 @@ class HistGOF(object):
         return self.chi2
         
 
-class HistQuantileBkgHist(object):
+class HistQuantileOnOff(object):
     """
-    HistQuantileBkgHist(hon,hoff,alpha)
+    HistQuantileOnOff(hon,hoff,alpha)
 
     Class that computes quantiles for the distribution of the excess
     signal in histogram given histograms for signal+backround (hon)
@@ -148,26 +148,23 @@ class HistQuantileBkgHist(object):
     ----------
     hon : histogram
 
-       Histogram object with distribution of signal and background.
+       Histogram with distribution of signal and background.
 
     hoff : histogram
 
-       Histogram object with background.
+       Histogram with background.
 
     alpha : float
 
-       Scaling factor which is used to renormalize the background distribution. 
+       Scaling factor between background in on and off distributions.
        
     """
     def __init__(self,hon,hoff,alpha):
 
-        self._xedges = np.array(hon.axis().edges())
-
-        self._non = copy.copy(hon.counts())
-        self._noff = copy.copy(hoff.counts())
+        self._axis = hon.axis()
         self._alpha = alpha
-        self._non = np.concatenate(([0],self._non))
-        self._noff = np.concatenate(([0],self._noff))
+        self._non = np.concatenate(([0],hon.counts))
+        self._noff = np.concatenate(([0],hoff.counts))
 
 
     def eval(self,fraction):
@@ -178,12 +175,12 @@ class HistQuantileBkgHist(object):
     def bootstrap(self,fraction=0.68,niter=1000,xmax=None):
 
         nedge = len(self._non)
-        hon = Histogram.createHistModel(self._xedges,self._non[1:])
-        hoff = Histogram.createHistModel(self._xedges,self._noff[1:])
+        hon = Histogram.createHistModel(self._axis.edges,self._non[1:])
+        hoff = Histogram.createHistModel(self._axis.edges,self._noff[1:])
 
-        non = np.random.poisson(np.concatenate(([0],hon._counts)),
+        non = np.random.poisson(np.concatenate(([0],hon.counts)),
                                 (niter,nedge))
-        noff = np.random.poisson(np.concatenate(([0],hoff._counts)),
+        noff = np.random.poisson(np.concatenate(([0],hoff.counts)),
                                  (niter,nedge))
 
         xq = []
@@ -216,10 +213,10 @@ class HistQuantileBkgHist(object):
         noff_tot = noff_cum[-1]
         nex_tot = non_tot-self._alpha*noff_tot
         
-        fn_nexcdf = UnivariateSpline(self._xedges,nex_cum,s=0,k=1)
+        fn_nexcdf = UnivariateSpline(self._axis.edges,nex_cum,s=0,k=1)
 
         return opt.brentq(lambda t: fn_nexcdf(t)-nex_tot*fraction,
-                          self._xedges[0],self._xedges[-1])
+                          self._axis.edges[0],self._axis.edges[-1])
 
     def binomial(self,non,noff,fraction=0.68):
 
@@ -232,12 +229,12 @@ class HistQuantileBkgHist(object):
         noff_tot = noff_cum[-1]
         nex_tot = non_tot-self._alpha*noff_tot
 
-        fn_noncdf = UnivariateSpline(self._xedges,non_cum,s=0)
-        fn_noffcdf = UnivariateSpline(self._xedges,noff_cum,s=0,k=1)
-        fn_nexcdf = UnivariateSpline(self._xedges,nex_cum,s=0)
+        fn_noncdf = UnivariateSpline(self._axis.edges,non_cum,s=0)
+        fn_noffcdf = UnivariateSpline(self._axis.edges,noff_cum,s=0,k=1)
+        fn_nexcdf = UnivariateSpline(self._axis.edges,nex_cum,s=0)
 
         xq = opt.brentq(lambda t: fn_nexcdf(t)-nex_tot*fraction,
-                        self._xedges[0],self._xedges[-1])
+                        self._axis.edges[0],self._axis.edges[-1])
 
         eff_on  = fn_noncdf(xq)/non_tot
         eff_off = fn_noffcdf(xq)/noff_tot
@@ -250,16 +247,16 @@ class HistQuantileBkgHist(object):
         nerr_hi = nex_tot*fraction+nerr
         nerr_lo = nex_tot*fraction-nerr
 
-        xq_hi = self._xedges[-1]
-        xq_lo = self._xedges[0]
+        xq_hi = self._axis.edges[-1]
+        xq_lo = self._axis.edges[0]
 
         if nerr_hi < nex_tot:
             xq_hi = opt.brentq(lambda t: fn_nexcdf(t)-nerr_hi,
-                               self._xedges[0],self._xedges[-1])
+                               self._axis.edges[0],self._axis.edges[-1])
 
         if nerr_lo > 0:
             xq_lo = opt.brentq(lambda t: fn_nexcdf(t)-nerr_lo,
-                               self._xedges[0],self._xedges[-1])
+                               self._axis.edges[0],self._axis.edges[-1])
 
         xq_err = 0.5*(xq_hi-xq_lo)
         
@@ -271,8 +268,8 @@ class HistQuantile(object):
     def __init__(self,hist):
 
         self._h = copy.deepcopy(hist)
-        self._x = np.array(hist.edges(),copy=True)
-        self._ncounts = copy.copy(hist._counts)
+        self._x = np.array(hist.edges,copy=True)
+        self._ncounts = copy.copy(hist.counts)
         self._ncounts = np.concatenate(([0],self._ncounts))
 
 
@@ -306,8 +303,8 @@ class HistQuantile(object):
 
     @staticmethod
     def quantile(h,fraction=0.68):
-        counts = np.concatenate(([0],h._counts))
-        return HistQuantile.array_quantile(h.axis().edges(),counts,fraction)
+        counts = np.concatenate(([0],h.counts))
+        return HistQuantile.array_quantile(h.axis().edges,counts,fraction)
         
     @staticmethod
     def array_quantile(edges,ncounts,fraction=0.68):
@@ -327,9 +324,9 @@ class HistQuantile(object):
         if x <= h._xedges[0]: return 0
         elif x >= h._xedges[-1]: return h.sum()
         
-        counts = np.concatenate(([0],h._counts))
+        counts = np.concatenate(([0],h.counts))
         counts_cum = np.cumsum(counts)
-        fn_ncdf = UnivariateSpline(h.axis().edges(),counts_cum,s=0,k=1)
+        fn_ncdf = UnivariateSpline(h.axis().edges,counts_cum,s=0,k=1)
         return fn_ncdf(x)
         
     def binomial(self,ncounts,fraction=0.68):

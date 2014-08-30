@@ -52,10 +52,14 @@ class IRFManager(object):
 
     @staticmethod
     def createFromFile(irf_name,irf_dir=None,expand_irf_name=True):
+
+        print 'Create From File ', irf_name
         
         if expand_irf_name: irf_names = expand_irf(irf_name)
         else: irf_names = [irf_name]
 
+        print irf_names
+        
         irfset = IRFManager()
         
         for name in irf_names:     
@@ -551,6 +555,11 @@ class PSFIRF(IRFComponent):
         dtheta = np.array(dtheta,ndmin=1)
         egy = np.array(egy,ndmin=1)
         cth = np.array(cth,ndmin=1)
+
+
+        dtheta[dtheta <= 10**self._theta_axis.lo_edge()] =\
+            10**self._theta_axis.lo_edge()
+        
         return self._psf_hist.interpolate(cth,egy,np.log10(dtheta))
 
     def king(self,dtheta,sig,g):

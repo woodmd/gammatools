@@ -142,15 +142,11 @@ class Catalog(object):
         self._src_radec = np.zeros(shape=(0,3))
 
     def get_source_by_name(self,name):
-
-#        import pprint
-#        pprint.pprint(self._src_index)
         
         if name in self._src_index:
             return self._src_data[self._src_index[name]]
         else:
-            print 'No Source with name found: ', name
-            sys.exit(1)
+            raise Exception('No Source with name found: ' + name)
 
     def get_source_by_position(self,ra,dec,radius):
         

@@ -304,21 +304,24 @@ class Figure(object):
     style = { 'show_ratio_args' : None,
               'mask_ratio_args' : None,
               'figstyle' : None,
+              'fontsize' : None,
               'format' : 'png',
               'fig_dir' : './',
               'figscale' : 1.0,
               'subplot_margins' : {'left' : 0.12, 'bottom' : 0.12,
-                                   'right' : 0.95, 'top': 0.95 },
+                                   'right' : 0.9, 'top': 0.9 },
               'figsize' : [8.0,6.0],
               'panes_per_fig' : 1 }
 
     def __init__(self,figlabel,nsubplot=0,**kwargs):
         
-        self._style = copy.deepcopy(Figure.style) 
+        self._style = copy.deepcopy(Figure.style)
+        
         update_dict(self._style,FigureSubplot.style,True)
         update_dict(self._style,kwargs)
 
         figsize = self._style['figsize']
+        
         figsize[0] *= self._style['figscale']
         figsize[1] *= self._style['figscale']
         
@@ -389,60 +392,12 @@ class Figure(object):
         
         for p in self._subplots: p.plot(**kwargs)
 
-        subplot_margins = {'left' : 0.12, 'bottom' : 0.12,
-                           'right' : 0.95, 'top': 0.95 }
-        
+        if not self._style['fontsize'] is None:
+            for p in self._subplots:
+                set_font_size(p.ax(),self._style['fontsize'])
         self._fig.subplots_adjust(**self._style['subplot_margins'])
         self._fig.savefig(fig_name)
         
-    def _plot(self,**kwargs):
-
-        style = copy.deepcopy(self._style)
-        style.update(kwargs)
-        
-        nsub = self._style['panes_per_fig']        
-        nfig = int(np.ceil(float(len(self._panes))/float(nsub)))
-
-        for i in range(nfig):
-
-            if nfig > 1:
-                fig_name = '%s_%02i.%s'%(self._figlabel,i,style['format'])
-            else:
-                fig_name = '%s.%s'%(self._figlabel,style['format'])
-
-            fig_name = os.path.join(style['fig_dir'],fig_name)
-
-            if nsub == 1:
-                (nx,ny) = (1,1)
-                figsize = (8,6)
-                fontsize=None
-            elif nsub == 2:
-                (nx,ny) = (1,2)
-                figsize = (8*1.5,6)
-                fontsize=10
-            elif nsub > 2 and nsub <= 4:
-                (nx,ny) = (2,2)
-                figsize = (8*1.4,6*1.4)
-                fontsize=10
-            else:
-                (nx,ny) = (2,4)
-                figsize = (8*1.4*2,6*1.4)
-                fontsize=10
-
-            fig = plt.figure(figsize=figsize)
-            for j in range(nsub):
-                isub = j+i*nsub
-                if isub + 1 > len(self._panes): continue
-                
-                ax = fig.add_subplot(nx,ny,j+1)
-                self._panes[isub].plot(ax,**kwargs)
-#                if not fontsize is None: set_font_size(ax,fontsize)
-
-            plt.subplots_adjust(left=0.12, bottom=0.12,
-                                right=0.95, top=0.95)
-                
-            fig.savefig(fig_name)#,bbox_inches='tight')
-
 class TwoPaneFigure(Figure):
 
     def __init__(self,figlabel,**kwargs):
@@ -520,13 +475,12 @@ class FigTool(Configurable):
 
     default_config = {
         'format' :( 'png', 'Set the output image format.' ),
-        'marker' : ['s','o','d','^','v','<','>'],
+        'marker' : (['s','o','d','^','v','<','>'],'Set the marker style sequence.'),
         'color'  : ['b','g','r','m','c','grey','brown'],
         'linestyle' : ['-','--','-.','-','--','-.','-'],
         'linewidth' : [1.0],
         'markersize' : [6.0],
         'figsize' : [8.0,6.0],
-        'hist_style' : 'errorbar',
         'norm_index'  : None,
         'legend_loc' : 'best',        
         'fig_dir' :
@@ -537,24 +491,8 @@ class FigTool(Configurable):
     
     def __init__(self,config=None,opts=None,**kwargs):
         super(FigTool,self).__init__()
-        self.configure(opts=opts,**kwargs)
- 
-#    @staticmethod
-#    def add_arguments(parser):
-#        
-#        for k, v in FigTool.default_config.iteritems():
-
-#            continue
-#            
-#            if isinstance(v[0],bool):
-#                parser.add_argument('--' + k,default=v[0],
-#                                    action='store_true',
-#                                    help=v[2] + ' [default: %s]'%v[0])
-#            else:
-#                parser.add_argument('--' + k,default=v[0],type=v[1],
-#                                    help=v[2] + ' [default: %s]'%v[0])
-        
-        
+        self.configure(config,opts=opts,**kwargs)
+         
     def create(self,figlabel,figstyle=None,nax=1,**kwargs):
 
         if self.config['fig_prefix']:

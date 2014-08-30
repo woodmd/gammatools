@@ -989,7 +989,7 @@ class Histogram(HistogramND):
 
             return self.hist(ax=ax,histtype='bar',counts=c,**draw_style)
         elif style['hist_style'] == 'step':
-
+            
             c = np.concatenate(([0],c,[0]))
             edges = np.concatenate((self._axes[0].edges,
                                     [self._axes[0].edges[-1]]))
