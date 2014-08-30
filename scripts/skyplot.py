@@ -26,8 +26,11 @@ from matplotlib.pyplot import gcf, setp
 from matplotlib.widgets import Slider, Button, RadioButtons
 from gammatools.core.fits_util import SkyImage, SkyCube, FITSImage
 from gammatools.core.fits_viewer import *
+from gammatools.core.mpl_util import PowerNormalize
 from gammatools.fermi.irf_util import *
 from gammatools.fermi.psf_model import *
+
+
 
 
 def get_irf_version(header):
@@ -62,13 +65,29 @@ args = parser.parse_args()
 hdulist = pyfits.open(args.files[0])
 model_hdu = None
 irf_version = None
+im_mdl = None
+
+
+im = FITSImage.createFromHDU(hdulist[args.hdu])
 
 
 if args.model_file:
     model_hdu = pyfits.open(args.model_file)[0]
     irf_version = get_irf_version(model_hdu.header)
+    im_mdl = FITSImage.createFromHDU(model_hdu)
+    
 
-        
+#fp = FITSPlotter(im,im_mdl,None,args.prefix)
+
+#fp.make_plots_skycube(None,smooth=True,resid_type='fractional',
+#                              suffix='_data_map_resid_frac')
+
+#fp.make_plots_skycube(4,smooth=True,resid_type='fractional',
+#                              suffix='_data_map_slice_resid_frac')
+
+#sys.exit(0)
+
+    
 irf_dir = '/u/gl/mdwood/ki10/analysis/custom_irfs/'
 if 'CUSTOM_IRF_DIR' in os.environ:
     irf_dir = os.environ['CUSTOM_IRF_DIR']
@@ -80,7 +99,7 @@ m = None
 if irf_version:
     irf = IRFManager.create(irf_version, True,irf_dir=irf_dir)
     ltfile = '/Users/mdwood/fermi/data/p301/ltcube_5years_zmax100.fits'
-    m = PSFModelLT(irf,cth_range=[0.2,1.0],src_type='iso')
+    m = PSFModelLT(irf,src_type='iso')
 
 
 
@@ -140,21 +159,24 @@ else:
         fp.make_energy_residual(suffix='_eresid')
 
         fp.make_plots_skycube(smooth=True,
-                              suffix='_data_map_smooth')
+                              suffix='_data_map_smooth',plots_per_fig=1)
         
 #        make_plots_skycube(im,4,smooth=True,
 #                           im_mdl=im_mdl,suffix='_data_map_slice_smooth')
 
-        fp.make_mdl_plots_skycube(suffix='_mdl_map')
+        fp.make_mdl_plots_skycube(suffix='_mdl_map',plots_per_fig=1)
+
+        fp.make_mdl_plots_skycube(suffix='_mdl_map_normp3',plots_per_fig=1,
+                                  norm=PowerNormalize(power=3))
         
         fp.make_plots_skycube(None,smooth=True,resid_type='fractional',
-                              suffix='_data_map_resid_frac')
+                              suffix='_data_map_resid_frac',plots_per_fig=1)
 
         fp.make_plots_skycube(4,smooth=True,resid_type='fractional',
                               suffix='_data_map_slice_resid_frac')
 
         fp.make_plots_skycube(None,smooth=True,resid_type='significance',
-                              suffix='_data_map_resid_sigma')
+                              suffix='_data_map_resid_sigma',plots_per_fig=1)
 
         fp.make_plots_skycube(4,smooth=True,resid_type='significance',
                               suffix='_data_map_slice_resid_sigma')

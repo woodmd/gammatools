@@ -69,7 +69,7 @@ class FITSPlotter(object):
         fig.plot()
 #        fig.savefig('%s_%s.png'%(self._prefix,suffix))
 
-    def make_plots_skycube(self,delta_bin=None,paxis=None,plots_per_fig=None,
+    def make_plots_skycube(self,delta_bin=None,paxis=None,plots_per_fig=4,
                            smooth=False, resid_type=None,
                            suffix='',model=False, **kwargs):
 
@@ -77,14 +77,16 @@ class FITSPlotter(object):
         else: im = self._im
         
         nbins = im.axis(2).nbins
-        if delta_bin is None: delta_bin = nbins
-    
-        nplots = nbins/delta_bin
+        if delta_bin is None:
+            delta_bin = np.array([0,nbins])
+            nplots = 1
+        else:
+            delta_bin = np.array([0,2,4,4,12])
+            nplots = 4
 
-        if plots_per_fig is None: plots_per_fig = min(8,nplots)
-
-    
-        nfig = nplots/plots_per_fig
+        bins = np.cumsum(delta_bin)
+        nfig = int(np.ceil(float(nplots)/float(plots_per_fig)))
+        
         if plots_per_fig > 4 and plots_per_fig <= 8:
             nx, ny = 4, 2
         elif plots_per_fig <= 4 and plots_per_fig > 1:
@@ -106,26 +108,37 @@ class FITSPlotter(object):
             fig2 = self.create_figure(figsize=(fig_sx,fig_sy))
             ##plt.figure(FITSPlotter.fignum,figsize=(fig_sx,fig_sy))
 
+            imin, imax = i*nfig, min(nplots,i*nfig+plots_per_fig)            
+            ibin0, ibin1 = bins[imin], bins[imax]
+            
+            fig_emin = im.axis(2).pix_to_coord(ibin0)
+            fig_emax = im.axis(2).pix_to_coord(ibin1)
 
             #            fig2 = plt.figure(100+i,figsize=(fig_sx,fig_sy))
             for j in range(plots_per_fig):
 
-                ibin = i*nfig*delta_bin + j*delta_bin
+                iplot = i*nfig+j
 
-                if ibin >= nbins: break
+                if iplot >= nplots: break
+                
+                ibin0 = bins[iplot]
+                ibin1 = bins[iplot+1]
+                print i, j, ibin0, ibin1
+                
+                
+                if ibin0 >= nbins: break
 #                print i, j, ibin
 
-                h = im.marginalize(2,[ibin,ibin+delta_bin])
+                h = im.marginalize(2,[[ibin0,ibin1]])
                 hm = None
                 if self._im_mdl:
-                    hm = self._im_mdl.marginalize(2,[ibin,ibin+delta_bin])
+                    hm = self._im_mdl.marginalize(2,[[ibin0,ibin1]])
 
                 mc_resid = []
                 
                     
                 if resid_type:
                     for k in range(10):
-                        print k
                         mc_resid.append(self.make_residual_map(h,hm,
                                                                smooth,mc=True,
                                                                resid_type=resid_type))
@@ -135,11 +148,11 @@ class FITSPlotter(object):
 #                h = self.make_counts_map(im,ibin,ibin+delta_bin,
 #                                         residual,smooth)
 
-                emin = im.axis(2).pix_to_coord(ibin)
-                emax = im.axis(2).pix_to_coord(ibin+delta_bin)
+                emin = im.axis(2).pix_to_coord(ibin0)
+                emax = im.axis(2).pix_to_coord(ibin1)
                 
-                rpsf68 = self._irf.quantile(10**emin,10**emax,0.68)
-                rpsf95 = self._irf.quantile(10**emin,10**emax,0.95)
+                rpsf68 = self._irf.quantile(10**emin,10**emax,0.2,1.0,0.68)
+                rpsf95 = self._irf.quantile(10**emin,10**emax,0.2,1.0,0.95)
                 
                 title = 'log$_{10}$(E/MeV) = [%.3f %.3f]'%(emin,emax)
                 
@@ -158,8 +171,10 @@ class FITSPlotter(object):
                 
 #                ax.set_ylim(0)
 
-        fig.savefig('%s_%i%s.png'%(self._prefix_path,i,suffix))
-        fig2.savefig('%s_%i%s_zproj.png'%(self._prefix_path,i,suffix))
+        fig_label = '%04.f_%04.f'%(fig_emin*1000,fig_emax*1000)
+                    
+        fig.savefig('%s_%s%s.png'%(self._prefix_path,fig_label,suffix))
+        fig2.savefig('%s_%s%s_zproj.png'%(self._prefix_path,fig_label,suffix))
 
     def create_figure(self,**kwargs):
         fig = plt.figure('Figure %i'%FITSPlotter.fignum,**kwargs)
