@@ -116,7 +116,10 @@ class FT1Loader(object):
 
             vra = np.array(table_src.field('RA'),dtype=float)
             vdec = np.array(table_src.field('DEC'),dtype=float)
-
+            
+            vptz_ra = np.array(table_src.field('PtRaz'),dtype=float)
+            vptz_dec = np.array(table_src.field('PtDecz'),dtype=float)
+            
             dth = separation_angle(self.src_radec[isrc][0],
                                    self.src_radec[isrc][1],
                                    np.radians(vra),
@@ -126,14 +129,55 @@ class FT1Loader(object):
             table_src = table_src[msk]
             vra = vra[msk]
             vdec = vdec[msk]
-
+            vptz_ra = vptz_ra[msk]
+            vptz_dec = vptz_dec[msk]
+            
+            
             veq = Vector3D.createLatLon(np.radians(vdec),
                                         np.radians(vra))
+
+            eptz = Vector3D.createLatLon(np.radians(vptz_dec),
+                                         np.radians(vptz_ra))
+            
 
             vp = veq.project2d(vsrc)
             vx = np.degrees(vp.theta()*np.sin(vp.phi()))
             vy = -np.degrees(vp.theta()*np.cos(vp.phi()))            
 
+            vptz = eptz.project2d(vsrc)
+
+#            print vptz.phi()
+
+            vp2 = copy.deepcopy(vp)
+            vp2.rotatez(-vptz.phi())
+
+            vx2 = np.degrees(vp2.theta()*np.sin(vp2.phi()))
+            vy2 = -np.degrees(vp2.theta()*np.cos(vp2.phi()))  
+
+#            import matplotlib.pyplot as plt
+
+#            print vp.theta()[:10]
+#            print vp2.theta()[:10]
+            
+#            print np.sqrt(vx**2+vy**2)[:10]
+#            print np.sqrt(vx2**2+vy2**2)[:10]
+            
+            
+#            plt.figure()
+#            plt.plot(vx2,vy2,marker='o',linestyle='None')
+
+#            plt.gca().set_xlim(-80,80)
+#            plt.gca().set_ylim(-80,80)
+            
+#            plt.figure()
+#            plt.plot(vx,vy,marker='o',linestyle='None')
+            
+#            plt.show()
+
+            
+#            vx2 = np.degrees(vp.theta()*np.sin(vp.phi()))
+#            vy2 = -np.degrees(vp.theta()*np.cos(vp.phi()))   
+            
             
             src_index = np.zeros(len(table_src),dtype=int)
             src_index[:] = isrc
@@ -162,6 +206,8 @@ class FT1Loader(object):
             pd.append('dec',list(table_src.field('DEC')))
             pd.append('delta_ra',list(vx))
             pd.append('delta_dec',list(vy))
+            pd.append('delta_phi',list(vx2))
+            pd.append('delta_theta',list(vy2))            
             pd.append('energy',list(np.log10(table_src.field('ENERGY'))))
             pd.append('dtheta',list(dth[msk]))
             pd.append('event_class',list(event_class))
@@ -210,7 +256,7 @@ class FT1Loader(object):
             
         if src_names.ndim == 0: src_names = src_names.reshape(1)
 
-        cat = Catalog()
+        cat = Catalog.get()
         
         for name in src_names:
 

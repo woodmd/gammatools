@@ -57,6 +57,8 @@ class PhotonData(object):
                        'dec'           : np.array([]),
                        'delta_ra'      : np.array([]),
                        'delta_dec'     : np.array([]),
+                       'delta_phi'     : np.array([]),
+                       'delta_theta'   : np.array([]),
                        'energy'        : np.array([]),
                        'time'          : np.array([]),
                        'psfcore'       : np.array([]),
@@ -135,7 +137,7 @@ class PhotonData(object):
                                   event_class_id,event_type_id,phases,
                                   cuts,src_index,
                                   cuts_file)
-
+        
         self.apply_mask(msk)
     
     @staticmethod

@@ -31,8 +31,8 @@ class Main(object):
         self.irf_colors = ['green','red','magenta','gray','orange']
     
     def main(self,*argv):
-        usage = "usage: %(prog)s [options] [npz file ...]"
-        description = """Generates PSF."""
+        usage = "usage: %(prog)s [options]"
+        description = """Generates PSF model."""
         parser = argparse.ArgumentParser(usage=usage,description=description)
 
         IRFManager.configure(parser)
