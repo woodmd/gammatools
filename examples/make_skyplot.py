@@ -12,6 +12,7 @@ import os
 import sys
 import copy
 import argparse
+import numpy as np
 from gammatools.core.astropy_helper import pyfits
 
 import matplotlib.pyplot as plt
@@ -48,6 +49,13 @@ plt.figure()
 
 # Smooth by 0.2 deg
 im.smooth(0.2).plot(cmap='ds9_b')
+
+# Draw an arbitrary contour in Galactic Coordinates
+phi = np.linspace(0,2*np.pi,10000)
+r = np.sqrt(2*np.cos(2*phi))
+x = im.lon + r*np.cos(phi)
+y = im.lat + r*np.sin(phi)
+im.ax()['gal'].plot(x,y,color='w')
 
 cat = Catalog.get('2fgl')
 cat.plot(im,ax=plt.gca(),label_threshold=5,src_color='w')
