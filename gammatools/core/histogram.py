@@ -910,7 +910,7 @@ class Histogram(HistogramND):
     def label(self):
         return self._style['label']
 
-    def _band(self,ax=None,style='step',alpha=0.2,**kwargs):
+    def _band(self,ax=None,style='step',alpha=0.2,mask_neg=False,**kwargs):
         if ax is None: ax = plt.gca()
 
         kw = extract_dict_by_keys(kwargs,MPLUtil.errorbar_kwargs)
@@ -933,11 +933,13 @@ class Histogram(HistogramND):
         
             ebar = ax.errorbar(x,y,**kw)
             kw_fill['color'] = ebar[0].get_color()
-            ax.fill_between(x,y+yerr,y-yerr,**kw_fill)
+            if mask_neg: kw_fill['where']=y-yerr>0
+            ax.fill_between(x,y-yerr,y+yerr,**kw_fill)
         elif style=='center':
 
             ebar = ax.errorbar(self._axes[0].center,self.counts,**kw)
             kw_fill['color'] = ebar[0].get_color()
+            if mask_neg: kw_fill['where']=self.counts-self.err>0
             ax.fill_between(self._axes[0].center,
                             self.counts+self.err,
                             self.counts-self.err,**kw_fill)

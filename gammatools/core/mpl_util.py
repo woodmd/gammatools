@@ -15,7 +15,7 @@ class MPLUtil(object):
     imshow_kwargs = ['interpolation','origin','vmin','vmax']
     pcolormesh_kwargs = ['shading','origin','vmin','vmax']
     contour_kwargs = ['levels','origin']
-    fill_kwargs = ['alpha']
+    fill_kwargs = ['alpha','where']
     errorbar_kwargs = ['marker','markersize','color','markerfacecolor',
                        'markeredgecolor','linestyle','linewidth','label',
                        'drawstyle']
