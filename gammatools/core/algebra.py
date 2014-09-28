@@ -11,9 +11,11 @@ class Vector3D(object):
             self._x = x
 
     def x(self):
+        """Return cartesian components."""
         return self._x
 
     def separation(self,v):     
+        """Return angular separation between this vector and another vector."""
         costh = np.sum(self._x*v._x,axis=0)        
         return np.arccos(costh)
     
@@ -21,8 +23,7 @@ class Vector3D(object):
         return np.sqrt(np.sum(self._x**2,axis=0))
 
     def theta(self):
-        return np.arctan2(np.sqrt(self._x[0]*self._x[0] +
-                                  self._x[1]*self._x[1]),self._x[2])
+        return np.arctan2(np.sqrt(self._x[0]**2 + self._x[1]**2),self._x[2])
 
     def phi(self):
         return np.arctan2(self._x[1],self._x[0])    
@@ -36,8 +37,13 @@ class Vector3D(object):
     def normalize(self):
         self._x *= 1./self.norm()
 
+    def rotatex(self,angle):
+
+        angle = np.array(angle,ndmin=1)
+        yaxis = Vector3D(angle[np.newaxis,:]*np.array([1.,0.,0.]).reshape(3,1))
+        self.rotate(yaxis)
+
     def rotatey(self,angle):
-#        yaxis = Vector3D(angle*np.array([0.,1.,0.]))
 
         angle = np.array(angle,ndmin=1)
         yaxis = Vector3D(angle[np.newaxis,:]*np.array([0.,1.,0.]).reshape(3,1))
@@ -50,24 +56,26 @@ class Vector3D(object):
         self.rotate(zaxis)
         
     def rotate(self,axis):
+        """Perform a rotation on this vector with respect to an
+        arbitrary axis.  The angle of rotation is given by the
+        magnitude of the axis vector."""
 
         angle = axis.norm()
-
-#        if np.abs(angle) == 0: return
-        
         tmp = np.zeros(self._x.shape) + axis._x
         eaxis = Vector3D(tmp)
-        eaxis._x *= 1./angle
+
+        inverse_angle = np.zeros(len(angle))
+        inverse_angle[angle>0] = 1./angle[angle>0]
+
+        eaxis._x *= inverse_angle
         par = np.sum(self._x*eaxis._x,axis=0)
         
         paxis = Vector3D(copy.copy(self._x))
-
         paxis._x -= par*eaxis._x
 
         cp = eaxis.cross(paxis)
         
         self._x = par*eaxis._x + np.cos(angle)*paxis._x + np.sin(angle)*cp._x
-
         
     def dot(self,v):
 
@@ -86,11 +94,6 @@ class Vector3D(object):
         return self*v
 
     def project2d(self,v):
-
-#        yaxis = Vector3D(np.array([0.,1.,0.]))
-#        zaxis = Vector3D(np.array([0.,0.,1.]))
-#        yaxis *= -v.theta()
-#        zaxis *= -v.phi()
         
         vp = Vector3D(copy.copy(self._x))
 
@@ -98,7 +101,6 @@ class Vector3D(object):
         vp.rotatey(-v.theta())
         
         return vp
-
     
     @staticmethod
     def createLatLon(lat,lon):
@@ -113,11 +115,6 @@ class Vector3D(object):
                       np.cos(theta)*(1+0.*phi)])
 
         return Vector3D(x)
-        
-#        v = []        
-#        for i in range(len(x)):
-#            v.append(Vector3D(x[i]))
-#        return v
 
     def __getitem__(self, i):
         return Vector3D(self._x[:,i])
@@ -155,7 +152,7 @@ if __name__ == '__main__':
     print 'v0: ', v0
     print 'v1: ', v1
     
-    v2 = v1.project(v0)
+    v2 = v1.project2d(v0)
 
     y = -np.degrees(v2.theta()*np.cos(v2.phi()))
     x = np.degrees(v2.theta()*np.sin(v2.phi()))
