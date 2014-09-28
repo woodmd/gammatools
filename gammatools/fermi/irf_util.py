@@ -90,7 +90,22 @@ class IRFManager(object):
 
     def add_irf(self,irf):
         self._irfs.append(irf)
-    
+
+    def fisheye(self,egy,cth,**kwargs):
+        
+        aeff_tot = self.aeff(egy,cth,**kwargs)
+        
+        v = None
+        for i, irf in enumerate(self._irfs):
+
+            aeff = irf.aeff(egy,cth,**kwargs)            
+            psf = irf.fisheye(egy,cth,**kwargs)*aeff
+            if i == 0: v  = psf
+            else: v += psf
+
+        v[aeff_tot>0] = (v/aeff_tot)[aeff_tot>0]
+        return v
+        
     def psf(self,dtheta,egy,cth,**kwargs):
         
         aeff_tot = self.aeff(egy,cth,**kwargs)
@@ -217,6 +232,9 @@ class IRF(object):
     def edisp(self,*args,**kwargs):
         return self._edisp(*args,**kwargs)
 
+    def fisheye(self,*args,**kwargs):
+        return self._psf.fisheye(*args,**kwargs)
+    
     def dump(self):
 
         self._aeff.dump()
@@ -235,7 +253,8 @@ class IRF(object):
             
 class IRFComponent(object):
 
-    def setup_axes(self,data):
+    @staticmethod
+    def load_table_axes(data):
 
         elo = np.log10(np.array(data[0][0]))
         ehi = np.log10(np.array(data[0][1]))
@@ -243,9 +262,14 @@ class IRFComponent(object):
         cthhi = np.array(data[0][3])
         
         edges = np.concatenate((elo,np.array(ehi[-1],ndmin=1)))
-        self._energy_axis = Axis(edges)
+        energy_axis = Axis(edges)
         edges = np.concatenate((cthlo,np.array(cthhi[-1],ndmin=1)))
-        self._cth_axis = Axis(edges)
+        cth_axis = Axis(edges)
+        
+        return energy_axis, cth_axis
+    
+    def setup_axes(self,data):
+        self._energy_axis, self._cth_axis = IRFComponent.load_table_axes(data)
                 
 class AeffIRF(IRFComponent):
 
@@ -253,7 +277,6 @@ class AeffIRF(IRFComponent):
         
         self._hdulist = pyfits.open(fits_file)        
         hdulist = self._hdulist
-        
         
         self.setup_axes(hdulist[1].data)
         self._aeff = np.array(hdulist[1].data[0][4])
@@ -269,14 +292,14 @@ class AeffIRF(IRFComponent):
     def dump(self):
         self._hdulist.info()
 
-        print 'Energy Axis: ', self._energy_axis.edges()
-        print 'Angle Axis: ', self._cth_axis.edges()
+        print 'Energy Axis: ', self._energy_axis.edges
+        print 'Angle Axis: ', self._cth_axis.edges
         
         for k, v in self._hdulist[0].header.iteritems():
             print '%-30s %s'%(k, v)
         
         
-    def __call__(self,egy,cth):
+    def __call__(self,egy,cth,**kwargs):
 
         egy = np.array(egy,ndmin=1)
         cth = np.array(cth,ndmin=1)
@@ -347,8 +370,8 @@ class EDispIRF(IRFComponent):
     def dump(self):
         self._hdulist.info()
 
-        print 'Energy Axis: ', self._energy_axis.edges()
-        print 'Angle Axis: ', self._cth_axis.edges()
+        print 'Energy Axis: ', self._energy_axis.edges
+        print 'Angle Axis: ', self._cth_axis.edges
         
         for k, v in self._hdulist[0].header.iteritems():
             print '%-30s %s'%(k, v)
@@ -373,24 +396,29 @@ class PSFIRF(IRFComponent):
         self._interpolate_density = interpolate_density
         self._hdulist = pyfits.open(fits_file)
         hdulist = self._hdulist
-#        hdulist.info()
+        hdulist.info()
 
         if re.search('front',fits_file.lower()) is not None: self._ct = 'front'
         elif re.search('back',fits_file.lower()) is not None: self._ct = 'back'
         else: self._ct = 'none'
+
+        self._cfront = hdulist['PSF_SCALING_PARAMS'].data[0][0][0:2]
+        self._cback = hdulist['PSF_SCALING_PARAMS'].data[0][0][2:4]
+        self._beta = hdulist['PSF_SCALING_PARAMS'].data[0][0][4]
         
         self.setup_axes(hdulist[1].data)
         nx = self._cth_axis.nbins
         ny = self._energy_axis.nbins
-
-        ncore = np.array(hdulist[1].data[0][4]).reshape(nx,ny)
-        ntail = np.array(hdulist[1].data[0][5]).reshape(nx,ny)
-        score = np.array(hdulist[1].data[0][6]).reshape(nx,ny)
-        stail = np.array(hdulist[1].data[0][7]).reshape(nx,ny)
-        gcore = np.array(hdulist[1].data[0][8]).reshape(nx,ny)
-        gtail = np.array(hdulist[1].data[0][9]).reshape(nx,ny)        
+        shape = (nx,ny)
+        
+        ncore = np.array(hdulist[1].data[0][4]).reshape(shape)
+        ntail = np.array(hdulist[1].data[0][5]).reshape(shape)
+        score = np.array(hdulist[1].data[0][6]).reshape(shape)
+        stail = np.array(hdulist[1].data[0][7]).reshape(shape)
+        gcore = np.array(hdulist[1].data[0][8]).reshape(shape)
+        gtail = np.array(hdulist[1].data[0][9]).reshape(shape)        
         fcore = 1./(1.+ntail*np.power(stail/score,2))
-
+        
         self._ncore_hist = Histogram2D(self._cth_axis,self._energy_axis,
                                        counts=ncore,var=0)
         self._ntail_hist = Histogram2D(self._cth_axis,self._energy_axis,
@@ -405,12 +433,34 @@ class PSFIRF(IRFComponent):
                                        counts=gtail,var=0)
         self._fcore_hist = Histogram2D(self._cth_axis,self._energy_axis,
                                        counts=fcore,var=0)
-        
-        self._cfront = hdulist[2].data[0][0][0:2]
-        self._cback = hdulist[2].data[0][0][2:4]
-        self._beta = hdulist[2].data[0][0][4]
 
-#        print 'Scaling Functions ', self._cfront, self._cback
+        try:
+            
+            fisheye_axes = IRFComponent.load_table_axes(hdulist['FISHEYE_CORRECTION'].data)[::-1]
+            fisheye_shape = (fisheye_axes[0].nbins,fisheye_axes[1].nbins)
+        
+            fisheye_mean   = np.array(hdulist['FISHEYE_CORRECTION'].
+                                      data[0][4]).reshape(fisheye_shape)
+            fisheye_median = np.array(hdulist['FISHEYE_CORRECTION'].
+                                      data[0][5]).reshape(fisheye_shape)
+            fisheye_peak   = np.array(hdulist['FISHEYE_CORRECTION'].
+                                      data[0][6]).reshape(fisheye_shape)
+        except:
+            fisheye_axes = (self._cth_axis,self._energy_axis)
+            fisheye_mean   = np.zeros(shape)
+            fisheye_median   = np.zeros(shape)
+            fisheye_peak   = np.zeros(shape)
+
+        self._mean_hist = Histogram2D(*fisheye_axes,counts=fisheye_mean,var=0)
+        self._median_hist = Histogram2D(*fisheye_axes,counts=fisheye_median,
+                                         var=0)
+        self._peak_hist = Histogram2D(*fisheye_axes,counts=fisheye_peak,var=0)
+
+        psf_scale = np.degrees(self.psf_scale(self._mean_hist.axis(1).center))
+        
+        self._mean_hist *= psf_scale
+        self._median_hist *= psf_scale
+        self._peak_hist *= psf_scale
         
         self._theta_axis = Axis(np.linspace(-3.0,np.log10(90.0),101))
         self._psf_hist = HistogramND([self._cth_axis,
@@ -477,8 +527,8 @@ class PSFIRF(IRFComponent):
     def dump(self):
         self._hdulist.info()
 
-        print 'Energy Axis: ', self._energy_axis.edges()
-        print 'Angle Axis: ', self._cth_axis.edges()
+        print 'Energy Axis: ', self._energy_axis.edges
+        print 'Angle Axis: ', self._cth_axis.edges
         
         for k, v in self._hdulist[0].header.iteritems():
             print '%-30s %s'%(k, v)
@@ -499,12 +549,24 @@ class PSFIRF(IRFComponent):
 
         fig.plot()
                 
-    def __call__(self,dtheta,egy,cth):        
+    def __call__(self,dtheta,egy,cth,**kwargs):        
 
         if self._interpolate_density:
             return self.eval2(dtheta,egy,cth)
         else:
             return self.eval(dtheta,egy,cth)
+
+    def fisheye(self,egy,cth,ctype='mean'):
+
+        v = self._mean_hist.interpolate(egy,cth)
+        if ctype == 'mean':
+            return self._mean_hist.interpolate(cth,egy)
+        elif ctype == 'median':
+            return self._median_hist.interpolate(cth,egy)
+        elif ctype == 'peak':
+            return self._peak_hist.interpolate(cth,egy)
+        else:
+            raise Exception('Invalid fisheye correction.')
         
     def quantile(self,egy,cth,frac=0.68):
         x = np.logspace(-3.0,np.log10(45.0),300)
@@ -520,7 +582,15 @@ class PSFIRF(IRFComponent):
         cdf /= cdf[-1]
 
         return percentile(x,cdf,frac)
+
+    def psf_scale(self,loge):
+
+        if self._ct == 'back': c = self._cback
+        else: c = self._cfront
         
+        return np.sqrt(np.power(c[0]*np.power(10,-self._beta*(2.0-loge)),2) +
+                       np.power(c[1],2))
+    
         
     def eval(self,dtheta,egy,cth):
         """Evaluate PSF by interpolating in PSF parameters."""

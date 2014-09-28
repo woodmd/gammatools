@@ -167,7 +167,11 @@ class HistogramND(object):
         c = 1./self._counts
         var = c**2*self._var/self._counts**2
         return HistogramND.create(self._axes,c,var,self._style)
-    
+
+    def abs(self):
+        c = np.abs(self._counts)
+        return HistogramND.create(self._axes,c,self._var,self._style)
+            
     def power10(self):
 
         err = np.sqrt(self._var)
@@ -185,7 +189,12 @@ class HistogramND(object):
         counts = c 
         var = (0.5*(chi-clo))**2
         return HistogramND.create(self._axes,counts,var,self._style)
-    
+
+    def fill_from_fn(self,fn):
+        
+        v = fn(*self.center()).reshape(self.shape())
+        self._counts = fn(*self.center()).reshape(self.shape())        
+        
     def fill(self,z,w=1.0,v=None):
         """
         Fill the histogram from a set of points arranged in an NxM
@@ -539,15 +548,22 @@ class HistogramND(object):
             x[msk] = 1./x[msk]
             x[~msk] = 0.0
             return self.__mul__(x)
-    
+
+    @staticmethod
+    def createFromFn(axes,fn,style=None,label='__nolabel__'):
+
+        h = HistogramND.create(axes,style=style,label=label)
+        h.fill_from_fn(fn)
+        return h
+        
     @staticmethod
     def create(axes,c=None,v=None,style=None,label='__nolabel__'):
         """Factory method for instantiating an empty histogram object.
         Will automatically produce a 1D or 2D histogram if appropriate
         based on the length of the input axes array."""
         ndim = len(axes)
-        if ndim == 1: return Histogram(axes[0],counts=c,var=v,
-                                       style=style,label=label)
+        if ndim == 1:
+            return Histogram(axes[0],counts=c,var=v,style=style,label=label)
         elif ndim == 2: 
             return Histogram2D(axes[0],axes[1],counts=c,var=v,
                                style=style,label=label)
