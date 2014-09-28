@@ -18,7 +18,9 @@ class IRFModel(object):
         self._psf = psf_r68
         self._edisp = edisp_r68
 
-        
+
+        emin = self._aeff_ptsrc.axis().edges[0]
+        emax = self._aeff_ptsrc.axis().edges[-1]
 
         msk = ((self._aeff.counts > 0)&
                (self._aeff.axis().center>4.0))
@@ -26,12 +28,17 @@ class IRFModel(object):
         aeff_err = np.log10(1.0 + self._aeff.err[msk]/
                             self._aeff.counts[msk])
 
+        knots = self._aeff.axis().center[msk][::2]
         self._aeff_fn = BSpline.fit(self._aeff.axis().center[msk],
                                     np.log10(self._aeff.counts[msk]),
-                                    aeff_err,
-                                    np.linspace(4.2,8.0,8),4)
+                                    aeff_err,knots,3)
 
-        
+#        plt.figure()
+#        x = self._aeff.axis().center
+#        plt.plot(x,10**self._aeff_fn(x))
+#        self._aeff.plot()
+#        plt.gca().set_yscale('log')
+#        plt.show()
 
         msk = ((self._aeff_ptsrc.counts > 0)&
                (self._aeff_ptsrc.axis().center>4.0))
@@ -45,7 +52,7 @@ class IRFModel(object):
 
         self._aeff_ptsrc_fn = BSpline.fit(self._aeff_ptsrc.axis().center[msk],
                                           self._aeff_ptsrc.counts[msk],err,
-                                          np.linspace(4.0,8.0,16),4)
+                                          np.linspace(emin,emax,16),4)
 
         
 #        plt.figure()
@@ -62,26 +69,36 @@ class IRFModel(object):
         bkg_err = np.log10(1.0 + 
                            self._bkg_ptsrc.err[msk]/
                            self._bkg_ptsrc.counts[msk])
-        
+
+        knots = self._bkg_ptsrc.axis().center[msk][::3]
         self._log_bkg_ptsrc_fn = \
             BSpline.fit(self._bkg_ptsrc.axis().center[msk],
                         np.log10(self._bkg_ptsrc.counts[msk]),
-                        bkg_err,
-                        np.linspace(4.0,8.0,8),4)
+                        bkg_err,knots,3)
 
         msk = (self._bkg.counts > 0)&(self._bkg.axis().center>4.0)
         bkg_err = np.log10(1.0 + self._bkg.err[msk]/self._bkg.counts[msk])
 
+        print knots
+        print self._bkg.axis().center[msk]
+        print self._bkg.counts[msk]
+        print np.log10(self._bkg.counts[msk])
+        print bkg_err
+        
+        knots = self._bkg.axis().center[msk][::3]
         self._log_bkg_fn = BSpline.fit(self._bkg.axis().center[msk],
                                        np.log10(self._bkg.counts[msk]),
-                                       bkg_err,
-                                       np.linspace(4.0,8.0,8),4)
+                                       bkg_err,knots,3)
+
+        import pprint
+        pprint.pprint(self._log_bkg_fn.__dict__)
 
         
 #        plt.figure()
 #        self._bkg.plot()
-#        x = np.linspace(4,8,100)        
-#        plt.plot(x,10**self._bkg_fn(x))        
+#        x = np.linspace(4,8,100) 
+#        print 10**self._log_bkg_fn(x)
+#        plt.plot(x,10**self._log_bkg_fn(x))        
 #        plt.gca().set_yscale('log')        
 #        plt.show()
         
@@ -187,16 +204,25 @@ class IRFModel(object):
                               counts=d['bkg_wcounts_rate']['counts'],
                               var=d['bkg_wcounts_rate']['var'])
 
+        if np.sum(bkg_ptsrc.var) == 0:
+            bkg_ptsrc._var = (bkg_ptsrc.counts * 0.1)**2
+
         bkg = Histogram(d['bkg_wcounts_rate_density']['xedges']+3.0,
                         counts=d['bkg_wcounts_rate_density']['counts'],
                         var=d['bkg_wcounts_rate_density']['var'])
 
         bkg *= Units._deg2
 
+        if np.sum(bkg.var) == 0:
+            bkg._var = (bkg.counts * 0.1)**2
+
 
         psf = Histogram(d['th68']['xedges']+3.0,
                          counts=d['th68']['counts'],
                          var=0)
+
+        msk = psf.counts == 0
+        psf._counts[msk]=0.1
 
         edisp = Histogram(d['edisp68']['xedges']+3.0,
                          counts=np.log10(1.0+d['edisp68']['counts']),

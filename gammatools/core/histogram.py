@@ -230,10 +230,10 @@ class HistogramND(object):
         self._counts += counts
         self._var += var
 
-    def random(self,method='poisson'):
+    def random(self,method='poisson',scale=1.0):
         """Generate a randomized histogram."""
 
-        c = np.array(np.random.poisson(self._counts),dtype='float')
+        c = np.array(np.random.poisson(scale*self._counts),dtype='float')
         v = copy.copy(c)
 
         return HistogramND.create(self._axes,c,v,self._style)
@@ -910,6 +910,42 @@ class Histogram(HistogramND):
     def label(self):
         return self._style['label']
 
+    def _band(self,ax=None,style='step',alpha=0.2,**kwargs):
+        if ax is None: ax = plt.gca()
+
+        kw = extract_dict_by_keys(kwargs,MPLUtil.errorbar_kwargs)
+        clear_dict_by_vals(kw,None)
+
+        kw_fill = extract_dict_by_keys(kwargs,MPLUtil.fill_kwargs)
+        clear_dict_by_vals(kw_fill,None)
+        kw_fill['alpha'] = alpha
+
+        if style=='step':
+            xedge = self._axes[0].edges
+            x = np.vstack((xedge[:-1],xedge[1:],xedge[1:])).ravel([-1])
+            y = np.vstack((self.counts,
+                           self.counts,
+                           self.counts)).ravel([-1])
+
+            yerr = np.vstack((self.err,
+                              self.err,
+                              self.err)).ravel([-1])
+        
+            ebar = ax.errorbar(x,y,**kw)
+            kw_fill['color'] = ebar[0].get_color()
+            ax.fill_between(x,y+yerr,y-yerr,**kw_fill)
+        elif style=='center':
+
+            ebar = ax.errorbar(self._axes[0].center,self.counts,**kw)
+            kw_fill['color'] = ebar[0].get_color()
+            ax.fill_between(self._axes[0].center,
+                            self.counts+self.err,
+                            self.counts-self.err,**kw_fill)
+        else:
+            raise Exception('Unrecognized band style: ', style)
+
+
+
     def _errorbar(self, label_rotation=0,
                  label_alignment='center', ax=None, 
                  counts=None, x=None,**kwargs):
@@ -983,16 +1019,18 @@ class Histogram(HistogramND):
             frac_err = np.sqrt(self._var)/self._counts
             style['msk'] = frac_err <= style['max_frac_error']
 
-        if style['hist_style'] == 'errorbar':
+        hs = style['hist_style']
+
+        if hs == 'errorbar':
             return self._errorbar(ax=ax,counts=c,**style)
-        elif style['hist_style'] == 'line':
+        elif hs == 'line':
 
             style['marker'] = 'None'
             style['hist_xerr'] = False
             style['hist_yerr'] = False
             style['fmt'] = '-'
             return self._errorbar(ax=ax,counts=c,**style)
-        elif style['hist_style'] == 'filled':
+        elif hs == 'filled':
 
             draw_style = copy.deepcopy(style)
             clear_dict_by_keys(draw_style,
@@ -1004,7 +1042,7 @@ class Histogram(HistogramND):
             del draw_style['drawstyle']
 
             return self.hist(ax=ax,histtype='bar',counts=c,**draw_style)
-        elif style['hist_style'] == 'step':
+        elif hs == 'step':
             
             c = np.concatenate(([0],c,[0]))
             edges = np.concatenate((self._axes[0].edges,
@@ -1018,6 +1056,10 @@ class Histogram(HistogramND):
             return self._errorbar(ax=ax,counts=c,
                                  x=edges,**style)
 
+        elif hs == 'band' or hs == 'band_step' :
+            return self._band(style='step',**style)  
+        elif hs == 'band_center' :
+            return self._band(style='center',**style)  
         else:
             raise Exception('Unrecognized style: ' + style)
 
