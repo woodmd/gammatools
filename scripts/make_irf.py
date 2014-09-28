@@ -100,6 +100,9 @@ parser = OptionParser(usage=usage,description=description)
 parser.add_option("--selection",default=None,type='string',
                   help=".")
 
+parser.add_option("--new_edisp",default=False,action='store_true',
+                  help=".")
+
 parser.add_option("--friends",default=None,type='string',
                   help=".")
 
@@ -109,7 +112,7 @@ parser.add_option("--cuts_file",default=None,type='string',
 parser.add_option("--class_name",default=None,type='string',
                   help="Set the class name.")
 
-parser.add_option("--irf_scaling",default=None,
+parser.add_option("--irf_scaling",default='pass7',
                   help="Set the class name.")
 
 parser.add_option("--psf_scaling",default=None,
@@ -119,6 +122,9 @@ parser.add_option("--psf_overlap",default='1/1',
                   help="Set the PSF overlap parameters for energy/angle.")
 
 parser.add_option("--edisp_overlap",default='1/1',
+                  help="Set the class name.")
+
+parser.add_option("--recon_var", default='WP8Best',
                   help="Set the class name.")
 
 parser.add_option("--generated",default=None,type='float',
@@ -192,6 +198,8 @@ if not opts.selection is None:
 branch_names = get_branches(cut_expr)
 branch_names = list(set(branch_names))
 
+branch_names += ['%s*'%opts.recon_var]
+
 friends = ''
 if not opts.friends is None:
 
@@ -202,16 +210,23 @@ if not opts.friends is None:
     
     friends = '\'%s\' : [ %s ]'%(input_file_path,','.join(friends_list))
 
+FRONT_SCALE_PARAMS_P8 = [0.0195, 0.1831, -0.2163, -0.4434, 0.0510, 0.6621] 
+BACK_SCALE_PARAMS_P8 = [0.0167, 0.1623, -0.1945, -0.4592, 0.0694, 0.5899]
     
-if opts.irf_scaling is None:
+    
+if opts.irf_scaling is 'pass7':
     psf_pars_string = '[5.81e-2, 3.77e-4, 9.6e-2, 1.3e-3, -0.8]'
     edisp_front_pars_string = '[0.0210, 0.058, -0.207, -0.213, 0.042, 0.564]'
     edisp_back_pars_string = '[0.0215, 0.0507, -0.22, -0.243, 0.065, 0.584]'
-elif opts.irf_scaling == 'front':
+elif opts.irf_scaling == 'pass8':
+    psf_pars_string = '[5.81e-2, 3.77e-4, 9.6E-2, 1.3E-3, -0.8]'
+    edisp_front_pars_string = '[0.0195, 0.1831, -0.2163, -0.4434, 0.0510, 0.6621]'
+    edisp_back_pars_string = '[0.0167, 0.1623, -0.1945, -0.4592, 0.0694, 0.5899]'    
+elif opts.irf_scaling == 'p8front':
     psf_pars_string = '[5.81e-2, 3.77e-4, 5.81e-2, 3.77e-4, -0.8]'
-    edisp_front_pars_string = '[0.0210, 0.058, -0.207, -0.213, 0.042, 0.564]'
-    edisp_back_pars_string = '[0.0210, 0.058, -0.207, -0.213, 0.042, 0.564]'
-elif opts.irf_scaling == 'back':
+    edisp_front_pars_string = '[0.0195, 0.1831, -0.2163, -0.4434, 0.0510, 0.6621]'
+    edisp_back_pars_string = '[0.0167, 0.1623, -0.1945, -0.4592, 0.0694, 0.5899]'
+elif opts.irf_scaling == 'p8back':
     psf_pars_string = '[9.6e-2, 1.3e-3, 9.6e-2, 1.3e-3, -0.8]'
     edisp_front_pars_string = '[0.0215, 0.0507, -0.22, -0.243, 0.065, 0.584]'
     edisp_back_pars_string = '[0.0215, 0.0507, -0.22, -0.243, 0.065, 0.584]'
@@ -249,7 +264,6 @@ Prune.cuts = '%s'
 Prune.branchNames = """
 McEnergy  McLogEnergy McXDir  McYDir  McZDir
 Tkr1FirstLayer
-WP8Best*
 EvtRun
 %s
 """.split()
@@ -260,15 +274,17 @@ Data.logemin = [%s]
 Data.logemax = [%s]
 #Bins.logemin = 0.75
 #Bins.logemax = 6.5
-Bins.set_energy_range(0.75,6.5)
-EffectiveAreaBins.set_energy_range(0.75,6.5)
+Bins.set_energy_bins(0.75,6.5)
+EffectiveAreaBins.set_energy_bins(0.75,6.5)
+FisheyeBins.set_energy_bins(0.75,6.5,0.125)
+FisheyeBins.set_angle_bins(0.2,0.05)
 
 Data.friends = { %s }
 
-Data.var_xdir = 'WP8BestXDir'
-Data.var_ydir = 'WP8BestYDir'
-Data.var_zdir = 'WP8BestZDir'
-Data.var_energy = 'WP8BestEnergy'
+Data.var_xdir = '%sXDir'
+Data.var_ydir = '%sYDir'
+Data.var_zdir = '%sZDir'
+Data.var_energy = '%sEnergy'
 
 Bins.edisp_energy_overlap = %s
 Bins.edisp_angle_overlap = %s
@@ -285,7 +301,9 @@ parameterFile = 'parameters.root'
 '''%(opts.class_name,cut_expr,' '.join(branch_names),
      ','.join(input_file_strings), ','.join(generated_array),
      ','.join(emin_array), ','.join(emax_array), 
-     friends,edisp_energy_overlap,edisp_angle_overlap,
+     friends,
+     opts.recon_var,opts.recon_var,opts.recon_var,opts.recon_var,
+     edisp_energy_overlap,edisp_angle_overlap,
      psf_energy_overlap,psf_angle_overlap,
      psf_pars_string,edisp_front_pars_string,edisp_back_pars_string)
 
@@ -319,7 +337,7 @@ if not os.path.isfile('parameters.root'):
     
 #os.chdir(irf_dir)
 
-cmd = 'makefits %s %s'%('parameters.root',opts.class_name)
+cmd = 'makefits new_edisp=%s %s %s'%(opts.new_edisp,'parameters.root',opts.class_name)
 print cmd
 os.system(cmd)
 

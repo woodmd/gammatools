@@ -60,27 +60,33 @@ except ImportError:
 #define default binning as attributes of object Bins
 class Bins(object):
 
-    @staticmethod
-    def set_energy_range(logemin=None,logemax=None):
+    @classmethod
+    def set_energy_bins(cls,logemin=None,logemax=None,logedelta=None):
 
-        if logemin is None: logemin = Bins.logemin
-        if logemax is None: logemax = Bins.logemax
+        if logemin is None: logemin = cls.logemin
+        if logemax is None: logemax = cls.logemax
+        if logedelta is None: logedelta = cls.logedelta
         
-        Bins.energy_bins = int((logemax-logemin)/Bins.logedelta)
-        Bins.energy_bin_edges = (num.arange(Bins.energy_bins+1)*
-                                 Bins.logedelta+logemin).tolist()
+        cls.energy_bins = int((logemax-logemin)/logedelta)
+        cls.energy_bin_edges = (num.arange(cls.energy_bins+1)*logedelta+logemin).tolist()
 
-        print 'Energy Bins ', Bins.energy_bin_edges
-    
+        print 'Energy Bins ', cls.energy_bin_edges
+
+    @classmethod
+    def set_angle_bins(cls,cthmin=None,cthdelta=None):
+        if cthmin is None: cthmin = cls.cthmin
+        if cthdelta is None: cthdelta = cls.cthdelta
+
+        cls.angle_bins = int((1.0-cthmin)/cthdelta)    
+        cls.angle_bin_edges = num.arange(cls.angle_bins+1)*cthdelta+cthmin
+        
+        
     logemin = 1.25
     logemax = 5.75
     logedelta = 0.25 #4 per decade
-        
-    deltaCostheta = 0.1
-    cthmin = 0.2;
-    angle_bins = int((1-cthmin)/deltaCostheta)
-    
-    angle_bin_edges = num.arange(angle_bins+1)*deltaCostheta+cthmin
+
+    cthmin = 0.2
+    cthdelta = 0.1
 
     # no overlap with adjacent bins for energy dispersion fits
     edisp_energy_overlap = 0  
@@ -90,8 +96,20 @@ class Bins(object):
     psf_energy_overlap = 0  
     psf_angle_overlap = 0
 
-Bins.set_energy_range()
+Bins.set_energy_bins()
+Bins.set_angle_bins()
 
+
+class FisheyeBins(Bins):
+    logemin = Bins.logemin
+    logemax = Bins.logemax
+    logedelta = 0.25
+
+    cthmin = 0.2
+    cthdelta = 0.1
+
+FisheyeBins.set_energy_bins()
+FisheyeBins.set_angle_bins()
     
     
 class EffectiveAreaBins(Bins):
@@ -106,32 +124,38 @@ class EffectiveAreaBins(Bins):
     logedelta = Bins.logedelta 
     # generate list with different 
     anglebinfactor=4 # bins multiplier
-    angle_bin_edges = num.arange(Bins.angle_bins*anglebinfactor+1)*Bins.deltaCostheta/anglebinfactor+Bins.cthmin
+    angle_bin_edges = num.arange(Bins.angle_bins*anglebinfactor+1)*Bins.cthdelta/anglebinfactor+Bins.cthmin
 
-    @staticmethod
-    def set_energy_range(logemin=None,logemax=None):
+    @classmethod
+    def set_energy_bins(cls,logemin=None,logemax=None):
 
-        if logemin is None: logemin = EffectiveAreaBins.logemin
-        if logemax is None: logemax = EffectiveAreaBins.logemax
+        if logemin is None: logemin = cls.logemin
+        if logemax is None: logemax = cls.logemax
         
-        EffectiveAreaBins.energy_bin_edges = []
+        cls.energy_bin_edges = []
         x = logemin
-        factor = EffectiveAreaBins.ebinfactor
+        factor = cls.ebinfactor
         while x<logemax+0.01:
-            if x>= EffectiveAreaBins.ebreak: factor = EffectiveAreaBins.ebinhigh
-            EffectiveAreaBins.energy_bin_edges.append(x)
-            x += EffectiveAreaBins.logedelta/factor
+            if x>= cls.ebreak: factor = cls.ebinhigh
+            cls.energy_bin_edges.append(x)
+            x += cls.logedelta/factor
 
-        print 'Energy Bins ', EffectiveAreaBins.energy_bin_edges
+        print 'Energy Bins ', cls.energy_bin_edges
 
-EffectiveAreaBins.set_energy_range()
+EffectiveAreaBins.set_energy_bins()
             
 class PSF(object):
     pass
 
 class Edisp(object):
-    pass
-
+    Version=2
+    #Scale Parameters
+    front_pars = [0.0195, 0.1831, -0.2163, -0.4434, 0.0510, 0.6621]
+    back_pars = [0.0167, 0.1623, -0.1945, -0.4592, 0.0694, 0.5899]
+    #Fit Parameters key=name, value=[pinit,pmin,max]
+#    fit_pars = {"f":[0.96,0.5,1.],"s1":[1.5,0.1,5.], "k1":[1.2,0.1,5.], "bias":[0.,-3.,3.], "s2":[2.5,0.8,8],  "k2":[.8,.01,8],"bias2":[0.,-3.,3.], "pindex1":[1.8,0.01,2],"pindex2":[1.8,0.01,2]}
+    fit_pars = {"f":[0.8,0.3,1.0],"s1":[1.5,0.1,5.0], "k1":[1.0,0.1,3.0], "bias":[0.0,-3,3], "bias2":[0.0,-3,3], "s2":[4.0,1.2,10], "k2":[1.0,0.1,3.0],"pindex1":[2.0,0.1,5],"pindex2":[2.0,0.1,5]}
+    
 # the log file - to cout if null
 logFile = 'log.txt'
 
