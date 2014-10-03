@@ -62,7 +62,7 @@ cat.plot(im,ax=plt.gca(),label_threshold=5,src_color='w')
 
 # Make 1D projection on LON axis
 plt.figure()
-pim = im.project(0)
+pim = im.project(0,offset_coord=True)
 pim.plot()
 plt.gca().grid(True)
 
