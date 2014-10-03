@@ -35,13 +35,15 @@ class FITSPlotter(object):
 
     fignum = 0
     
-    def __init__(self,im,im_mdl,irf=None,prefix=None,outdir='plots'):
+    def __init__(self,im,im_mdl,irf=None,prefix=None,outdir='plots',
+                 rsmooth=0.2):
 
         self._ft = FigTool(fig_dir=outdir)
         self._im = im
         self._im_mdl = im_mdl
         self._irf = irf
         self._prefix = prefix
+        self._rsmooth = rsmooth
         if self._prefix is None: self._prefix = 'fig'
         if outdir: self._prefix_path = os.path.join(outdir,self._prefix)
         
@@ -143,7 +145,7 @@ class FITSPlotter(object):
                                                                smooth,mc=True,
                                                                resid_type=resid_type))
                     h = self.make_residual_map(h,hm,smooth,resid_type=resid_type)
-                elif smooth: h = h.smooth(0.2,compute_var=True)
+                elif smooth: h = h.smooth(self._rsmooth,compute_var=True)
                 
 #                h = self.make_counts_map(im,ibin,ibin+delta_bin,
 #                                         residual,smooth)
@@ -189,8 +191,8 @@ class FITSPlotter(object):
                                  dtype='float')
             
         if smooth:
-            hm = hm.smooth(0.2,compute_var=True,summed=True)
-            h = h.smooth(0.2,compute_var=True,summed=True)
+            hm = hm.smooth(self._rsmooth,compute_var=True,summed=True)
+            h = h.smooth(self._rsmooth,compute_var=True,summed=True)
 
         ts = 2.0*(poisson_lnl(h.counts,h.counts) -
                   poisson_lnl(h.counts,hm.counts))
@@ -1285,7 +1287,8 @@ class PlotPanel(BasePanel):
                 cm = im
 
             h = cm.project(self._pindex,
-                           bin_range=proj_bin_range).rebin(self.rebin)
+                           bin_range=proj_bin_range,
+                           offset_coord=True).rebin(self.rebin)
 
             if self._norm: h = h.normalize()
             

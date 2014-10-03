@@ -53,6 +53,8 @@ parser.add_argument('files', nargs='+')
 
 parser.add_argument('--gui', action='store_true')
 
+parser.add_argument('--rsmooth', default=0.2, type=float)
+
 parser.add_argument('--model_file', default=None)
 parser.add_argument('--prefix', default=None)
 
@@ -145,7 +147,7 @@ else:
         im_mdl = FITSImage.createFromHDU(model_hdu)
     
 
-    fp = FITSPlotter(im,im_mdl,m,args.prefix)
+    fp = FITSPlotter(im,im_mdl,m,args.prefix,rsmooth=args.rsmooth)
         
     if isinstance(im,SkyImage):
         fp.make_projection_plots_skyimage(im)

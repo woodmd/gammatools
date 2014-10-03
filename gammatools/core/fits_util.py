@@ -220,16 +220,16 @@ class FITSImage(HistogramND):
             h._axes[0] = Axis(h.axis().pix_to_coord(h.axis().edges()))
             return h
 
-    def project(self,pdims,bin_range=None):
+    def project(self,pdims,bin_range=None,offset_coord=False):
 
         h = HistogramND.project(self,pdims,bin_range)
-        return self.create(h)
+        return self.create(h,offset_coord=offset_coord)
         
-    def marginalize(self,mdims,bin_range=None):
+    def marginalize(self,mdims,bin_range=None,offset_coord=False):
 
         mdims = np.array(mdims,ndmin=1,copy=True)
         pdims = np.setdiff1d(self._dims,mdims)
-        return self.project(pdims,bin_range)
+        return self.project(pdims,bin_range,offset_coord=offset_coord)
 
     @property
     def lat(self):
@@ -247,23 +247,26 @@ class FITSImage(HistogramND):
     def wcs(self):
         return self._wcs
     
-    def create(self,h):
+    def create(self,h,offset_coord=False):
         """Take an input HistogramND object and cast it into a
         SkyImage if appropriate."""
 
+        print 'offset_coord ', offset_coord
+        
         if h.ndim() == 2:
 
             if h.axis(0)._sky_coord and h.axis(1)._sky_coord:
                 return SkyImage(self._wcs,h.axes(),h.counts,
                                 self._roi_radius_deg,self._roi_msk)
             else:
-                axis0 = Axis(h.axis(0).pix_to_coord(h.axis(0).edges))
-                axis1 = Axis(h.axis(1).pix_to_coord(h.axis(1).edges))
+                axis0 = Axis(h.axis(0).pix_to_coord(h.axis(0).edges,not offset_coord))
+                axis1 = Axis(h.axis(1).pix_to_coord(h.axis(1).edges,not offset_coord))
+                
                 h._axes[0] = axis0
                 h._axes[1] = axis1
                 return h
         else:
-            h._axes[0] = Axis(h.axis().pix_to_coord(h.axis().edges))
+            h._axes[0] = Axis(h.axis().pix_to_coord(h.axis().edges, not offset_coord))
             return h
 
     @staticmethod
