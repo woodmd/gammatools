@@ -19,6 +19,7 @@ class MPLUtil(object):
     errorbar_kwargs = ['marker','markersize','color','markerfacecolor',
                        'markeredgecolor','linestyle','linewidth','label',
                        'drawstyle']
+    hist_kwargs = ['color','alpha','histtype','label']
 
 class PowerNormalize(matplotlib.colors.Normalize):
     def __init__(self, vmin=None, vmax=None, power=2., clip=False):

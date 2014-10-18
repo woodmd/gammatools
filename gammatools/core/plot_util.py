@@ -258,7 +258,7 @@ class FigureSubplot(object):
         ax.grid(True)
         if len(labels) > 0 and style['legend']:
             ax.legend(prop={'size' : style['legend_fontsize']},
-                      loc=style['legend_loc'],ncol=1)
+                      loc=style['legend_loc'],ncol=1,numpoints=1)
 
         if not style['ylabel'] is None:
             ax.set_ylabel(style['ylabel'])

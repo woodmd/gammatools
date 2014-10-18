@@ -920,6 +920,8 @@ class Histogram(HistogramND):
         clear_dict_by_vals(kw_fill,None)
         kw_fill['alpha'] = alpha
 
+        artists = []
+        
         if style=='step':
             xedge = self._axes[0].edges
             x = np.vstack((xedge[:-1],xedge[1:],xedge[1:])).ravel([-1])
@@ -946,6 +948,14 @@ class Histogram(HistogramND):
         else:
             raise Exception('Unrecognized band style: ', style)
 
+        if 'where' in kw_fill: kw_fill.pop('where')
+        
+        patch, = [ax.add_patch(plt.Rectangle((0,0),0,0,**kw_fill))]
+        
+        artists += [ebar]
+        artists += [patch]
+
+        return artists
 
 
     def _errorbar(self, label_rotation=0,
@@ -980,18 +990,24 @@ class Histogram(HistogramND):
         kw = extract_dict_by_keys(style,MPLUtil.errorbar_kwargs)
         clear_dict_by_vals(kw,None)
 
-        errorbar = ax.errorbar(x[msk], counts[msk],xerr=xerr,yerr=yerr,**kw)
+        ebar = ax.errorbar(x[msk], counts[msk],xerr=xerr,yerr=yerr,**kw)
         self._prepare_xaxis(label_rotation, label_alignment)
-        return errorbar
+        return [ebar]
 
     def hist(self,ax=None,counts=None,**kwargs):
         """Plot this histogram using the 'hist' matplotlib method."""
         if ax is None: ax = plt.gca()
         if counts is None: counts = self._counts
 
-        ax.hist(self._axes[0].center, self._axes[0].nbins,
-                range=[self._axes[0].lo_edge(),self._axes[0].hi_edge()],
-                weights=counts,**kwargs)
+        style = kwargs
+        
+        kw = extract_dict_by_keys(style,MPLUtil.hist_kwargs)
+        clear_dict_by_vals(kw,None)
+        
+        hist = ax.hist(self._axes[0].center, self._axes[0].nbins,
+                       range=[self._axes[0].lo_edge(),self._axes[0].hi_edge()],
+                       weights=counts,**kw)
+        return [hist]
 
 
     def plot(self,ax=None,overflow=False,**kwargs):
@@ -1000,6 +1016,8 @@ class Histogram(HistogramND):
 
         All additional keyword arguments will be passed to
         :func:`matplotlib.pyplot.plot`.
+
+        Returns an array of matplotlib artists.
         """
 
         style = copy.deepcopy(self._style)
@@ -1032,18 +1050,16 @@ class Histogram(HistogramND):
             style['hist_yerr'] = False
             style['fmt'] = '-'
             return self._errorbar(ax=ax,counts=c,**style)
-        elif hs == 'filled':
+        elif hs == 'stepfilled' or hs == 'bar':
 
-            draw_style = copy.deepcopy(style)
-            clear_dict_by_keys(draw_style,
-                               Histogram.default_draw_style.keys(),False)
-            clear_dict_by_vals(draw_style,None)
-            draw_style['linewidth'] = 0
-            del draw_style['linestyle']
-            del draw_style['marker']
-            del draw_style['drawstyle']
+            style['histtype'] = hs
+            
+#            draw_style['linewidth'] = 0
+#            del draw_style['linestyle']
+ #           del draw_style['marker']
+ #           del draw_style['drawstyle']
 
-            return self.hist(ax=ax,histtype='bar',counts=c,**draw_style)
+            return self.hist(ax=ax,counts=c,**style)
         elif hs == 'step':
             
             c = np.concatenate(([0],c,[0]))
@@ -1063,7 +1079,7 @@ class Histogram(HistogramND):
         elif hs == 'band_center' :
             return self._band(style='center',**style)  
         else:
-            raise Exception('Unrecognized style: ' + style)
+            raise Exception('Unrecognized style: ' + hs)
 
     def scale_density(self,fn):
 
