@@ -72,22 +72,29 @@ class FITSPlotter(object):
 #        fig.savefig('%s_%s.png'%(self._prefix,suffix))
 
     def make_plots_skycube(self,delta_bin=None,paxis=None,plots_per_fig=4,
-                           smooth=False, resid_type=None,
-                           suffix='',model=False, **kwargs):
+                           smooth=False, resid_type=None,make_projection=False,
+                           suffix='',model=False, projection='psf68',**kwargs):
 
         if model: im = self._im_mdl
         else: im = self._im
         
         nbins = im.axis(2).nbins
         if delta_bin is None:
-            delta_bin = np.array([0,nbins])
+            bins = np.array([0,nbins])
             nplots = 1
         else:
-            delta_bin = np.array([0,2,4,4,12])
-            nplots = 4
+#            delta_bin = np.array([0,2,4,4,12])
+#            nplots = 4
 
-        bins = np.cumsum(delta_bin)
+            bins = np.cumsum(np.concatenate(([0],delta_bin)))
+            nplots = len(bins)-1
+
         nfig = int(np.ceil(float(nplots)/float(plots_per_fig)))
+
+        print 'bins ', bins
+        print 'nplots ', nplots
+        print 'nfig ', nfig
+        print 'plots_per_fig ', plots_per_fig
         
         if plots_per_fig > 4 and plots_per_fig <= 8:
             nx, ny = 4, 2
@@ -99,84 +106,154 @@ class FITSPlotter(object):
         fig_sx = 5.0*nx
         fig_sy = 5.0*ny
 
+
+        figs = []
+        for i in range(nfig):
+            
+#            fig_label = '%0'%(fig_emin*1000,fig_emax*1000)
+            fig_label = '%02i'%i
+            fig_name = '%s_%s%s.png'%(self._prefix_path,fig_label,suffix)
+            fig2_name = '%s_%s%s_zproj.png'%(self._prefix_path,fig_label,suffix)
+            fig3_name = '%s_%s%s_xproj.png'%(self._prefix_path,fig_label,suffix)
+            fig4_name = '%s_%s%s_yproj.png'%(self._prefix_path,fig_label,suffix)
+            
+            
+            figs.append({'fig'  : self.create_figure(figsize=(fig_sx,fig_sy)),
+                         'fig2' : self.create_figure(figsize=(fig_sx,fig_sy)),
+                         'fig3' : self.create_figure(figsize=(fig_sx,fig_sy)),
+                         'fig4' : self.create_figure(figsize=(fig_sx,fig_sy)),
+                         'fig_name' : fig_name,
+                         'fig2_name' : fig2_name,
+                         'fig3_name' : fig3_name,
+                         'fig4_name' : fig4_name,
+                         })
+            
+        plots = []
+        for i in range(nplots):
+                           
+            ifig = i/plots_per_fig
+            plots.append({'fig'  : figs[ifig]['fig'],
+                          'fig2' : figs[ifig]['fig2'],
+                          'fig3' : figs[ifig]['fig3'],
+                          'fig4' : figs[ifig]['fig4'],
+                          'ibin' : [bins[i], bins[i+1]],
+                          'subplot' : i%plots_per_fig,
+                         })
+                          
+
+        print plots
+            
+        
 #        figs = []
 #        for i in range(nfig): figs.append(plt.figure(figsize=(fig_sx,fig_sy)))
         
-        for i in range(nfig):
-
-#        fig, axes = plt.subplots(2,4,figsize=(1.5*10,1.5*5))
-
-            fig = self.create_figure(figsize=(fig_sx,fig_sy))
-            fig2 = self.create_figure(figsize=(fig_sx,fig_sy))
+        for i, p in enumerate(plots):
             ##plt.figure(FITSPlotter.fignum,figsize=(fig_sx,fig_sy))
 
-            imin, imax = i*nfig, min(nplots,i*nfig+plots_per_fig)            
-            ibin0, ibin1 = bins[imin], bins[imax]
             
-            fig_emin = im.axis(2).pix_to_coord(ibin0)
-            fig_emax = im.axis(2).pix_to_coord(ibin1)
+            ibin0, ibin1 = p['ibin']
+            emin = im.axis(2).pix_to_coord(ibin0)
+            emax = im.axis(2).pix_to_coord(ibin1)
 
-            #            fig2 = plt.figure(100+i,figsize=(fig_sx,fig_sy))
-            for j in range(plots_per_fig):
+            print 'ibin0, ibin1 ', ibin0, ibin1            
+            
+            rpsf68 = self._irf.quantile(10**emin,10**emax,0.2,1.0,0.68)
+            rpsf95 = self._irf.quantile(10**emin,10**emax,0.2,1.0,0.95)
 
-                iplot = i*nfig+j
-
-                if iplot >= nplots: break
+            if smooth:
+                delta_proj = 0.0
+            elif projection== 'psf68':
+                delta_proj = rpsf68
+            elif isinstance(projection,float):
+                delta_proj = projection
                 
-                ibin0 = bins[iplot]
-                ibin1 = bins[iplot+1]
-                print i, j, ibin0, ibin1
-                
-                
-                if ibin0 >= nbins: break
-#                print i, j, ibin
+            x0 = im.axis(0).coord_to_pix(delta_proj,False)
+            x1 = im.axis(0).coord_to_pix(-delta_proj,False)
+            y0 = im.axis(1).coord_to_pix(-delta_proj,False)
+            y1 = im.axis(1).coord_to_pix(delta_proj,False)
 
-                h = im.marginalize(2,[[ibin0,ibin1]])
-                hm = None
-                if self._im_mdl:
-                    hm = self._im_mdl.marginalize(2,[[ibin0,ibin1]])
+            if smooth:
+                x1 = x0+1
+                y1 = y0+1
 
-                mc_resid = []
-                
-                    
-                if resid_type:
-                    for k in range(10):
-                        mc_resid.append(self.make_residual_map(h,hm,
-                                                               smooth,mc=True,
-                                                               resid_type=resid_type))
-                    h = self.make_residual_map(h,hm,smooth,resid_type=resid_type)
-                elif smooth: h = h.smooth(self._rsmooth,compute_var=True)
+            title = 'log$_{10}$(E/MeV) = [%.3f, %.3f]'%(emin,emax)                
+            subplot = '%i%i%i'%(ny,nx,p['subplot']+1)
+            
+            fig = p['fig']
+            fig2 = p['fig2']
+            fig3 = p['fig3']
+            fig4 = p['fig4']
+
+            h = im.marginalize(2,[[ibin0,ibin1]])
+            hm = None
+            if self._im_mdl:
+                hm = self._im_mdl.marginalize(2,[[ibin0,ibin1]])
+
+            mc_resid = []
+
+            if resid_type:
+                for k in range(10):
+                    mc_resid.append(self.make_residual_map(h,hm,
+                                                           smooth,mc=True,
+                                                           resid_type=resid_type))
+                h = self.make_residual_map(h,hm,smooth,resid_type=resid_type)
+            elif smooth:
+                h = h.smooth(self._rsmooth,compute_var=True)
+                hm = hm.smooth(self._rsmooth,compute_var=True)
                 
 #                h = self.make_counts_map(im,ibin,ibin+delta_bin,
 #                                         residual,smooth)
+                
 
-                emin = im.axis(2).pix_to_coord(ibin0)
-                emax = im.axis(2).pix_to_coord(ibin1)
-                
-                rpsf68 = self._irf.quantile(10**emin,10**emax,0.2,1.0,0.68)
-                rpsf95 = self._irf.quantile(10**emin,10**emax,0.2,1.0,0.95)
-                
-                title = 'log$_{10}$(E/MeV) = [%.3f %.3f]'%(emin,emax)
-                
-                subplot = '%i%i%i'%(ny,nx,j+1)
-                
-                if paxis is None:
-                    self.make_image_plot(subplot,h,fig,fig2,
-                                         title,rpsf68,rpsf95,
-                                         resid_type=resid_type,
-                                         mc_resid=mc_resid,**kwargs)
-                else:
-                    ax = fig.add_subplot(subplot)
-                    hp = h.project(paxis)
-                    hp.plot(ax=ax,**kwargs)
-                    ax.set_xlim(*hp.axis().lims())
-                
-#                ax.set_ylim(0)
+            self.make_image_plot(subplot,h,fig,fig2,
+                                 title,rpsf68,rpsf95,
+                                 smooth=smooth,
+                                 resid_type=resid_type,
+                                 mc_resid=mc_resid,**kwargs)
 
-        fig_label = '%04.f_%04.f'%(fig_emin*1000,fig_emax*1000)
-                    
-        fig.savefig('%s_%s%s.png'%(self._prefix_path,fig_label,suffix))
-        fig2.savefig('%s_%s%s_zproj.png'%(self._prefix_path,fig_label,suffix))
+            if make_projection:
+                ax = fig3.add_subplot(subplot)
+                plt.sca(ax)
+                
+                hpx = h.project(0,[[x0,x1]],offset_coord=True)
+                hpx.plot(ax=ax,linestyle='None',label='Data',**kwargs)
+                
+                if hm:
+                    hmpx = hm.project(0,[[x0,x1]],offset_coord=True)
+                    hmpx.plot(ax=ax,label='Model',hist_style='line',linestyle='-',**kwargs)
+
+                ax.grid(True)
+                ax.set_xlabel('GLON Offset')
+                ax.set_xlim(*hpx.axis().lims())
+                ax.legend(loc='upper right')
+                ax.set_ylim(0)
+                ax.set_title(title)
+                
+                ax = fig4.add_subplot(subplot)
+                plt.sca(ax)
+                hpy = h.project(1,[[y0,y1]],offset_coord=True)
+                hpy.plot(ax=ax,linestyle='None',label='Data',**kwargs)
+
+                if hm:
+                    hmpy = hm.project(1,[[y0,y1]],offset_coord=True)
+                    hmpy.plot(ax=ax,label='Model',hist_style='line',linestyle='-',**kwargs)
+            
+                ax.grid(True)
+                ax.set_xlabel('GLAT Offset')
+                ax.set_xlim(*hpy.axis().lims())
+                ax.legend(loc='upper right')                
+                ax.set_ylim(0)
+                ax.set_title(title)
+
+        for f in figs:
+            f['fig'].savefig(f['fig_name'])
+
+            if not resid_type is None:
+                f['fig2'].savefig(f['fig2_name'])
+
+            if make_projection:
+                f['fig3'].savefig(f['fig3_name'])
+                f['fig4'].savefig(f['fig4_name'])
 
     def create_figure(self,**kwargs):
         fig = plt.figure('Figure %i'%FITSPlotter.fignum,**kwargs)
@@ -215,6 +292,7 @@ class FITSPlotter(object):
         
 
     def make_image_plot(self,subplot,h,fig,fig2,title,rpsf68,rpsf95,
+                        smooth=False,
                         resid_type=None,mc_resid=None,**kwargs):
 
         plt.figure(fig.get_label())
@@ -232,9 +310,12 @@ class FITSPlotter(object):
             kwargs['levels'] = [-1.0,-0.5,0.5,1.0]
             cb_label = 'Fractional Residual'
 
+        if smooth:
+            kwargs['beam_size'] = [self._rsmooth,self._rsmooth,0.0,4]
+            
         axim = h.plot(subplot=subplot,cmap='ds9_b',**kwargs)
-        h.plot_circle(rpsf68,color='w')
-        h.plot_circle(rpsf95,color='w',linestyle='--')
+        h.plot_circle(rpsf68,color='w',lw=1.5)
+        h.plot_circle(rpsf95,color='w',linestyle='--',lw=1.5)
         h.plot_marker(marker='+',color='w',linestyle='--')
         ax = h.ax()
         ax.set_title(title)
@@ -247,6 +328,8 @@ class FITSPlotter(object):
         cat = Catalog.get('3fgl')
         cat.plot(h,ax=ax,src_color='w',label_threshold=5.0)
 
+        if resid_type is None: return
+        
         plt.figure(fig2.get_label())        
         ax2 = fig2.add_subplot(subplot)
 
@@ -1296,7 +1379,8 @@ class PlotPanel(BasePanel):
 
         if len(self._lines) == 0:
 
-            for i, p in enumerate(pcm): self._lines.append(p.plot(**self._style[i]))
+            for i, p in enumerate(pcm):
+                self._lines.append(p.plot(**self._style[i])[0])
             self._ax = plt.gca()
             self._ax.grid(True)
             self._ax.set_title(self._title)

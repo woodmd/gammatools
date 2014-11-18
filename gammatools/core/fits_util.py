@@ -250,8 +250,6 @@ class FITSImage(HistogramND):
     def create(self,h,offset_coord=False):
         """Take an input HistogramND object and cast it into a
         SkyImage if appropriate."""
-
-        print 'offset_coord ', offset_coord
         
         if h.ndim() == 2:
 
@@ -490,6 +488,8 @@ class SkyImage(FITSImage):
         return np.vstack((skycrd[0],skycrd[1]))
 
     def smooth(self,sigma,compute_var=False,summed=False):
+
+        sigma /= 1.5095921854516636        
         sigma /= np.abs(self._axes[0]._delta)
         
         from scipy import ndimage
@@ -544,8 +544,7 @@ class SkyImage(FITSImage):
         self._ax.set_ylim(self.axis(1).lo_edge(),self.axis(1).hi_edge())    
 
         
-    def plot(self,subplot=111,logz=False,catalog=None,
-             cmap='jet',**kwargs):
+    def plot(self,subplot=111,logz=False,catalog=None,cmap='jet',**kwargs):
 
         from matplotlib.colors import NoNorm, LogNorm, Normalize
 
@@ -556,8 +555,14 @@ class SkyImage(FITSImage):
         kwargs_imshow = { 'interpolation' : 'nearest',
                           'origin' : 'lower','norm' : None,
                           'vmin' : None, 'vmax' : None }
+
+        zscale = kwargs.get('zscale',None)
+        zscale_power = kwargs.get('zscale_power',2.0)
+        beam_size = kwargs.get('beam_size',None)
         
-        if logz: kwargs_imshow['norm'] = LogNorm()
+        if zscale == 'pow':
+            kwargs_imshow['norm'] = PowerNormalize(power=zscale_power)
+        elif logz: kwargs_imshow['norm'] = LogNorm()
         else: kwargs_imshow['norm'] = Normalize()
 
         ax = pywcsgrid2.subplot(subplot, header=self._wcs.to_header())
@@ -579,7 +584,7 @@ class SkyImage(FITSImage):
 
         update_dict(kwargs_imshow,kwargs)
         update_dict(kwargs_contour,kwargs)
-
+        
         im = ax.imshow(counts.T,**kwargs_imshow)
         im.set_cmap(colormap)
 
@@ -615,6 +620,15 @@ class SkyImage(FITSImage):
 #        ax.set_display_coord_system("gal")       
  #       ax.locator_params(axis="x", nbins=12)
 
+        ax.add_size_bar(1./self._axes[0]._delta, # 30' in in pixel
+                        r"$1^{\circ}$",loc=3,color='w')
+            
+        if beam_size is not None:
+            ax.add_beam_size(2.0*beam_size[0]/self._axes[0]._delta,
+                             2.0*beam_size[1]/self._axes[1]._delta,
+                             beam_size[2],beam_size[3],
+                             patch_props={'fc' : "none", 'ec' : "w"})
+            
         self._ax = ax
         
         return im

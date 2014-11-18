@@ -163,6 +163,64 @@ class HistogramND(object):
     def err(self):
         return np.sqrt(self._var)
 
+    @staticmethod
+    def createFromTH3(hist,label = '__nolabel__'):
+        nx = hist.GetNbinsX()
+        ny = hist.GetNbinsY()
+        nz = hist.GetNbinsZ()
+
+        xmin = hist.GetXaxis().GetBinLowEdge(1)
+        xmax = hist.GetXaxis().GetBinLowEdge(nx+1)
+
+        ymin = hist.GetYaxis().GetBinLowEdge(1)
+        ymax = hist.GetYaxis().GetBinLowEdge(ny+1)
+
+        zmin = hist.GetZaxis().GetBinLowEdge(1)
+        zmax = hist.GetZaxis().GetBinLowEdge(nz+1)
+        
+        xaxis = Axis.create(xmin,xmax,nx)
+        yaxis = Axis.create(ymin,ymax,ny)
+        yaxis = Axis.create(zmin,zmax,nz)
+
+        counts = np.zeros(shape=(nx,ny,nz))
+        var = np.zeros(shape=(nx,ny,nz))
+
+        for ix in range(1,nx+1):
+            for iy in range(1,ny+1):
+                for iz in range(1,nz+1):
+                    counts[ix-1][iy-1][iz-1] = hist.GetBinContent(ix,iy,iz)
+                    var[ix-1][iy-1][iz-1] = hist.GetBinError(ix,iy,iz)**2
+
+        style = {}
+        style['label'] = label
+        style['title'] = hist.GetTitle()
+
+        h = HistogramND([xaxis,yaxis,zaxis],
+                        counts=counts,var=var,style=style)
+
+        return h
+
+    def to_root(self,name,title=None):
+
+        if title is None: title=name
+        
+        import ROOT
+        h = ROOT.TH3F(name,title,self.xaxis().nbins,
+                      self.xaxis().lo_edge(),self.xaxis().hi_edge(),
+                      self.yaxis().nbins,
+                      self.yaxis().lo_edge(),self.yaxis().hi_edge(),
+                      self.zaxis().nbins,
+                      self.zaxis().lo_edge(),self.zaxis().hi_edge())
+
+        for i in range(self.xaxis().nbins):
+            for j in range(self.yaxis().nbins):
+                for k in range(self.yaxis().nbins):
+                    h.SetBinContent(i+1,j+1,k+1,self._counts[i,j,k])
+                    h.SetBinError(i+1,j+1,k+1,np.sqrt(self._var[i,j,k]))
+
+        return h
+
+    
     def inverse(self):
         c = 1./self._counts
         var = c**2*self._var/self._counts**2
@@ -868,8 +926,10 @@ class Histogram(HistogramND):
 
         return Histogram(xedge,counts=mu_count,var=copy.deepcopy(mu_count))
     
-    def to_root(self,name,title):
+    def to_root(self,name,title=None):
 
+        if title is None: title=name
+        
         import ROOT
         h = ROOT.TH1F(name,title,self.axis().nbins,
                       self.axis().lo_edge(),self.axis().hi_edge())
@@ -1572,8 +1632,10 @@ class Histogram2D(HistogramND):
 
         return h
 
-    def to_root(self,name,title):
+    def to_root(self,name,title=None):
 
+        if title is None: title=name
+        
         import ROOT
         h = ROOT.TH2F(name,title,self.xaxis().nbins,
                       self.xaxis().lo_edge(),self.xaxis().hi_edge(),
