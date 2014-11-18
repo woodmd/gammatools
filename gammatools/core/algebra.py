@@ -17,6 +17,10 @@ class Vector3D(object):
     def separation(self,v):     
         """Return angular separation between this vector and another vector."""
         costh = np.sum(self._x*v._x,axis=0)        
+
+        costh[costh>1.0] = 1.0
+        costh[costh<-1.0]=-1.0
+
         return np.arccos(costh)
     
     def norm(self):

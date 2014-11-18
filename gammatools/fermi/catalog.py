@@ -45,6 +45,7 @@ class CatalogSource(object):
 
         self.__dict__.update(data)
 
+        self._names_dict = {}
         self._cel_vec = Vector3D.createLatLon(np.radians(self.DEJ2000),
                                               np.radians(self.RAJ2000))
 
@@ -58,8 +59,12 @@ class CatalogSource(object):
         self._names = []
         for k in Catalog.src_name_cols:
 
-            name = self.__dict__[k]
+            if not k in self.__dict__: continue
+
+            name = self.__dict__[k].strip()
             if name != '':  self._names.append(name)
+
+            self._names_dict[k] = name
             
 #            name = self.__dict__[k].lower().replace(' ','')
 #            if name != '': 
@@ -68,10 +73,17 @@ class CatalogSource(object):
     def names(self):
         return self._names
 
+    def get_name(self,key=None):
+
+        if key is None:
+            return self._names[0]
+        else: 
+            return self._names_dict[key]
+
     @property
     def name(self):
         return self._names[0]
-    
+
     @property
     def ra(self):
         return self.RAJ2000
@@ -107,7 +119,9 @@ class CatalogSource(object):
         return s
         
     def __getitem__(self,k):
-        return self.__dict__[k]
+
+        if not k in self.__dict__: return None
+        else: return self.__dict__[k]
 
 
 #        for k in Catalog.src_name_cols:
@@ -128,12 +142,17 @@ class Catalog(object):
     
     catalog_files = { '2fgl' : os.path.join(gammatools.PACKAGE_ROOT,
                                             'data/gll_psc_v08.fit'),
+                      '1fhl' : os.path.join(gammatools.PACKAGE_ROOT,
+                                            'data/gll_psch_v07.fit'),
                       '3fgl' : os.path.join(gammatools.PACKAGE_ROOT,
+                                            'data/gll_psc_v11.fit'),
+                      '3fglp' : os.path.join(gammatools.PACKAGE_ROOT,
                                             'data/gll_psc4yearsource_v12r3_assoc_v6r6p0_flags.fit'),
                       }
 
     src_name_cols = ['Source_Name',
-                     'ASSOC1','ASSOC2','ASSOC_GAM1','ASSOC_GAM2','ASSOC_TEV']
+                     'ASSOC1','ASSOC2','ASSOC_GAM','1FHL_Name','2FGL_Name',
+                     'ASSOC_GAM1','ASSOC_GAM2','ASSOC_TEV']
 
     def __init__(self):
 
@@ -142,18 +161,23 @@ class Catalog(object):
         self._src_radec = np.zeros(shape=(0,3))
 
     def get_source_by_name(self,name):
-        
+
         if name in self._src_index:
             return self._src_data[self._src_index[name]]
         else:
-            raise Exception('No Source with name found: ' + name)
+            return None
 
-    def get_source_by_position(self,ra,dec,radius):
+    def get_source_by_position(self,ra,dec,radius,min_radius=None):
         
         x = latlon_to_xyz(np.radians(dec),np.radians(ra))
         costh = np.sum(x*self._src_radec,axis=1)        
         costh[costh>1.0] = 1.0
-        msk = np.where(np.arccos(costh) < np.radians(radius))[0]
+
+        if min_radius is not None:
+            msk = np.where((np.arccos(costh) < np.radians(radius)) &
+                           (np.arccos(costh) > np.radians(min_radius)))[0]
+        else:
+            msk = np.where(np.arccos(costh) < np.radians(radius))[0]
 
         srcs = [ self._src_data[i] for i in msk]
         return srcs
@@ -435,7 +459,7 @@ class Catalog(object):
     @staticmethod
     def create(filename):
 
-        if re.search('\.fits$',filename) or re.search('\.fit$',filename):        
+        if re.search('\.fits$',filename) or re.search('\.fit$',filename):
             return Catalog.create_from_fits(filename)
         elif re.search('(\.P|\.P\.gz)',filename):
             return load_object(filename)
@@ -443,11 +467,7 @@ class Catalog(object):
             raise Exception("Unrecognized suffix in catalog file: %s"%(filename))
 
     @staticmethod
-    def create_from_fits(fitsfile=None):
-
-        if fitsfile is None:
-            fitsfile = os.path.join(gammatools.PACKAGE_ROOT,
-                                    'data/gll_psc_v08.fit')
+    def create_from_fits(fitsfile):
 
         cat = Catalog()
         hdulist = pyfits.open(fitsfile)
@@ -457,6 +477,7 @@ class Catalog(object):
         for icol, col in enumerate(table.columns.names):
 
             col_data = hdulist[1].data[col]
+
 #            print icol, col, type(col_data)
 
             if type(col_data[0]) == np.float32: 
@@ -487,26 +508,29 @@ class Catalog(object):
 #                elif type(v) == np.int16: src[col] = int(v)
             src['Source_Name'] = src['Source_Name'].strip()
                 
-            cat.load_source(src,i)
+            cat.load_source(CatalogSource(src))
 
         return cat
     
-    def load_source(self,src,i):
+    def load_source(self,src):
         src_name = src['Source_Name']
+        src_index = len(self._src_data)
 
         self._src_data.append(src)
         phi = np.radians(src['RAJ2000'])
         theta = np.pi/2.-np.radians(src['DEJ2000'])
 
-        self._src_radec[i] = [np.sin(theta)*np.cos(phi),
-                             np.sin(theta)*np.sin(phi),
-                             np.cos(theta)]
+        self._src_radec[src_index] = [np.sin(theta)*np.cos(phi),
+                                      np.sin(theta)*np.sin(phi),
+                                      np.cos(theta)]
 
         for s in Catalog.src_name_cols:
-            if s in src and src[s] != '':
-                self._src_index[src[s]] = i
-                self._src_index[src[s].replace(' ','')] = i
-                self._src_index[src[s].replace(' ','').lower()] = i
+            if s in src.__dict__ and src[s] != '':
+
+                name = src[s].strip()
+                self._src_index[name] = src_index
+                self._src_index[name.replace(' ','')] = src_index
+                self._src_index[name.replace(' ','').lower()] = src_index
 
     def save(self,outfile,format='pickle'):
 
