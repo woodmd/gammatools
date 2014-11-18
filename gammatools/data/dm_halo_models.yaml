@@ -63,7 +63,7 @@ gc_gnfw10:
   rmin : '10.0 pc'
   gamma : 1.0
   rhos : null
-  rhor : [0.3, 8.5]
+  rhor : [0.4, 8.5]
   type : gnfw
 
 gc_gnfw11:
@@ -73,7 +73,7 @@ gc_gnfw11:
   rmin : '10.0 pc'
   gamma : 1.1
   rhos : null
-  rhor : [0.3, 8.5]
+  rhor : [0.4, 8.5]
   type : gnfw
 
 gc_gnfw12:
@@ -83,7 +83,7 @@ gc_gnfw12:
   rmin : '10.0 pc'
   gamma : 1.2
   rhos : null
-  rhor : [0.3, 8.5]
+  rhor : [0.4, 8.5]
   type : gnfw
 
 gc_gnfw13:
@@ -93,7 +93,7 @@ gc_gnfw13:
   rmin : '10.0 pc'
   gamma : 1.3
   rhos : null
-  rhor : [0.3, 8.5]
+  rhor : [0.4, 8.5]
   type : gnfw
 
 gc_gnfw14:
@@ -102,7 +102,7 @@ gc_gnfw14:
   rmax : 100.0
   gamma : 1.4
   rhos : null
-  rhor : [0.3, 8.5]
+  rhor : [0.4, 8.5]
   type : gnfw
 
 gc_einasto:
