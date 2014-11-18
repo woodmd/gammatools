@@ -552,6 +552,8 @@ class HistogramND(object):
     @staticmethod
     def createFromFn(axes,fn,style=None,label='__nolabel__'):
 
+        if not isinstance(axes,list): axes = [axes]
+
         h = HistogramND.create(axes,style=style,label=label)
         h.fill_from_fn(fn)
         return h
@@ -1827,7 +1829,7 @@ class Histogram2D(HistogramND):
         return p
         
     
-    def contour(self,ax=None,**kwargs):
+    def contour(self,ax=None,clabel=False,**kwargs):
         """Render this histogram with the matplotlib imshow method."""
 #        levels = [2.,4.,6.,8.,10.]
 
@@ -1842,9 +1844,11 @@ class Histogram2D(HistogramND):
         kw = extract_dict_by_keys(style,MPLUtil.contour_kwargs)
         kw['origin'] = 'lower'
         
+        print kw
+
         cs = plt.contour(self._xaxis.center,self._yaxis.center,
                          self._counts.T,**kw)
-#        plt.clabel(cs, fontsize=9, inline=1)
+        if clabel: plt.clabel(cs, fontsize=9, inline=1)
 
         self.update_axis_labels(ax)
 

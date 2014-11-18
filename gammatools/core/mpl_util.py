@@ -14,7 +14,7 @@ class MPLUtil(object):
     scatter_kwargs = ['marker','color','edgecolor','label']    
     imshow_kwargs = ['interpolation','origin','vmin','vmax']
     pcolormesh_kwargs = ['shading','origin','vmin','vmax']
-    contour_kwargs = ['levels','origin']
+    contour_kwargs = ['levels','origin','cmap','colors']
     fill_kwargs = ['alpha','where']
     errorbar_kwargs = ['marker','markersize','color','markerfacecolor',
                        'markeredgecolor','linestyle','linewidth','label',
