@@ -23,10 +23,21 @@ from astropy_helper import pywcs
 from astropy_helper import pyfits
 #from astropy.io.fits.header import Header
 import numpy as np
+import healpy as hp
 from gammatools.core.algebra import Vector3D
 from gammatools.fermi.catalog import *
 from gammatools.core.util import *
 from gammatools.core.histogram import *
+
+def stack_images(files,output_file,hdu_index=0):
+
+    hdulist0 = None
+    for i, f in enumerate(files):
+        hdulist = pyfits.open(f)
+        if i == 0: hdulist0 = hdulist
+        else:
+            hdulist0[hdu_index].data += hdulist[hdu_index].data
+    hdulist0.writeto(output_file,clobber=True)
 
 def load_ds9_cmap():
     # http://tdc-www.harvard.edu/software/saoimage/saoimage.color.html
@@ -101,6 +112,9 @@ class FITSAxis(Axis):
     def type(self):
         return self._type
 
+    def to_axis(self,apply_crval=True):
+        return Axis(self.pix_to_coord(self.edges,apply_crval))
+    
     def pix_to_coord(self,p,apply_crval=True):
         """Convert from FITS pixel coordinates to projected sky
         coordinates."""
@@ -154,6 +168,196 @@ class FITSAxis(Axis):
         return axes
 
 
+class HealpixImage(HistogramND):
+
+    def __init__(self,axes,hp_axis_index=0,counts=None,var=None):
+        super(HealpixImage, self).__init__(axes,counts=counts,var=var)
+
+        self._hp_axis = self.axes()[hp_axis_index]
+        self._nside = hp.npix2nside(self._hp_axis.nbins)
+        self._nest=False
+
+    @property
+    def nside(self):
+        return self._nside
+
+    @property
+    def nest(self):
+        return self._nest
+    
+    def createFromHist(self,h):
+        """Take an input HistogramND object and cast it into a
+        HealpixSkyImage if appropriate."""
+        
+        if h.ndim() == 2:
+            return HealpixSkyCube(h.axes(),h.counts)
+        else:
+            return HealpixSkyImage(h.axes(),h.counts)
+
+    def slice(self,sdims,dim_index):
+
+        h = HistogramND.slice(self,sdims,dim_index)
+        if h.ndim() == 2:
+            return HealpixSkyCube(h.axes(),h.counts)
+        elif h.ndim() == 1:        
+            return HealpixSkyImage(h.axes(),h.counts)
+        else:
+            h._axes[0] = Axis(h.axis().pix_to_coord(h.axis().edges()))
+            return h
+
+    def project(self,pdims,bin_range=None):
+
+        print 'pdims ', pdims
+        
+        h = HistogramND.project(self,pdims,bin_range)
+        return self.createFromHist(h)
+        
+    def marginalize(self,mdims,bin_range=None):
+
+        mdims = np.array(mdims,ndmin=1,copy=True)
+        pdims = np.setdiff1d(self._dims,mdims)
+
+        print mdims
+        print pdims
+        print self._dims
+        
+        return self.project(pdims,bin_range)
+        
+class HealpixSkyImage(HealpixImage):
+
+    def __init__(self,axes,counts=None,var=None):
+        super(HealpixSkyImage, self).__init__(axes,counts=counts,var=var)
+        
+    def fill(self,lon,lat,w=1.0):
+        ipix = hp.ang2pix(self.nside,lat,lon,nest=self.nest)
+        super(HealpixSkyImage,self).fill(ipix,w)
+
+    def interpolate(self,lon,lat):
+        
+        pixcrd = self._wcs.wcs_world2pix(lon, lat, 0)
+        return interpolate2d(self._xedge,self._yedge,self._counts,
+                             *pixcrd)
+
+    def center(self):
+        pixcrd = super(SkyImage,self).center()
+        skycrd = self._wcs.wcs_pix2sky(pixcrd[0], pixcrd[1], 0)
+
+        return np.vstack((skycrd[0],skycrd[1]))
+        
+    def smooth(self,sigma):
+
+        im = HealpixSkyImage(copy.deepcopy(self.axes()),
+                             counts=copy.deepcopy(self._counts),
+                             var=copy.deepcopy(self._var))
+        
+        sc = hp.sphtfunc.smoothing(im.counts,sigma=np.radians(sigma))
+
+        im._counts = sc
+        im._var = sc
+
+        return im
+                
+    def plot(self,**kwargs):
+
+        kwargs_imshow = { 'norm' : None,
+                          'vmin' : None, 'vmax' : None }
+
+        zscale_power = kwargs.get('zscale_power',2.0)
+        zscale = kwargs.get('zscale',None)
+        
+        if zscale == 'pow':
+            kwargs_imshow['norm'] = PowerNormalize(power=zscale_power)
+        elif zscale == 'log': kwargs_imshow['norm'] = LogNorm()
+        else: kwargs_imshow['norm'] = Normalize()
+        
+        from healpy import projaxes as PA
+        
+        fig = plt.gcf()
+
+        extent = (0.02,0.05,0.96,0.9)
+        ax=PA.HpxMollweideAxes(fig,extent,coord=None,rot=None,
+                               format='%g',flipconv='astro')
+
+        fig.add_axes(ax)
+        img0 = ax.projmap(self.counts,nest=self.nest,xsize=1600,coord=None,
+                          **kwargs_imshow)
+
+        hp.visufunc.graticule(verbose=False,lw=0.5,color='k')
+    
+class HealpixSkyCube(HealpixImage):
+
+    def __init__(self,axes,hp_axis_index=0,counts=None):
+        super(HealpixSkyCube, self).__init__(axes,hp_axis_index,counts)
+
+    def center(self):
+        pixcrd = np.array(self.axes()[1].edges[:-1],dtype=int)
+        pixang0, pixang1 = hp.pixelfunc.pix2ang(self.nside,pixcrd)
+
+        pixloge = self.axes()[0].center
+
+#        print pixloge        
+#        x,y = np.meshgrid(pixloge,pixang0,indexing='ij')
+        
+        pixloge = np.repeat(pixloge[:,np.newaxis],len(pixang0),axis=1)
+        pixang0 = np.repeat(pixang0[np.newaxis,:],len(pixloge),axis=0)
+        pixang1 = np.repeat(pixang1[np.newaxis,:],len(pixloge),axis=0)
+
+        pixloge = np.ravel(pixloge)
+        pixang0 = np.ravel(pixang0)
+        pixang1 = np.ravel(pixang1)
+        pixang0 = np.pi/2. - pixang0
+
+        
+        return np.vstack((pixloge,np.degrees(pixang1),np.degrees(pixang0)))
+        
+        print pixloge.shape
+        print pixang0.shape
+
+        print x.shape
+        print y.shape
+        print self.counts.shape
+
+
+        print x[:,1000]
+        print pixloge[:,1000]
+
+        print y[10,:]
+        print pixang0[10,:]
+        
+        return pixang
+        
+    @staticmethod
+    def create(energy_axis,nside):
+
+        npix = hp.pixelfunc.nside2npix(nside)
+        hp_axis = Axis.create(0,npix,npix)        
+        return HealpixSkyCube([energy_axis,hp_axis],1)
+        
+    @staticmethod
+    def createFromFITS(fitsfile,image_hdu='SKYMAP'):
+        """ """
+
+        hdulist = pyfits.open(fitsfile)        
+        header = hdulist[image_hdu].header
+        ebounds = hdulist['EBOUNDS'].data
+
+        v = hdulist[image_hdu].data
+
+        dtype = v.dtype[0]
+        image_data = copy.deepcopy(v.view((dtype, len(v.dtype.names))))
+        #np.array(hdulist[image_hdu].data).astype(float)
+        
+        nbin = len(ebounds)        
+        emin = ebounds[0][1]/1E3
+        emax = ebounds[-1][2]/1E3
+        delta = np.log10(emax/emin)/nbin
+
+        energy_axis = Axis.create(np.log10(emin),np.log10(emax),nbin)
+        hp_axis = Axis.create(0,image_data.shape[0],image_data.shape[0])
+        
+        return HealpixSkyCube([energy_axis,hp_axis],1,image_data.T)
+
+    
 class FITSImage(HistogramND):
     """Base class for SkyImage and SkyCube classes.  Handles common
     functionality for performing sky to pixel coordinate conversions."""
@@ -223,7 +427,7 @@ class FITSImage(HistogramND):
     def project(self,pdims,bin_range=None,offset_coord=False):
 
         h = HistogramND.project(self,pdims,bin_range)
-        return self.create(h,offset_coord=offset_coord)
+        return self.createFromHist(h,offset_coord=offset_coord)
         
     def marginalize(self,mdims,bin_range=None,offset_coord=False):
 
@@ -247,7 +451,7 @@ class FITSImage(HistogramND):
     def wcs(self):
         return self._wcs
     
-    def create(self,h,offset_coord=False):
+    def createFromHist(self,h,offset_coord=False):
         """Take an input HistogramND object and cast it into a
         SkyImage if appropriate."""
         
@@ -344,6 +548,11 @@ class SkyCube(FITSImage):
         ecrd = self._axes[2].coord_to_pix(loge)
         super(SkyCube,self).fill(np.vstack((pixcrd[0],pixcrd[1],ecrd)))
 
+    def interpolate(self,lon,lat,loge):
+        pixcrd = self._wcs.wcs_world2pix(lon,lat, 0)
+        ecrd = np.array(self._axes[2].coord_to_pix(loge),ndmin=1)
+        return super(SkyCube,self).interpolate(pixcrd[0],pixcrd[1],ecrd)
+        
     @staticmethod
     def createFromHDU(hdu):
         
@@ -362,8 +571,19 @@ class SkyCube(FITSImage):
         header = hdulist[ihdu].header
         wcs = pywcs.WCS(header,naxis=[1,2],relax=True)
 
-        
-        axes = copy.deepcopy(FITSAxis.create_axes(header))
+        print hdulist.info()
+
+        if hdulist[1].name == 'ENERGIES':
+            v = hdulist[1].data
+            v = copy.deepcopy(v.view((v.dtype[0], len(v.dtype.names))))
+            v = np.log10(v)
+            energy_axis = Axis.createFromArray(v)
+            axes = copy.deepcopy(FITSAxis.create_axes(header))
+            axes[2]._crval = energy_axis.edges[0]
+            axes[2]._delta = energy_axis.width[0]
+            axes[2]._crpix = 0.0
+        else:        
+            axes = copy.deepcopy(FITSAxis.create_axes(header))
         return SkyCube(wcs,axes,
                        copy.deepcopy(hdulist[ihdu].data.astype(float).T))
 

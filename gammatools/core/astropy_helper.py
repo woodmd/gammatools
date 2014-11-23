@@ -8,6 +8,10 @@ else:
 if has_astropy:
     from astropy.io import fits as pyfits
     import astropy.wcs as pywcs
+    import warnings
+    from astropy.utils.exceptions import AstropyUserWarning
+    warnings.filterwarnings('ignore', category=AstropyUserWarning)
+    
 else:
     import pyfits
     import pywcs

@@ -253,7 +253,8 @@ class BExpTask(Task):
     
 class BinTask(Task):
 
-    default_config = { 'npix' : 140,
+    default_config = { 'nxpix' : 140,
+                       'nypix' : None,
                        'xref' : 0.0,
                        'yref' : 0.0,
                        'emin' : 1000.0,
@@ -261,6 +262,7 @@ class BinTask(Task):
                        'scfile' : None,
                        'chatter' : 2,
                        'proj' : 'AIT',
+                       'hpx_order' : 3,
                        'enumbins' : 16,
                        'algorithm' : 'ccube',
                        'binsz' : 0.1,
@@ -273,20 +275,27 @@ class BinTask(Task):
         self._infile = os.path.abspath(infile)
         self._outfile = os.path.abspath(outfile)
         self.register_output_file(self._outfile)
+
+        if re.search('^(?!\@)(.+)(\.txt|\.lst)$',self._infile):
+            self._infile = '@'+self._infile
         
         self._gtbin=GtApp('gtbin','evtbin')
         
 
     def run_task(self):
 
-        config = self.config
+        config = copy.deepcopy(self.config)
 
         outfile = os.path.basename(self._output_files[0])
+
+        if config['nypix'] is None:
+            config['nypix'] = config['nxpix']
         
         self._gtbin.run(algorithm=config['algorithm'],
-                        nxpix=config['npix'],
-                        nypix=config['npix'],
+                        nxpix=config['nxpix'],
+                        nypix=config['nypix'],
                         binsz=config['binsz'],
+                        hpx_order=config['hpx_order'],
                         evfile=self._infile,
                         outfile=outfile,
                         scfile=config['scfile'],
@@ -376,7 +385,7 @@ class MkTimeTask(Task):
 
     def run_task(self):
         
-        config = self.config()
+        config = self.config
 
         outfile = os.path.basename(self._output_files[0])
         

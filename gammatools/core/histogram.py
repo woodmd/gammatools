@@ -112,6 +112,11 @@ class HistogramND(object):
                 self._var = np.ones(shape=shape)*self._var
 
         self._ndim = self._counts.ndim
+
+        if self._ndim != len(self._axes):
+            raise Exception('Mismatch of data and axis dimensions: %i %i'
+                            %(len(self._axes),self._ndim))
+        
         self._dims = np.array(range(self._ndim),dtype=int)
 
     def shape(self):
@@ -311,7 +316,7 @@ class HistogramND(object):
         for i in pdims:
             axes.append(self._axes[i])
             new_shape.append(self._axes[i].nbins)
-
+            
         if not bin_range is None:
 
             bin_range = np.array(bin_range,ndmin=2,copy=True)
@@ -493,10 +498,9 @@ class HistogramND(object):
         center = []
         for i in range(self._ndim): center.append(self._axes[i].center)
 
-
         if len(x) == 1:
             xv = x[0]
-            shape = x[0].shape
+            shape = x[0].shape[1]
         else:            
             xv, shape = expand_array(*x)
 
@@ -813,6 +817,9 @@ class Axis(object):
         ibin[ibin < 0] = 0
         ibin[ibin > self.nbins-1] = self.nbins-1
         return ibin
+
+    def __str__(self):
+        return '%i %s'%(self._nbins,self._edges)
 
 class Histogram(HistogramND):
     """One-dimensional histogram class.  Each bin is assigned both a

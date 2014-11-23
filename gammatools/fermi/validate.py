@@ -772,8 +772,11 @@ class PSFValidate(Configurable):
                                bkg_counts)
         
         if excess_sum > 25:
-            self.compute_quantiles(hq, psf_data, iegy, icth, theta_max)
-
+            try:
+                self.compute_quantiles(hq, psf_data, iegy, icth, theta_max)
+            except Exception, e:
+                print e
+                
         hmodel_density = []
         hmodel_counts = []
         for i, ml in enumerate(self.model_labels):
@@ -1087,8 +1090,12 @@ class PSFValidate(Configurable):
 
         
         if excess_sum > 25:
-            self.compute_quantiles(hq, psf_data, iegy, icth, theta_max)
-            
+
+            try:
+                self.compute_quantiles(hq, psf_data, iegy, icth, theta_max)
+            except Exception, e:
+                print e
+                
         hmodel_density = []
         hmodel_counts = []
 
@@ -1264,7 +1271,7 @@ class PSFValidate(Configurable):
         imin = im.axis(0).valToBin(-r68)
         imax = im.axis(0).valToBin(r68)+1
     
-        fig = plt.figure()
+        fig = plt.figure(figsize=(8,8))
         plt.gca().set_title(fig_title)
         
         im = copy.deepcopy(im)
@@ -1293,15 +1300,16 @@ class PSFValidate(Configurable):
 
         imx = im.project(0,[[imin,imax]])
         
-        fig[0].add_hist(imx,label='Data')
+        fig[0].add_hist(imx.rebin(2),label='Data',linestyle='None')
         for i, h in enumerate(model_hists):
-            fig[0].add_hist(h.project(0,[[imin,imax]]),
+            fig[0].add_hist(h.project(0,[[imin,imax]]).rebin(2),
                             hist_style='line',linestyle='-',
                             label=self.model_labels[i])
 
-        imx2 = imx.slice(0,[[imin,imax]])
+        imx2 = imx.slice(0,[[imin,imax]]).rebin(2)
         med = imx2.quantile(0.5)        
-        data_stats = 'Mean = %.3f\nMedian = %.3f $\pm$ %.3f'%(imx2.mean(),med[0],med[1])
+        data_stats = 'Mean = %.3f\nMedian = %.3f $\pm$ %.3f'%(imx2.mean(),
+                                                              med[0],med[1])
 
         fig[0].ax().set_title(fig_title)
         fig[0].ax().text(0.05,0.95,
@@ -1318,9 +1326,9 @@ class PSFValidate(Configurable):
 
         imy = im.project(1,[[imin,imax]])
         
-        fig[0].add_hist(imy,label='Data')
+        fig[0].add_hist(imy.rebin(2),label='Data',linestyle='None')
         for i, h in enumerate(model_hists):
-            fig[0].add_hist(h.project(0,[[imin,imax]]),
+            fig[0].add_hist(h.project(0,[[imin,imax]]).rebin(2),
                             hist_style='line',linestyle='-',
                             label=self.model_labels[i])
 
