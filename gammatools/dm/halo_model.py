@@ -6,7 +6,7 @@ from gammatools.dm.jcalc import *
 class HaloModelFactory(object):
 
     @staticmethod
-    def create(src_name,model_file = None):
+    def create(src_name,model_file = None,rho_rsun = None, gamma = None):
 
         if model_file is None:
             model_file = os.path.join(gammatools.PACKAGE_ROOT,
@@ -18,6 +18,12 @@ class HaloModelFactory(object):
             raise Exception('Could not find profile: ' + src_name)
 
         src = halo_model_lib[src_name]
+
+        if rho_rsun is not None:
+            src['rhor'] = [rho_rsun,8.5]
+
+        if gamma is not None:
+            src['gamma'] = gamma
 
         return HaloModel(src)
 

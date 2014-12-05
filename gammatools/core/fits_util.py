@@ -206,8 +206,6 @@ class HealpixImage(HistogramND):
             return h
 
     def project(self,pdims,bin_range=None):
-
-        print 'pdims ', pdims
         
         h = HistogramND.project(self,pdims,bin_range)
         return self.createFromHist(h)
@@ -215,12 +213,7 @@ class HealpixImage(HistogramND):
     def marginalize(self,mdims,bin_range=None):
 
         mdims = np.array(mdims,ndmin=1,copy=True)
-        pdims = np.setdiff1d(self._dims,mdims)
-
-        print mdims
-        print pdims
-        print self._dims
-        
+        pdims = np.setdiff1d(self._dims,mdims)        
         return self.project(pdims,bin_range)
         
 class HealpixSkyImage(HealpixImage):
@@ -253,7 +246,7 @@ class HealpixSkyImage(HealpixImage):
         sc = hp.sphtfunc.smoothing(im.counts,sigma=np.radians(sigma))
 
         im._counts = sc
-        im._var = sc
+        im._var = copy.deepcopy(sc)
 
         return im
                 
@@ -264,11 +257,28 @@ class HealpixSkyImage(HealpixImage):
 
         zscale_power = kwargs.get('zscale_power',2.0)
         zscale = kwargs.get('zscale',None)
-        
+        cbar = kwargs.get('cbar',True)
+        cbar_label = kwargs.get('cbar_label','')
+        title = kwargs.get('title','')
+        levels = kwargs.get('levels',None)
+
+        kwargs_imshow['vmin'] = kwargs.get('vmin',None)
+        kwargs_imshow['vmax'] = kwargs.get('vmax',None)
+
+        cmap = mpl.cm.get_cmap(kwargs.get('cmap','jet'))
+        cmap.set_under('white')
+        kwargs_imshow['cmap'] = cmap
+
         if zscale == 'pow':
-            kwargs_imshow['norm'] = PowerNormalize(power=zscale_power)
+            vmed = np.median(self.counts)
+            vmax = max(self.counts)
+            vmin = min(1.1*self.counts[self.counts>0])
+#            vmin = max(vmed*(vmed/vmax),min(self.counts[self.counts>0]))
+
+            kwargs_imshow['norm'] = PowerNorm(gamma=1./zscale_power,
+                                              clip=True)
         elif zscale == 'log': kwargs_imshow['norm'] = LogNorm()
-        else: kwargs_imshow['norm'] = Normalize()
+        else: kwargs_imshow['norm'] = Normalize(clip=True)
         
         from healpy import projaxes as PA
         
@@ -278,11 +288,43 @@ class HealpixSkyImage(HealpixImage):
         ax=PA.HpxMollweideAxes(fig,extent,coord=None,rot=None,
                                format='%g',flipconv='astro')
 
+        ax.set_title(title)
         fig.add_axes(ax)
-        img0 = ax.projmap(self.counts,nest=self.nest,xsize=1600,coord=None,
+
+        img0 = ax.projmap(self.counts,nest=self.nest,xsize=1600,coord='C',
                           **kwargs_imshow)
 
+        if levels:
+            cs = ax.contour(img0,extent=ax.proj.get_extent(),
+                            levels=levels,colors=['k'],
+                            interpolation='nearest')
+
         hp.visufunc.graticule(verbose=False,lw=0.5,color='k')
+
+        if cbar:
+
+            im = ax.get_images()[0]
+            cb = fig.colorbar(im, orientation='horizontal', 
+                              shrink=.8, pad=0.05,format='%.2g')
+            #, ticks=[min, max])
+            cb.ax.xaxis.set_label_text(cbar_label)
+
+            if zscale=='pow':
+                gamma = 1./zscale_power
+
+                print vmin, vmed, vmax
+
+                ticks = np.linspace(vmin**gamma,
+                                    vmax**gamma,6)**(1./gamma)
+
+                print ticks
+
+                cb.set_ticks(ticks)
+
+#            cb.ax.xaxis.labelpad = -8
+            # workaround for issue with viewers, see colorbar docstring
+            cb.solids.set_edgecolor("face")
+
     
 class HealpixSkyCube(HealpixImage):
 
@@ -363,7 +405,8 @@ class FITSImage(HistogramND):
     functionality for performing sky to pixel coordinate conversions."""
     
     def __init__(self,wcs,axes,counts=None,roi_radius_deg=180.,roi_msk=None):
-        super(FITSImage, self).__init__(axes,counts=counts,var=counts)
+        super(FITSImage, self).__init__(axes,counts=counts,
+                                        var=copy.deepcopy(counts))
         
         self._wcs = wcs
         self._roi_radius_deg = roi_radius_deg

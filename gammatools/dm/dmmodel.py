@@ -305,12 +305,11 @@ class DMLimitCalc(object):
 
         self._psi_axis = Axis(np.linspace(np.radians(0.0),np.radians(1.0),101))
         self._psi = self._psi_axis.center
-        self._domega = np.pi*(np.power(self._psi_axis.edges()[1:],2)-
-                              np.power(self._psi_axis.edges()[:-1],2))
+        self._domega = np.pi*(np.power(self._psi_axis.edges[1:],2)-
+                              np.power(self._psi_axis.edges[:-1],2))
 
         self._aeff = self._irf.aeff(self._loge - Units.log10_mev)
         self._bkg_rate = irf.bkg(self._loge - Units.log10_mev)*self._dloge
-
 
         self._redge = [np.radians(rmin),np.radians(rmax)]
         self._msk = (self._psi > self._redge[0]) & (self._psi < self._redge[1])
@@ -485,7 +484,7 @@ class DMLimitCalc(object):
         dmmodel._sigmav = np.power(10.,-28.)
 
         sc = self.counts(dmmodel,tau)
-        
+
         sc_msk = copy.copy(sc); sc_msk[:,~self._msk] = 0
         bc_msk = copy.copy(bc); bc_msk[:,~self._msk] = 0
 
@@ -520,8 +519,8 @@ class DMLimitCalc(object):
 
         print t0, sfrac, self._min_fsig, np.sum(ts[msk])
 
-        axis0 = Axis(self._loge_axis.edges()-np.log10(Units.gev))
-        axis1 = Axis(np.degrees(self._psi_axis.edges()))
+        axis0 = Axis(self._loge_axis.edges-np.log10(Units.gev))
+        axis1 = Axis(np.degrees(self._psi_axis.edges))
 
         o['sigmav_ul'] = np.power(10,-28.)*t0
         o['sc_hist'] = Histogram2D(axis0,axis1,counts=sc*t0)
@@ -533,8 +532,8 @@ class DMLimitCalc(object):
 
         return o
 
-        axis0 = Axis(self._loge_axis.edges()-np.log10(Units.gev))
-        axis1 = Axis(np.degrees(self._psi_axis.edges()))
+        axis0 = Axis(self._loge_axis.edges-np.log10(Units.gev))
+        axis1 = Axis(np.degrees(self._psi_axis.edges))
 
         dlnl_hist = Histogram2D(axis0,axis1)
         dlnl_hist._counts = copy.copy(dlnl)

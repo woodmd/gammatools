@@ -8,6 +8,8 @@ from matplotlib import transforms as mtransforms
 from matplotlib.ticker import FixedLocator, ScalarFormatter, MultipleLocator
 from matplotlib.ticker import LogLocator, AutoLocator
 import numpy as np
+from numpy import ma
+import matplotlib.cbook as cbook
 
 class MPLUtil(object):
 
@@ -21,14 +23,110 @@ class MPLUtil(object):
                        'drawstyle']
     hist_kwargs = ['color','alpha','histtype','label']
 
+class PowerNorm(matplotlib.colors.Normalize):
+    """
+    Normalize a given value to the ``[0, 1]`` interval with a power-law
+    scaling. This will clip any negative data points to 0.
+    """
+    def __init__(self, gamma, vmin=None, vmax=None, clip=True):
+        matplotlib.colors.Normalize.__init__(self, vmin, vmax, clip)
+        self.gamma = gamma
+
+    def __call__(self, value, clip=None):
+        if clip is None:
+            clip = self.clip
+
+        result, is_scalar = self.process_value(value)
+
+        self.autoscale_None(result)
+        gamma = self.gamma
+        vmin, vmax = self.vmin, self.vmax
+        if vmin > vmax:
+            raise ValueError("minvalue must be less than or equal to maxvalue")
+        elif vmin == vmax:
+            result.fill(0)
+        else:
+            if clip:
+                mask = ma.getmask(result)
+                val = ma.array(np.clip(result.filled(vmax), vmin, vmax),
+                                mask=mask)
+            resdat = result.data
+            resdat -= vmin
+            np.power(resdat, gamma, resdat)
+            resdat /= (vmax - vmin) ** gamma
+            result = np.ma.array(resdat, mask=result.mask, copy=False)
+            result[(value < 0)&~result.mask] = 0
+        if is_scalar:
+            result = result[0]
+        return result
+
+    def inverse(self, value):
+        if not self.scaled():
+            raise ValueError("Not invertible until scaled")
+        gamma = self.gamma
+        vmin, vmax = self.vmin, self.vmax
+
+        if cbook.iterable(value):
+            val = ma.asarray(value)
+            return ma.power(value, 1. / gamma) * (vmax - vmin) + vmin
+        else:
+            return pow(value, 1. / gamma) * (vmax - vmin) + vmin
+
+    def autoscale(self, A):
+        """
+        Set *vmin*, *vmax* to min, max of *A*.
+        """
+        self.vmin = ma.min(A)
+        if self.vmin < 0:
+            self.vmin = 0
+            warnings.warn("Power-law scaling on negative values is "
+                          "ill-defined, clamping to 0.")
+
+        self.vmax = ma.max(A)
+
+    def autoscale_None(self, A):
+        ' autoscale only None-valued vmin or vmax'
+        if self.vmin is None and np.size(A) > 0:
+            self.vmin = ma.min(A)
+            if self.vmin < 0:
+                self.vmin = 0
+                warnings.warn("Power-law scaling on negative values is "
+                              "ill-defined, clamping to 0.")
+
+        if self.vmax is None and np.size(A) > 0:
+            self.vmax = ma.max(A)
+
 class PowerNormalize(matplotlib.colors.Normalize):
     def __init__(self, vmin=None, vmax=None, power=2., clip=False):
         self.power = power
         matplotlib.colors.Normalize.__init__(self, vmin, vmax, clip)
 
     def __call__(self, value, clip=None):
+
+        print 'call ', type(value)
+
+#        print 'value ', value
+#        print 'clip ', clip
+
         return np.ma.masked_array(np.power((value-self.vmin)/self.vmax,
-                                  1./self.power))
+                                           1./self.power))
+
+        if isinstance(value,np.ma.masked_array):
+            print 'here'
+            mask = value.mask
+            v = np.ma.masked_array(value,copy=True)
+            v[~v.mask] = np.power((v[~v.mask]-self.vmin)/self.vmax,
+                                 1./self.power)
+
+        else:
+            print 'here2'
+            v = np.ma.masked_array(np.power((value-self.vmin)/self.vmax,
+                                            1./self.power))
+#        import healpy as hp
+#        v[v.mask]=10
+
+        return v
+
     
 class SqrtScale(mscale.ScaleBase):
     """
