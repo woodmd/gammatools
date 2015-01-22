@@ -87,17 +87,18 @@ class Task(Configurable):
         
     def cleanup(self):
 
-        for f in self._output_files:
-            
-            if self.config['verbose']:
-                print 'cp %s %s'%(os.path.basename(f),f)                
-            os.system('cp %s %s'%(os.path.basename(f),f))
-
+        self.stage_output_files()
         os.chdir(self._cwd)
             
         if not self._savedata and os.path.exists(self._workdir):
             shutil.rmtree(self._workdir)
 
+    def stage_output_files(self):
+        for f in self._output_files:            
+            if self.config['verbose']:
+                print 'cp %s %s'%(os.path.basename(f),f)                
+            os.system('cp %s %s'%(os.path.basename(f),f))        
+            
     def __del__(self):
         if not self._savedata and os.path.exists(self._workdir):
             if self.config['verbose']:
@@ -328,14 +329,15 @@ class SelectorTask(Task):
                        'convtype' : -1 }               
     
     def __init__(self,infile,outfile,config=None,opts=None,**kwargs):
-        super(SelectorTask,self).__init__()
+        super(SelectorTask,self).__init__()        
         self.configure(config,opts=opts,**kwargs)
         
         self._infile = os.path.abspath(infile)
         self._outfile = os.path.abspath(outfile)
         self.register_output_file(self._outfile)
 
-        if re.search('^(?!\@)(.+)\.txt$',self._infile):
+#        if re.search('^(?!\@)(.+)\.txt$',self._infile):
+        if re.search('^(?!\@)(.+)(\.txt|\.lst)$',self._infile):
             self._infile = '@'+self._infile
             
         self._gtselect=GtApp('gtselect','dataSubselector')
