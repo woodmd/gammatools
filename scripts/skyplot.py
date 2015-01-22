@@ -153,29 +153,42 @@ else:
         fp.make_projection_plots_skyimage(im)
     elif isinstance(im,SkyCube):
 
+        # All Energies        
         fp.make_energy_residual(suffix='_eresid')
 
+        fp.make_plots_skycube(smooth=True,resid_type='significance',
+                              suffix='_data_map_resid_sigma',plots_per_fig=1)
+
+        fp.make_mdl_plots_skycube(suffix='_mdl_map_slice',plots_per_fig=1)
+        
+        fp.make_plots_skycube(suffix='_data_map',plots_per_fig=1,
+                              make_projection=True,projection=0.5)
+        
+        fp.make_plots_skycube(suffix='_data_map_smooth',plots_per_fig=1,
+                              make_projection=True,projection=0.5,smooth=True)
+        
 #        fp.make_plots_skycube(smooth=True,
 #                              suffix='_data_map_smooth',plots_per_fig=1)
         
 #        make_plots_skycube(im,4,smooth=True,
 #                           im_mdl=im_mdl,suffix='_data_map_slice_smooth')
 
-        delta_bin = [2,2,4,10]
         
-        fp.make_mdl_plots_skycube(suffix='_mdl_map',plots_per_fig=1,delta_bin=delta_bin)
+        
+        delta_bin = [2,2,4,10]
+
+
+        # Slices
+        fp.make_mdl_plots_skycube(suffix='_mdl_map_slice',plots_per_fig=1,delta_bin=delta_bin)
         
         fp.make_mdl_plots_skycube(suffix='_mdl_map_normp3',plots_per_fig=1,
                                   zscale='pow',zscale_power=4.0,delta_bin=delta_bin)
 
-        fp.make_plots_skycube(suffix='_data_map',plots_per_fig=1,delta_bin=delta_bin,
+        fp.make_plots_skycube(suffix='_data_map_slice',plots_per_fig=1,delta_bin=delta_bin,
                               make_projection=True,projection=0.5)
         
-        fp.make_plots_skycube(suffix='_data_map_smooth',plots_per_fig=1,delta_bin=delta_bin,
+        fp.make_plots_skycube(suffix='_data_map_slice_smooth',plots_per_fig=1,delta_bin=delta_bin,
                               make_projection=True,projection=0.5,smooth=True)
-
-        fp.make_plots_skycube(smooth=True,resid_type='significance',
-                              suffix='_data_map_resid_sigma',plots_per_fig=1)
 
         fp.make_plots_skycube(smooth=True,resid_type='significance',
                               suffix='_data_map_slice_resid_sigma',plots_per_fig=1,
@@ -183,10 +196,10 @@ else:
         
         sys.exit(0)
         
-        fp.make_plots_skycube(None,smooth=True,resid_type='fractional',
+        fp.make_plots_skycube(smooth=True,resid_type='fractional',
                               suffix='_data_map_resid_frac',plots_per_fig=1)
 
-        fp.make_plots_skycube(4,smooth=True,resid_type='fractional',
+        fp.make_plots_skycube(smooth=True,resid_type='fractional',
                               suffix='_data_map_slice_resid_frac')
 
         

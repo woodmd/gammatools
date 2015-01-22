@@ -1,5 +1,6 @@
 import inspect
 import os
+import copy
 from util import update_dict
 
 class Option(object):
@@ -40,6 +41,13 @@ class Option(object):
     @property
     def group(self):
         return self._group
+
+    @property
+    def argname(self):
+
+        if self._group is not None:
+            return self._group + '.' + self._name
+        else: return self._name
     
     @staticmethod
     def create(name,x,group=None):
@@ -70,11 +78,11 @@ class Option(object):
 
 class Configurable(object):
 
-    def __init__(self,config=None,**kwargs):
-
+    def __init__(self,config=None,register_defaults=True,**kwargs):
+        
         self._config = {}
         self._default_config = {}
-        self.register_default_config(self)
+        if register_defaults: self.register_default_config(self)
         self.configure(config,**kwargs)
 
     @property
@@ -86,36 +94,61 @@ class Configurable(object):
                                 group_key='default_subsection'):
         """Register default configuration dictionaries for this class
         and all classes from which it inherits."""
-
+        
         for base_class in inspect.getmro(cls):
+
             if key in base_class.__dict__:
                 c.update_default_config(base_class.__dict__[key])
 #            else:
 #                raise Exception('No config dictionary with key %s '%key +
 #                                'in %s'%str(cls))
-
+                
     @classmethod
-    def get_default_config(cls,key='default_config'):
-
+    def get_default_config(cls,key='default_config',group=None):
+        
         o = {}        
-        for base_class in inspect.getmro(cls):            
+        for base_class in inspect.getmro(cls):
             if key in base_class.__dict__:
                 o.update(base_class.__dict__[key])
-
+                
         for k in o.keys():
-            o[k] = Option.create(k,o[k])
+            o[k] = Option.create(k,o[k],group=group)
 
         return o
-        
-    @classmethod
-    def add_arguments(cls,parser):
-        config = cls.get_default_config()
 
-        for k, v in config.iteritems():
+    @classmethod
+    def get_class_config(cls,key='default_config',group=None):
+        
+        o = copy.deepcopy(cls.__dict__[key])
+        for k in o.keys():
+            o[k] = Option.create(k,o[k],group=group)
+
+        return o
+
+    @classmethod
+    def add_arguments(cls,parser,config=None,group=None,skip=None):
+        
+        if config is None:
+            config = cls.get_default_config(group=group).values()
+            
+        groups = {}
+#        for k, v in config.iteritems():
+        for v in config:
+            if v.group is not None and not v.group in groups:
+                groups[v.group] = parser.add_argument_group(v.group)
+
+#        for k, v in config.iteritems():
+        for v in config:
+
+            if skip is not None and v.name in skip: continue
+            
+            if v.group is None: group = parser
+            else: group = groups[v.group]
+
             if v.type == bool:
-                parser.add_argument('--' + k,default=v.value,
-                                    action='store_true',
-                                    help=v.docstring + ' [default: %s]'%v.value)
+                group.add_argument('--' + v.argname,default=v.value,
+                                   action='store_true',
+                                   help=v.docstring + ' [default: %s]'%v.value)
             else:
 
                 if isinstance(v.value,list):
@@ -125,7 +158,7 @@ class Configurable(object):
                     value = v.value
                     opt_type = v.type
                 
-                parser.add_argument('--' + k,default=value,
+                group.add_argument('--' + v.argname,default=value,
                                     type=opt_type,
                                     help=v.docstring + ' [default: %s]'%v.value)
         
@@ -180,12 +213,49 @@ class Configurable(object):
 
     def set_config(self,key,value):
         self._config[key] = value
+
+    def parse_opts(self,opts):
+
+#        import pprint
+#        pprint.pprint(self._config)
+        
+        for k,v in opts.__dict__.iteritems():
+
+            if v is None: continue
+
+            print 'Parsing ', k, v
+            
+            argname = k.split('.')
+            if len(argname) == 2:
+                group = argname[0]
+                name = argname[1]
+                
+                default_config = self._default_config[group][name]
+                config = self._config[group]
+            else:
+                name = argname[0]
+
+                if not name in self._default_config: continue
+                
+                default_config = self._default_config[name]
+                config = self._config
+            
+                
+            if isinstance(config,list) and not isinstance(v,list):
+                value = v.split(',')
+                value = map(default_config.list_type,value)
+#                self.set_config(k,value)
+            else:
+                value = v
+
+            config[name] = v
+
         
     def configure(self,config=None,opts=None,group=None,**kwargs):
         """Update the configuration of this object with the contents
         of 'config'.  When the same option is defined in multiple
         inputs the order of precedence is config -> opts -> kwargs."""
-
+        
         if not config is None:
 
             if group and not group in config:
@@ -195,19 +265,8 @@ class Configurable(object):
                 update_dict(self._config,config[group])
             else:
                 update_dict(self._config,config)
-            
                 
-        if not opts is None:
-            for k,v in opts.__dict__.iteritems():
-                if k in self._config and not v is None:
-                    if isinstance(self._config[k],list) and \
-                            not isinstance(v,list):
-
-                        value = v.split(',')
-                        value = map(self._default_config[k].list_type,value)
-                        self.set_config(k,value)
-                    else:
-                        self.set_config(k,v)
+        if not opts is None: self.parse_opts(opts)
                 
         update_dict(self._config,kwargs)
         

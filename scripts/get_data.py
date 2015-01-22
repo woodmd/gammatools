@@ -8,7 +8,8 @@ import numpy as np
 
 event_samples = { 'pass6' : 'P6_public_v3',
                   'pass7' : 'P7.6_P120_BASE',
-                  'pass7r' : 'P7_P202_BASE'}
+                  'pass7r' : 'P7_P202_BASE',
+                  'pass8'  : 'P8_P301_BASE' }
 
 usage = "usage: %prog [options] "
 description = "Download data with astro server tool."
@@ -24,9 +25,9 @@ parser.add_option('--ra', default = 0, type = float,
 parser.add_option('--dec', default = 0, type = float, 
                   help = 'Maximum energy')
 
-parser.add_option('--event_sample', default='pass7',
+parser.add_option('--event_sample', default='pass7r',
                   choices=event_samples.keys(),
-                  help='Event Sample (pass6,pass7,pass7r)')
+                  help='Event Sample (pass6,pass7,pass7r,pass8)')
 
 parser.add_option('--event_class', default='Source', type = "string",
                   help='Event Class (Diffuse,Source,Clean)')
@@ -34,6 +35,11 @@ parser.add_option('--event_class', default='Source', type = "string",
 parser.add_option('--minEnergy', default = 1.5, type = float, 
                   help = 'Minimum energy')
 parser.add_option('--maxEnergy', default = 5.5, type = float, 
+                  help = 'Maximum energy')
+
+parser.add_option('--minZenith', default = None, type = float, 
+                  help = 'Minimum energy')
+parser.add_option('--maxZenith', default = None, type = float, 
                   help = 'Maximum energy')
 
 parser.add_option('--data_type', default = 'ft1',
@@ -98,6 +104,12 @@ command += ' --ra %9.5f --dec %9.5f ' %(ra,dec)
 if opts.radius is not None:
     command += ' --radius %5.2f' %(opts.radius)
 
+if opts.minZenith is not None:
+    command += ' --minZenith %9.3f '%(opts.minZenith)
+
+if opts.maxZenith is not None:
+    command += ' --maxZenith %9.3f '%(opts.maxZenith)
+        
 command += ' --minEnergy %9.2f --maxEnergy %9.2f' %(np.power(10,opts.minEnergy),np.power(10,opts.maxEnergy))
 command += ' --output-ft1-max-bytes-per-file %i'%(opts.max_file_size*1E9)
 command += ' --output-ls1-max-bytes-per-file %i'%(opts.max_file_size*1E9)
@@ -116,5 +128,5 @@ print command_ft1
 print command_ft2
 
 os.system(command_ft1)
-os.system(command_ft2)
+#os.system(command_ft2)
 

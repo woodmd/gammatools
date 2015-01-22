@@ -272,8 +272,7 @@ Data.files = [%s]
 Data.generated = [%s]
 Data.logemin = [%s]
 Data.logemax = [%s]
-#Bins.logemin = 0.75
-#Bins.logemax = 6.5
+
 Bins.set_energy_bins(0.75,6.5)
 EffectiveAreaBins.set_energy_bins(0.75,6.5)
 FisheyeBins.set_energy_bins(0.75,6.5,0.125)

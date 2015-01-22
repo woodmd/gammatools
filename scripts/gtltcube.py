@@ -14,20 +14,8 @@ parser = argparse.ArgumentParser(usage=usage, description=description)
 
 parser.add_argument('files', nargs='+')
 
-parser.add_argument('--dcostheta', default = 0.025, type=float,
-                  help = '')
-
-parser.add_argument('--binsz', default = 1.0, type=float,
-                    help = '')
-
-parser.add_argument('--zmax', default = 105.0, type=float,
-                    help = 'Set the maximum zenith angle.')
-
 parser.add_argument('--output', default = None, 
                   help = 'Output file')
-
-parser.add_argument('--scfile', default = None, required=True,
-                    help = 'Spacecraft file')
 
 #parser.add_argument("-l", "--logdir", dest="logdir", default=".", 
 #                  help="log DIRECTORY (default ./)")
@@ -40,6 +28,8 @@ parser.add_argument('--scfile', default = None, required=True,
 
 parser.add_argument('--queue', default = None,
                     help='Set the batch queue.')
+
+LTCubeTask.add_arguments(parser)
 
 args = parser.parse_args()
 
@@ -64,12 +54,7 @@ for f in args.files:
     else:
         outfile = args.output
 
-    gt_task = LTCubeTask(outfile,
-                         dcostheta=args.dcostheta,
-                         binsz=args.binsz,
-                         zmax=args.zmax,
-                         evfile=f,
-                         scfile=args.scfile)
+    gt_task = LTCubeTask(outfile,opts=args,evfile=f)
 
     gt_task.run()
     

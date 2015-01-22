@@ -232,10 +232,31 @@ class HealpixSkyImage(HealpixImage):
                              *pixcrd)
 
     def center(self):
-        pixcrd = super(SkyImage,self).center()
-        skycrd = self._wcs.wcs_pix2sky(pixcrd[0], pixcrd[1], 0)
+        """Returns lon,lat."""
 
-        return np.vstack((skycrd[0],skycrd[1]))
+        pixcrd = np.array(self.axes()[0].edges[:-1],dtype=int)
+        pixang0, pixang1 = hp.pixelfunc.pix2ang(self.nside,pixcrd)
+        
+        pixang0 = np.ravel(pixang0)
+        pixang1 = np.ravel(pixang1)
+        pixang0 = np.pi/2. - pixang0
+        
+        return np.vstack((np.degrees(pixang1),np.degrees(pixang0)))
+    
+
+    def mask(self,lonrange=None,latrange=None):
+        
+        c = self.center()
+        msk = np.empty(self.axis(0).nbins,dtype='bool'); msk.fill(True)
+        msk &= (c[1] > latrange[0])&(c[1] < latrange[1])
+        self._counts[msk]=np.nan
+        
+    def integrate(self,lonrange=None,latrange=None):
+
+        c = self.center()
+        msk = np.empty(self.axis(0).nbins,dtype='bool'); msk.fill(True)
+        msk &= (c[1] > latrange[0])&(c[1] < latrange[1])
+        return np.sum(self._counts[msk])        
         
     def smooth(self,sigma):
 
@@ -305,7 +326,7 @@ class HealpixSkyImage(HealpixImage):
 
             im = ax.get_images()[0]
             cb = fig.colorbar(im, orientation='horizontal', 
-                              shrink=.8, pad=0.05,format='%.2g')
+                              shrink=.8, pad=0.05,format='%.3g')
             #, ticks=[min, max])
             cb.ax.xaxis.set_label_text(cbar_label)
 

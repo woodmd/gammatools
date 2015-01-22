@@ -53,9 +53,10 @@ energy_label = 'Energy [log$_{10}$(E/MeV)]'
 costh_label = 'Cos $\\theta$'
 acceptance_label = 'Acceptance [m$^2$ sr]'
 effarea_label = 'Effective Area [m$^2$]'
+
+psb_label = '68% PSF Containment [deg]'
 psf68_label = '68% PSF Containment [deg]'
 psf68_ratio_label = '68% PSF Containment Ratio'
-
 psf95_label = '95% PSF Containment [deg]'
 psf95_ratio_label = '95% PSF Containment Ratio'
 
@@ -68,6 +69,8 @@ for arg in args.files:
 
     
 for i, irfm in enumerate(irf_models):
+    continue
+    
     for j, irf in enumerate(irfm._irfs):
 
         irf0 = irf_models[0]._irfs[j]
@@ -114,28 +117,49 @@ acc_hists = []
 effarea_hists = []
 psf68_hists = []
 psf95_hists = []
+psfb_mean_hists = []
+psfb_median_hists = []
+psfb_peak_hists = []
 
 #fig, axes = plt.subplots(2,len(irf_models))
 
 #acc_fig = ft.create('acc')
 #psf_fig = ft.create('psf')
 
-energy_axis = Axis.create(1.00,6.50,44,label=energy_label)
+loge_axis = Axis.create(1.00,6.50,44,label=energy_label)
 cth_axis = Axis.create(0.2,1.0,32,label=costh_label)
 
 for k, irf in enumerate(irf_models):
-    hpsf68 = Histogram2D(energy_axis,cth_axis)
-    hpsf95 = Histogram2D(energy_axis,cth_axis)
-    hacc = Histogram2D(energy_axis,cth_axis)
-    heffarea = Histogram2D(energy_axis,cth_axis)         
+    hpsf68 = Histogram2D(loge_axis,cth_axis)
+    hpsf95 = Histogram2D(loge_axis,cth_axis)
+    hpsfb = Histogram2D(loge_axis,cth_axis)
+    hacc = Histogram2D(loge_axis,cth_axis)
+    heffarea = Histogram2D(loge_axis,cth_axis)         
     heffarea._counts = irf.aeff(*heffarea.center()).reshape(heffarea.shape())
     hpsf68._counts = irf.psf_quantile(*hpsf68.center()).reshape(hpsf68.shape())
-    hpsf95._counts = irf.psf_quantile(*hpsf95.center(),frac=0.95).reshape(hpsf95.shape())
+    hpsf95._counts = irf.psf_quantile(*hpsf95.center(),
+                                       frac=0.95).reshape(hpsf95.shape())
+    hpsfb_mean = \
+        HistogramND.createFromFn([loge_axis,cth_axis],
+                                 lambda x, y: irf.fisheye(x,y,ctype='mean'))
+    hpsfb_median = \
+        HistogramND.createFromFn([loge_axis,cth_axis],
+                                 lambda x, y: irf.fisheye(x,y,ctype='median'))
+    hpsfb_peak = \
+        HistogramND.createFromFn([loge_axis,cth_axis],
+                                 lambda x, y: irf.fisheye(x,y,ctype='peak'))
 
-    hacc = heffarea*2.*np.pi*hacc.yaxis().width()[np.newaxis,:]
+    hpsfb_mean = hpsfb_mean.abs()
+    hpsfb_median = hpsfb_median.abs()
+    hpsfb_peak = hpsfb_peak.abs()
+        
+    hacc = heffarea*2.*np.pi*hacc.yaxis().width[np.newaxis,:]
     acc_hists.append(hacc)
     psf68_hists.append(hpsf68)
     psf95_hists.append(hpsf95)
+    psfb_mean_hists.append(hpsfb_mean)
+    psfb_median_hists.append(hpsfb_median)
+    psfb_peak_hists.append(hpsfb_peak)
     effarea_hists.append(heffarea)
     
     fig = ft.create('%s_effarea'%(labels[k]),
@@ -259,7 +283,30 @@ def make_projection_plots(hists,cut_label,cut_dim,cuts,figname,**kwargs):
 #    fig.savefig(figname,bbox_inches='tight')
 
 common_kwargs = { 'hist_xerr': False, 'figscale' : 1.4 }
-    
+
+make_projection_plots(psfb_mean_hists,'Cos $\\theta$',1,[1.0,0.8,0.6,0.4],
+                      'psfb_mean_egy',
+                      xlabel=energy_label,
+                      ylabel='Mean Fisheye Correction [deg]',
+                      ylim=[1E-3,1E2],
+                      yscale='log',legend_loc='upper right',**common_kwargs)
+
+make_projection_plots(psfb_median_hists,'Cos $\\theta$',1,[1.0,0.8,0.6,0.4],
+                      'psfb_median_egy',
+                      xlabel=energy_label,
+                      ylabel='Median Fisheye Correction [deg]',
+                      ylim=[1E-3,1E2],
+                      yscale='log',legend_loc='upper right',**common_kwargs)
+
+make_projection_plots(psfb_peak_hists,'Cos $\\theta$',1,[1.0,0.8,0.6,0.4],
+                      'psfb_peak_egy',
+                      xlabel=energy_label,
+                      ylabel='Peak Fisheye Correction [deg]',
+                      ylim=[1E-3,1E2],
+                      yscale='log',legend_loc='upper right',**common_kwargs)
+
+plt.show()
+
 make_projection_plots(psf68_hists,'Cos $\\theta$',1,[1.0,0.8,0.6,0.4],
                       'psf68_egy',
                       xlabel=energy_label,ylabel=psf68_label,
