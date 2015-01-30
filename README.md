@@ -19,3 +19,14 @@ in the default location:
 or in a specific location with the prefix option:
 
     python setup.py install --prefix=$HOME/local
+
+Project Status
+--------------
+
+.. image:: https://travis-ci.org/gammatools/gammatools.png
+    :target: https://travis-ci.org/gammatools/gammatools
+
+License
+-------
+Astropy is licensed under a 3-clause BSD style license - see the
+``licenses/LICENSE.rst`` file.
