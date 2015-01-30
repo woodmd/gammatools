@@ -23,10 +23,10 @@ or in a specific location with the prefix option:
 Project Status
 --------------
 
-.. image:: https://travis-ci.org/gammatools/gammatools.png
-    :target: https://travis-ci.org/gammatools/gammatools
+.. image:: https://travis-ci.org/woodmd/gammatools.png
+    :target: https://travis-ci.org/woodmd/gammatools
 
 License
 -------
-Astropy is licensed under a 3-clause BSD style license - see the
+gammatools is licensed under a 3-clause BSD style license - see the
 ``licenses/LICENSE.rst`` file.
