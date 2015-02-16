@@ -6,7 +6,6 @@ from gammatools.core.astropy_helper import pyfits
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import UnivariateSpline
-import bisect
 from gammatools.core.histogram import *
 
 def expand_irf(irf):
