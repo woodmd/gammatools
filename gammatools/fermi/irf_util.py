@@ -662,8 +662,6 @@ class PSFIRF(IRFComponent):
     def save(self,filename):
 
         self._hdulist[0].header['FILENAME'] = filename
-        
-#        print self._hdulist[1].data[0][4].shape, self._ncore.shape
 
         self._hdulist[1].data[0][4] = self._ncore
         self._hdulist[1].data[0][5] = self._ntail

@@ -38,6 +38,8 @@ class PSFModel(object):
             self._wfn = self.powerlaw_exp
 
     def load_file(self,file):
+        """Load PSF data from gtpsf file."""
+
         hdulist = pyfits.open(file)
         self._dtheta = np.array(hdulist[2].data.field(0))
         self._energy = np.array(hdulist[1].data.field(0))
