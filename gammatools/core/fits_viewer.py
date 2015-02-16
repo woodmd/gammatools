@@ -685,9 +685,6 @@ class FITSViewerApp(wx.App):
 
 
     def OnInit(self):
-
-        print 'im: ', self._im
-        
         self.frame = FITSViewerFrame(self._im,parent=None,
                                      title="FITS Viewer",
                                      size=(1.5*640, 1.5*480))
@@ -875,7 +872,9 @@ class FITSViewerFrame(wx.Frame):
 
         style = {}
 
-        if 'CREATOR' in hdu.header and hdu.header['CREATOR'] == 'gtsrcmaps':
+#        is_model_map = False
+        if ('CREATOR' in hdu.header and hdu.header['CREATOR'] == 'gtsrcmaps') or \
+                'mcube' in str(hdu.header['FILENAME']):
             style['hist_style'] = 'line'
             style['linestyle'] = '-'
 
