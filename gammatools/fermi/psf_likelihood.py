@@ -38,8 +38,6 @@ class ConvolvedGaussFn(PDF):
 
         a = pset.array()
 
-        print 'a ', a
-
 #        norm = pset[self._pid[0]]
 #        sig = pset[self._pid[1]]
 
@@ -316,8 +314,6 @@ class Binned2DLnL(ParamFnBase):
         lnl = (-mus)
         lnl[msk_on] += non[msk_on]*np.log(mus[msk_on])
 
-        print lnl.shape
-
         if pset.size() > 1: return -np.sum(lnl,axis=1)
         else: return -np.sum(lnl)
 
@@ -398,179 +394,6 @@ if __name__ == '__main__':
 
     pset = pset.makeParameterArray(0,np.linspace(0.5,1,8))
 
-    print pset
-
     xlo = np.array([0])
     xhi = np.array([0.5])
 
-    print gfn.integrate(xlo,xhi,pset)
-
-    sys.exit(0)
-
-    fn = PolarPolyFn.create(2,[0.1,1.0])
-
-    p0 = Parameter(2,3.7,'p0')
-
-    cm = CompositeModel()
-
-#    cm.addModel(fn,[p0],'(1-p0)**2+a1**3')
-    cm.addModel(fn)
-
-
-    pset = copy.deepcopy(cm.param())
-
-    print 'pset ', pset
-
-    p = pset.array()
-    rnd = np.random.uniform(0.0,1.0,(len(p),10,1))
-
-    prnd = p - 0.5*p + rnd*(2.0*p - (p - 0.5*p))
-
-    print 'p ', p.shape
-    print 'prnd ', prnd.shape
-
-
-    pset.setParam(prnd)
-
-    x = np.linspace(0,1,5)
-    print 'x: ', x
-
-
-    print 'cm.eval(1.0) ---------------'
-    print cm.eval(1.0)
-    print 'cm.eval(x) -----------------'
-    print cm.eval(x)
-    print 'cm.eval(x,p) ---------------'
-    print cm.eval(x,p)
-    print cm.eval(x,prnd)
-    print cm.eval(x,pset)
-
-
-
-    kfn = KingFn.create(0.2,5.0,0.5)
-
-    kfn_pset = copy.deepcopy(kfn.param())
-
-    kfn_pset = kfn_pset.makeParameterArray(1,np.linspace(0.5,1,8))
-
-    print kfn_pset
-
-    print 'kfn.eval(x)'
-    print kfn.eval(x)
-    print 'kfn.integrate(x[:-1],x[1:])'
-    print kfn.integrate(x[:-1],x[1:])
-    print 'kfn.integrate(x[:-1],x[1:])'
-    v = kfn.integrate(x[:-1],x[1:],kfn_pset)
-    print v.shape
-    print v
-
-    gfn = ConvolvedGaussFn.create(1.0,1.0,kfn,3)
-
-    pset = copy.deepcopy(gfn.param())
-
-    pset.getParByID(1).set(0.01)
-
-    print pset
-
-
-    print 'gfn.eval(x)'
-    print gfn.eval(x)
-
-    print gfn.eval(x,pset)
-
-    print 'gfn.integrate(x[:-1],x[1:])'
-    print gfn.param()
-    print gfn.integrate(x[:-1],x[1:])
-
-    pset = pset.makeParameterArray(1,np.linspace(0.5,1,8))
-
-
-
-    print 'gfn.integrate(x[:-1],x[1:])'
-    print pset
-    print gfn.integrate(x[:-1],x[1:],pset)
-
-    sys.exit(0)
-
-    sys.exit(0)
-    
-    gfn = ConvolvedGaussFn.create(0.01,1.0,kfn,3)
-
-    x = np.linspace(0,3,100)
-
-#    plt.plot(x,gfn.eval(x))
-
-    pset = gfn.param()
-
-    print pset
-
-    pset[4] = 0.15
-
-    plt.plot(x,gfn.eval(x,pset))
-
-    pset[4] = 0.05
-
-    p = pset.makeParameterArray(4,np.linspace(0.1,0.2,3))
-
-    plt.plot(x,gfn.eval(x,p)[0])
-    plt.plot(x,gfn.eval(x,p)[1])
-    plt.plot(x,gfn.eval(x,p)[2])
-
-
-    plt.show()
-
-    sys.exit(0)
-
-    nevent = 10000
-
-    cm = CompositeModel()
-#    cm.addModel(KingFn.create(1.0,3.0,0.5*nevent))
-
-    cm.addModel(PolyFn.create(3,[0,1,2]))
-#    cm.addModel(KingFn.create(0.2,3.0,0.5*nevent,3))
-
-    print cm.param()
-
-    nbin = 80
-
-    h0 = Histogram([0,5.0],nbin)
-    h1 = Histogram([0,5.0],nbin)
-
-
-
-    h0.fill(cm.rnd(nevent,10.0))
-
-    lnlfn = OnOffBinnedLnL(h0._counts,h1._counts,h0._xedges,1.0,cm)
-
-    plt.figure()
-
-    sig = np.linspace(0.9,1.1,100)
-
-    
-
-
-    p = cm.param().makeParameterArray(1,sig)
-
-
-#print lnlfn.eval(p)
-#print lnlfn.eval(p[0])
-
-
-    plt.plot(sig,lnlfn.eval(p))
-
-    lnlfn.fit()
-
-
-
-#plt.plot(sig,lnlfn.eval())
-
-    plt.figure()
-
-
-    x = np.linspace(0,3,100)
-
-    h0.plot()
-    
-    plt.plot(h0._x,cm.integrate(h0._xedges[:-1],h0._xedges[1:]))
-
-    plt.show()

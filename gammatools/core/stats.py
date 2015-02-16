@@ -341,37 +341,9 @@ def poisson_ul(nc,mus,mub,data_axes=1):
     for i in range(lnl.shape[0]):
         
         dlnl = -2*(lnl[i]-lnl[i][0])
-
         deltas_root = find_root(deltas,dlnl,2.72)
-
         ul[i] = snorm[i][0] + deltas_root
 
-
-        continue
-
-        print i, snorm[i][0], deltas_root
-
-        z0 = 2*np.sum(poisson_lnl(nc[i],mutot[i]))
-        z1 = 2*np.sum(poisson_lnl(nc[i],mutot[i]+deltas_root*mus))
-
-        print z0, z1, z1-z0
-
-        continue
-
-        ul = snorm[i][0] + find_root(deltas,dlnl,2.72)
-
-        print '------------'
-
-        z0 = 2*np.sum(poisson_lnl(nc[i],mutot[i]))
-        z1 = 2*np.sum(poisson_lnl(nc[i],mub+ul*mus))
-
-        print z0, z1, z1-z0
-
-        print snorm[i][0], ul
-
-#        plt.figure()
-#        plt.plot(x,dlnl)
-#        plt.show()
     return ul
 
 
@@ -391,24 +363,24 @@ if __name__ == '__main__':
     scalc = OnOffExperiment(mus,mub,alpha)
 
 
-    print scalc.asimov_ts0_signal(1.0)
-    print scalc.asimov_ts0_signal(np.linspace(0.1,100,10))
+    print(scalc.asimov_ts0_signal(1.0))
+    print(scalc.asimov_ts0_signal(np.linspace(0.1,100,10)))
 
 
     ts = scalc.mc_ts(1.0,1000)
 
-    print np.median(ts)
+    print(np.median(ts))
 
     sys.exit(0)
 
     s = np.linspace(0.1,100,10)
 
-    print 'ts0_signal ', scalc.asimov_ts0_signal(s)
-    print 'ts0_signal[5] ', s[5], scalc.asimov_ts0_signal(s[5])
+    print('ts0_signal ', scalc.asimov_ts0_signal(s))
+    print('ts0_signal[5] ', s[5], scalc.asimov_ts0_signal(s[5]))
     mu, muerr =  scalc.asimov_mu_ts0(25.0)
 
-    print 'TS(mu): ', scalc.asimov_ts0_signal(mu)
-    print 'TS(mu+muerr): ', scalc.asimov_ts0_signal(mu+muerr)
+    print('TS(mu): ', scalc.asimov_ts0_signal(mu))
+    print('TS(mu+muerr): ', scalc.asimov_ts0_signal(mu+muerr))
 
     ns = np.random.poisson(mus,(ntrial,len(mus))).T
     nb = np.random.poisson(mub,(ntrial,len(mub))).T
@@ -445,17 +417,17 @@ if __name__ == '__main__':
     ul_asimov_lower = (1.64-1)*sigma
 
 
-    print 'SIGMA ', sigma
-    print 'SIGMA ', sigma_mu_fn(1.0)
-    print 'SIGMA ', sigma_mu_fn(10.0)
-    print 'Asimov q0 UL  ', find_fn_root(lambda t: fn_qmu(mub+t,mub+t,mub),0,100,dlnl)
-    print 'Asimov qmu UL ', ul_asimov_qmu, sigma
-    print 'Asimov UL ', ul_asimov, ul_asimov_upper-ul_asimov, ul_asimov_lower-ul_asimov
+    print('SIGMA ', sigma)
+    print('SIGMA ', sigma_mu_fn(1.0))
+    print('SIGMA ', sigma_mu_fn(10.0))
+    print('Asimov q0 UL  ', find_fn_root(lambda t: fn_qmu(mub+t,mub+t,mub),0,100,dlnl))
+    print('Asimov qmu UL ', ul_asimov_qmu, sigma)
+    print('Asimov UL ', ul_asimov, ul_asimov_upper-ul_asimov, ul_asimov_lower-ul_asimov)
 
-    print -2*poisson_delta_lnl(mub,mub,mub+ul_asimov)
-    print -2*poisson_delta_lnl(mub,mub,mub+ul_asimov_qmu)
-    print fn_qmu(mub,mub,mub+ul_asimov_qmu)
-    print dlnl
+    print(-2*poisson_delta_lnl(mub,mub,mub+ul_asimov))
+    print(-2*poisson_delta_lnl(mub,mub,mub+ul_asimov_qmu))
+    print(fn_qmu(mub,mub,mub+ul_asimov_qmu))
+    print(dlnl)
 
     qmu = -2*poisson_delta_lnl(mub,mub,mub+ul_asimov_qmu)
 
@@ -480,9 +452,3 @@ if __name__ == '__main__':
 
     plt.show()
 
-    print 'Median UL ', np.median(ul_mc)
-
-    print 'Median TS ', np.median(ts_mc)
-    print 'Asimov TS ', ts_asimov
-#    print fn_qmu(mus+mub,mus+mub,mub)
-#    print fn_qmu(mub,mub,mus+mub)

@@ -6,7 +6,8 @@ from gammatools.dm.jcalc import *
 class HaloModelFactory(object):
 
     @staticmethod
-    def create(src_name,model_file = None,rho_rsun = None, gamma = None):
+    def create(src_name,model_file = None,rho_rsun = None, gamma = None,
+               **kwargs):
 
         if model_file is None:
             model_file = os.path.join(gammatools.PACKAGE_ROOT,
@@ -18,6 +19,7 @@ class HaloModelFactory(object):
             raise Exception('Could not find profile: ' + src_name)
 
         src = halo_model_lib[src_name]
+        src.update(kwargs)
 
         if rho_rsun is not None:
             src['rhor'] = [rho_rsun,8.5]
@@ -29,7 +31,10 @@ class HaloModelFactory(object):
 
 class HaloModel(object):
 
-    def __init__(self,src):
+    def __init__(self,src,**kwargs):
+
+        src.update(kwargs)
+
         self._losfn = LoSIntegralFnFast.create(src)
         self._dp = DensityProfile.create(src)
         self._jp = JProfile(self._losfn)

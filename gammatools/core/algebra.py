@@ -181,8 +181,8 @@ if __name__ == '__main__':
     v0 = Vector3D.createLatLon(0.0,np.radians(2.0))
     v1 = Vector3D.createLatLon(np.radians(lat),np.radians(lon))
 
-    print 'v0: ', v0
-    print 'v1: ', v1
+    print('v0: ', v0)
+    print('v1: ', v1)
     
     v2 = v1.project2d(v0)
 
@@ -190,4 +190,4 @@ if __name__ == '__main__':
     x = np.degrees(v2.theta()*np.sin(v2.phi()))
 
     for i in range(4):    
-        print '%.3f %.3f'%(x[i], y[i])
+        print('%.3f %.3f'%(x[i], y[i]))

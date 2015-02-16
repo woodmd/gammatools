@@ -3,7 +3,12 @@ import errno
 import numpy as np
 import scipy.special as spfn
 import re
-import cPickle as pickle
+
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
+
 import gzip
 import bisect
 import inspect
@@ -129,7 +134,7 @@ def update_dict(d0,d1,add_new_keys=False,append=False):
 
     if d0 is None or d1 is None: return
     
-    for k, v in d0.iteritems():
+    for k, v in d0.items():
         
         if not k in d1: continue
 
@@ -140,7 +145,7 @@ def update_dict(d0,d1,add_new_keys=False,append=False):
         else: d0[k] = d1[k]
 
     if add_new_keys:
-        for k, v in d1.iteritems(): 
+        for k, v in d1.items(): 
             if not k in d0: d0[k] = d1[k]
         
 def clear_dict_by_vals(d,vals):
@@ -187,14 +192,14 @@ def dispatch_jobs(exe,args,opts,queue=None,
             cmd = '%s %s '%(exe,x)
             batch_cmd = 'bsub -q %s -R %s '%(queue,resources)
             batch_cmd += ' %s %s '%(cmd,cmd_opts)        
-            print batch_cmd
+            print(batch_cmd)
             os.system(batch_cmd)
 
     else:
         cmd = '%s %s '%(exe,' '.join(args))
         batch_cmd = 'bsub -q %s -R %s '%(queue,resources)
         batch_cmd += ' %s %s '%(cmd,cmd_opts)        
-        print batch_cmd
+        print(batch_cmd)
         os.system(batch_cmd)
             
 
@@ -255,7 +260,7 @@ def bitarray_to_int(x,big_endian=False):
 
 def make_dir(d):
     try: os.makedirs(d)
-    except os.error, e:
+    except OSError as e:
         if e.errno != errno.EEXIST: raise 
 
 def get_parameters(expr):
@@ -438,17 +443,10 @@ def interpolatend(x0,z,x):
                 index[j][i] = ix
                 psum[j] *= (1.0-xs)
 
-#    print index
-#    print index[0].shape
-#    print z[np.ix_(index[0])]
-
     for j in range(len(psum)):
 
         idx = []
         for i in range(ndim): idx.append(index[j][i])
-
-#        print idx
-
         psum[j] *= z[idx]
 
     return np.sum(psum,axis=0)
@@ -563,19 +561,6 @@ def convolve2d_gauss(fn,r,sig,rmax,nstep=200):
                np.exp(np.log(je)+x-(r*r+rp*rp)/(2*sig2)),axis=saxis)*dr
 
     return s
-
-#        sig2 = sig*sig
-#        x = r*rp/(sig2)
-
-#        print 'rp: ', rp.shape
-#        print 'x: ', x.shape
-
-#        je = spfn.ive(0,x)
-#        fnrp = fn(rp)
-
-#        return np.sum(rp*fnrp/(sig2)*
-#                      np.exp(np.log(je)+x-(r*r+rp*rp)/(2*sig2)),axis=1)*dr
-
 
 def convolve1(fn,r,sig,rmax):
 

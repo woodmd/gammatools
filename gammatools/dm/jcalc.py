@@ -633,6 +633,8 @@ class DensityProfile(object):
 
         if name == 'nfw':
             dp = NFWProfile(**extract(['rhos','rs','rmin'],o))
+        elif name == 'burkert':
+            dp = BurkertProfile(**extract(['rhos','rs','rmin'],o))
         elif name == 'gnfw':
             dp = GNFWProfile(**extract(['rhos','rs','rmin','gamma'],o))
         elif name == 'isothermal':

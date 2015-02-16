@@ -232,7 +232,7 @@ def mycov(self,full_output=False,min_step=1e-5,max_step=1,max_iters=5,target=0.5
     """
 
     if self.gradient is None:
-        print 'No analytic gradient found; using finite differences.'
+        print('No analytic gradient found; using finite differences.')
         return self.errors(method='HESSE')
     step_size = np.diag(self.errors(method='MIGRAD'))**0.5 / 8.
     step_size = np.maximum(step_size,min_step*1.1)
@@ -278,12 +278,12 @@ def mycov(self,full_output=False,min_step=1e-5,max_step=1,max_iters=5,target=0.5
             par[i] += di
             delta_f = (g_up - g_dn)[i]
             converged,new_step = revised_step(delta_f,di,i)
-            print 'Parameter %d -- Iteration %d -- Step size: %.2e -- delta: %.2e'%(i,j,di,delta_f)
+            print('Parameter %d -- Iteration %d -- Step size: %.2e -- delta: %.2e'%(i,j,di,delta_f))
             if converged: break
             else: step_size[i] = new_step
         hess[i,:] = (g_up - g_dn) / (2*di)  # central difference
         if not converged:
-            print 'Warning: step size for parameter %d (%.2g) did not result in convergence.'%(i,di)
+            print('Warning: step size for parameter %d (%.2g) did not result in convergence.'%(i,di))
     
     try:
         cov = inv(hess)

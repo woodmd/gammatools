@@ -14,10 +14,10 @@ import re
 import abc
 import inspect
 from scipy.interpolate import UnivariateSpline
-from histogram import Histogram
-from util import expand_aliases, get_parameters
-from minuit import Minuit
-from parameter_set import Parameter, ParameterSet
+from .histogram import Histogram
+from .util import expand_aliases, get_parameters
+from .minuit import Minuit
+from .parameter_set import Parameter, ParameterSet
 import matplotlib.pyplot as plt
 
 class ParamFnBase(object):

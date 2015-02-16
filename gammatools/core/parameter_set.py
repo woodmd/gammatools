@@ -14,8 +14,7 @@ import numpy as np
 import copy
 import re
 from scipy.interpolate import UnivariateSpline
-from histogram import Histogram
-from util import expand_aliases, get_parameters
+from gammatools.core.util import expand_aliases, get_parameters
 
 class Parameter(object):
     """This class encapsulates a single function parameter that can
@@ -324,5 +323,4 @@ if __name__ == '__main__':
     pset = ParameterSet()
     pset.createParameter(0.0,'par0')
     
-    for p in pset:
-        print p
+    for p in pset: print(p)

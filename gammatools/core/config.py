@@ -1,7 +1,7 @@
 import inspect
 import os
 import copy
-from util import update_dict
+from gammatools.core.util import update_dict
 
 class Option(object):
 
@@ -132,12 +132,10 @@ class Configurable(object):
             config = cls.get_default_config(group=group).values()
             
         groups = {}
-#        for k, v in config.iteritems():
         for v in config:
             if v.group is not None and not v.group in groups:
                 groups[v.group] = parser.add_argument_group(v.group)
 
-#        for k, v in config.iteritems():
         for v in config:
 
             if skip is not None and v.name in skip: continue
@@ -199,10 +197,9 @@ class Configurable(object):
        
     def print_config(self):
         
-        print 'CONFIG'
-        for k, v in self._default_config.iteritems():
-            print '%20s %10s %10s %s'%(k,self._config[k],v.value,
-                                       v.docstring)
+        for k, v in self._default_config.items():
+            print('%20s %10s %10s %s'%(k,self._config[k],v.value,
+                                       v.docstring))
 
     @property
     def config(self):
@@ -219,11 +216,9 @@ class Configurable(object):
 #        import pprint
 #        pprint.pprint(self._config)
         
-        for k,v in opts.__dict__.iteritems():
+        for k,v in opts.__dict__.items():
 
             if v is None: continue
-
-            print 'Parsing ', k, v
             
             argname = k.split('.')
             if len(argname) == 2:
@@ -270,7 +265,7 @@ class Configurable(object):
                 
         update_dict(self._config,kwargs)
         
-        for k, v in self._config.iteritems():
+        for k, v in self._config.items():
 
             if v is None or not isinstance(v,str): continue            
             if os.path.isfile(v): self._config[k] = os.path.abspath(v)

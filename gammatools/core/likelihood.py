@@ -14,12 +14,11 @@ import numpy as np
 import copy
 import re
 from scipy.interpolate import UnivariateSpline
-from histogram import Histogram
-from util import expand_aliases, get_parameters
-from minuit import Minuit
-from parameter_set import Parameter, ParameterSet
+from gammatools.core.util import expand_aliases, get_parameters
+from gammatools.core.minuit import Minuit
+from gammatools.core.parameter_set import Parameter, ParameterSet
 import matplotlib.pyplot as plt
-from model_fn import ParamFnBase, PDF
+from gammatools.core.model_fn import ParamFnBase, PDF
 
 class CompProdModel(PDF):
 

@@ -103,30 +103,19 @@ class PowerNormalize(matplotlib.colors.Normalize):
 
     def __call__(self, value, clip=None):
 
-        print 'call ', type(value)
-
-#        print 'value ', value
-#        print 'clip ', clip
-
         return np.ma.masked_array(np.power((value-self.vmin)/self.vmax,
                                            1./self.power))
 
         if isinstance(value,np.ma.masked_array):
-            print 'here'
             mask = value.mask
             v = np.ma.masked_array(value,copy=True)
             v[~v.mask] = np.power((v[~v.mask]-self.vmin)/self.vmax,
                                  1./self.power)
 
         else:
-            print 'here2'
             v = np.ma.masked_array(np.power((value-self.vmin)/self.vmax,
                                             1./self.power))
-#        import healpy as hp
-#        v[v.mask]=10
-
         return v
-
     
 class SqrtScale(mscale.ScaleBase):
     """

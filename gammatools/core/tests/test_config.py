@@ -63,19 +63,19 @@ class TestConfigurable(unittest.TestCase):
         self.assertEqual(base_class.config,
                          BaseClass.default_config)
         self.assertEqual(derived_class.config,
-                         dict(BaseClass.default_config.items()+
-                              DerivedClass.default_config.items()))
+                         dict(list(BaseClass.default_config.items())+
+                              list(DerivedClass.default_config.items())))
         self.assertEqual(derived2_class.config,
-                         dict(BaseClass.default_config.items()+
-                              DerivedClass.default_config.items()+
-                              DerivedClass2.default_config.items()))
+                         dict(list(BaseClass.default_config.items())+
+                              list(DerivedClass.default_config.items())+
+                              list(DerivedClass2.default_config.items())))
 
         # Test dict input
         base_class = BaseClass(config)
         derived_class = DerivedClass(config)
         derived2_class = DerivedClass2(config)
 
-        for k, v in config.iteritems():
+        for k, v in config.items():
 
             if k in base_class.default_config: 
                 self.assertEqual(base_class.config[k],v)
@@ -89,12 +89,12 @@ class TestConfigurable(unittest.TestCase):
         self.assertEqual(set(base_class.config.keys()),
                          set(BaseClass.default_config.keys()))
         self.assertEqual(set(derived_class.config.keys()),
-                         set(BaseClass.default_config.keys()+
-                             DerivedClass.default_config.keys()))
+                         set(list(BaseClass.default_config.keys())+
+                             list(DerivedClass.default_config.keys())))
         self.assertEqual(set(derived2_class.config.keys()),
-                         set(BaseClass.default_config.keys()+
-                             DerivedClass.default_config.keys()+
-                             DerivedClass2.default_config.keys()))
+                         set(list(BaseClass.default_config.keys())+
+                             list(DerivedClass.default_config.keys())+
+                             list(DerivedClass2.default_config.keys())))
         
         # Test dict and kwarg input -- kwargs take precedence over dict
         base_class = BaseClass(config,**kwargs)
@@ -103,7 +103,7 @@ class TestConfigurable(unittest.TestCase):
 
         config.update(kwargs)
 
-        for k, v in config.iteritems():
+        for k, v in config.items():
 
             if k in base_class.default_config: 
                 self.assertEqual(base_class.config[k],v)
@@ -117,12 +117,12 @@ class TestConfigurable(unittest.TestCase):
         self.assertEqual(set(base_class.config.keys()),
                          set(BaseClass.default_config.keys()))
         self.assertEqual(set(derived_class.config.keys()),
-                         set(BaseClass.default_config.keys()+
-                             DerivedClass.default_config.keys()))
+                         set(list(BaseClass.default_config.keys())+
+                             list(DerivedClass.default_config.keys())))
         self.assertEqual(set(derived2_class.config.keys()),
-                         set(BaseClass.default_config.keys()+
-                             DerivedClass.default_config.keys()+
-                             DerivedClass2.default_config.keys()))
+                         set(list(BaseClass.default_config.keys())+
+                             list(DerivedClass.default_config.keys())+
+                             list(DerivedClass2.default_config.keys())))
 
         return
         # Test update

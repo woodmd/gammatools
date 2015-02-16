@@ -279,8 +279,7 @@ class HistogramND(object):
         else: v = np.array(v,ndmin=1)
 
         if z.shape[0] != self._ndim:
-
-            print z.shape, self._ndim
+            print(z.shape, self._ndim)
             raise Exception('Coordinate dimension of input array must be '
                             'equal to histogram dimension.')
 
@@ -475,8 +474,8 @@ class HistogramND(object):
             else:
                 slices[idim] = slice(index_range[0],index_range[0]+1)
 
-        axes = filter(None,axes)
-        new_shape = filter(None,new_shape)
+        axes = list(filter(None,axes))
+        new_shape = list(filter(None,new_shape))
         
         c = self._counts[slices].reshape(new_shape)
         v = self._var[slices].reshape(new_shape)
@@ -591,6 +590,12 @@ class HistogramND(object):
         return o
 
     def __div__(self,x):
+        return self.divide(x)
+
+    def __truediv__(self,x):
+        return self.divide(x)
+
+    def divide(self,x):
 
         if isinstance(x, HistogramND):
             o = copy.deepcopy(self)
@@ -1415,12 +1420,12 @@ class Histogram(HistogramND):
 
     def rebin(self,bins=2):
 
-        if bins <= 1: return copy.deepcopy(self)
+        if isinstance(bins,int) and bins <= 1: return copy.deepcopy(self)
 
         bins = np.array(bins)
 
         if bins.ndim == 0:
-            bin_index = range(0,self._axes[0].nbins,bins)
+            bin_index = list(range(0,self._axes[0].nbins,bins))
             bin_index.append(self._axes[0].nbins)
             bin_index = np.array(bin_index)
         else:
@@ -1534,32 +1539,33 @@ class Histogram(HistogramND):
 
         return o
 
-    def __div__(self,x):
 
-        if isinstance(x, Histogram):
-            o = copy.deepcopy(self)
-
-            y1 = self._counts
-            y2 = x._counts
-            y1_var = self._var
-            y2_var = x._var
-
-            msk = ((y1!=0) & (y2!=0))
-
-            o._counts[~msk] = 0.
-            o._var[~msk] = 0.
-            
-            o._counts[msk] = y1[msk] / y2[msk]
-            o._var[msk] = (y1[msk] / y2[msk])**2
-            o._var[msk] *= (y1_var[msk]/y1[msk]**2 + y2_var[msk]/y2[msk]**2)
-
-            return o
-        else:
-            x = np.array(x,ndmin=1)
-            msk = x != 0
-            x[msk] = 1./x[msk]
-            x[~msk] = 0.0
-            return self.__mul__(x)
+#    def __div__(self,x):
+#
+#        if isinstance(x, Histogram):
+#            o = copy.deepcopy(self)
+#
+#            y1 = self._counts
+#            y2 = x._counts
+#            y1_var = self._var
+#            y2_var = x._var
+#
+#            msk = ((y1!=0) & (y2!=0))
+#
+#            o._counts[~msk] = 0.
+#            o._var[~msk] = 0.
+#            
+#            o._counts[msk] = y1[msk] / y2[msk]
+#            o._var[msk] = (y1[msk] / y2[msk])**2
+#            o._var[msk] *= (y1_var[msk]/y1[msk]**2 + y2_var[msk]/y2[msk]**2)
+#
+#            return o
+#        else:
+#            x = np.array(x,ndmin=1)
+#            msk = x != 0
+#            x[msk] = 1./x[msk]
+#            x[~msk] = 0.0
+#            return self.__mul__(x)
 
     def _prepare_xaxis(self, rotation=0, alignment='center'):
         """Apply bounds and text labels on x axis."""
@@ -1918,8 +1924,6 @@ class Histogram2D(HistogramND):
 
         kw = extract_dict_by_keys(style,MPLUtil.contour_kwargs)
         kw['origin'] = 'lower'
-        
-        print kw
 
         cs = plt.contour(self._xaxis.center,self._yaxis.center,
                          self._counts.T,**kw)
@@ -1988,14 +1992,10 @@ if __name__ == '__main__':
     h1d.fill(8.5,1)
     h1d.fill(9.5,1)
 
-
-    print h1d.axis().edges
-
     for x in h1d.iterbins():
-        print x.center, x.counts
-
+        print(x.center, x.counts)
 
     h1d.rebin([4,4,2])
 
-    print h1d.axis().edges
+    print (h1d.axis().edges)
         

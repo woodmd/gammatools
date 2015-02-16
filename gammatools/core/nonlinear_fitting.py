@@ -1,6 +1,6 @@
-from parameter_set import *
-from util import update_dict
-from model_fn import ParamFn
+from .parameter_set import *
+from .util import update_dict
+from .model_fn import ParamFn
 import inspect
 from gammatools.core.config import Configurable
 #from iminuit import Minuit as Minuit2
@@ -24,8 +24,6 @@ class IMinuitFitter(object):
 #            kwargs { p.name() }
 
         m = Minuit2(lambda x: self._objfn.eval(x))
-
-        print m.fit()
 
 
 class MinuitFitter(object):
@@ -56,9 +54,6 @@ class MinuitFitter(object):
         imin = np.argmin(lnl)
 
         pset.update(prnd[:,imin])
-
-        print self._objfn.eval(pset)
-
         return pset
 
     def profile(self,pset,pname,pval,refit=True):
@@ -81,9 +76,6 @@ class MinuitFitter(object):
                 pset.setParByName(pname,p)
 
                 v = self._objfn.eval(pset)
-
-#                print p, v, pset.getParByName('agn_norm').value()
-
                 fval.append(v)
             
         return np.array(fval)
@@ -102,8 +94,6 @@ class MinuitFitter(object):
         for i, p in enumerate(pset):
             if not p.lims is None: lims.append(p.lims)
             else: lims.append([0.0,0.0])
-                            
-        print pset.array()
 
         minuit = Minuit(lambda x: self._objfn.eval(x),
                         pset.array(),fixed=fixed,limits=lims,
@@ -118,7 +108,6 @@ class MinuitFitter(object):
         return FitResults(pset,fval,cov)
 
     def plot_lnl_scan(self,pset):
-        print pset
 
         fig = plt.figure(figsize=(12,8))
         for i in range(9):
