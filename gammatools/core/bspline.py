@@ -1,9 +1,34 @@
 import numpy as np
+import copy
+
+def fit_svd(x,y,yerr,n=2):
+
+    x = np.asarray(x)
+    y = np.asarray(y)
+    yerr = np.asarray(yerr)
+    
+    A = np.zeros(shape=(len(x),n+1))
+
+    for i in range(n+1):
+        A[:,i] = np.power(x,i)/yerr
+
+    b = y/yerr
+    (u,s,v) = np.linalg.svd(A,full_matrices=False)
+    ub = np.sum(u.T*b,axis=1)
+    a = np.sum(ub*v.T/s,axis=1)
+
+    vn = v.T/s
+    cov = np.dot(vn,vn.T)
+
+    return a, cov
 
 class BSpline(object):
     """Class representing a 1-D B-spline."""
     
+    m1 = np.array([[1.0]])
+
     m2 = np.array([[1.0,-1.0],[0.0,1.0]])
+
     m3 = 0.5*np.array([[1.0,-2.0,1.0],
                        [1.0,2.0,-2.0],
                        [0.0,0.0, 1.0]])
@@ -19,40 +44,41 @@ class BSpline(object):
 
         @param k Knot vector.
         @param w Weights vector.
-        @param nd Order of spline (2=linear, 3=quadratic, 4=cubic)
+        @param nd Order of spline (1=step-wise, 2=linear, 3=quadratic, 4=cubic)
         """
         self._k = k
         self._w = w
         self._nd = nd
+        self._m = BSpline.get_matrix(nd)
 
-        if nd == 2: self._m = BSpline.m2
-        elif nd == 3: self._m = BSpline.m3
-        elif nd == 4: self._m = BSpline.m4
+    @staticmethod
+    def get_matrix(nd):
+        if nd == 1: return BSpline.m1
+        elif nd == 2: return BSpline.m2
+        elif nd == 3: return BSpline.m3
+        elif nd == 4: return BSpline.m4
         else:
-            print 'Spline order ', nd, ' not supported.'
-            sys.exit(1)
-
+            raise Exception('Spline order %i not supported.'%nd)
+        
     @staticmethod
     def fit(x,y,yerr,k,nd):
 
-        if nd == 2: m = BSpline.m2
-        elif nd == 3: m = BSpline.m3
-        elif nd == 4: m = BSpline.m4
-        else:
-            print 'Spline order ', nd, ' not supported.'
-            sys.exit(1)
+        m = BSpline.get_matrix(nd)
+
+        if isinstance(k,int):
+            k = np.linspace(x[0],x[-1],k)
 
         nrow = k.shape[0]
         ndata = x.shape[0]
         
+        print nrow, ndata
+
         a = np.zeros(shape=(ndata,nrow))
 
         if yerr is None: yerr = np.ones(ndata)        
         b = y/yerr
         
         ix, px = BSpline.poly(x,k,nd)
-#        msum = np.sum(m,axis=1)
-
         for i in range(ndata):
             for j in range(nd):
 #                a[i,ix[i]:ix[i]+nd] += m[j]*px[j,i]
@@ -63,7 +89,6 @@ class BSpline(object):
         w = np.sum(ub*v.T/s,axis=1)
 
         return BSpline(k,w,nd)
- 
 
     @staticmethod
     def poly(x,k,nd,ndx=0):
@@ -84,12 +109,6 @@ class BSpline(object):
         ix[ix>imax] = imax
 
         xp = (x-k[ix])/kw
-
-#        px = np.ones(shape=(nd,x.shape[0]))
-#        for i in range(1,nd): px[i] = px[i-1]*(xp)
-
-#        return ix, px
-
 
         if ndx == 0:
             c = np.ones(nd)
@@ -190,3 +209,88 @@ class BSpline(object):
             cut.append('(%s)*(%s)'%(cond,'+'.join(wexp)))
 
         return '+'.join(cut)
+
+
+class PolyFn(object):
+    """Class representing a polynomial of the form:
+
+    f(x) = Sum_{i=0}^{n+1} a_{i}*x^i
+    """
+    
+    def __init__(self,n,a=None,cov=None):
+        """Initialize 1-D polynomial function object.
+
+        @param n Order of polynomial.        
+        """
+
+        self._n = n
+        if a is None: self._a = np.zeros(n+1)
+        else: self._a = np.array(a,copy=True,ndmin=1)
+
+        if cov is None: self._cov = np.zeros((len(a),len(a)))
+        else: self._cov = cov
+
+    def coeff(self):
+        return self._a
+
+    def err(self):
+        return np.sqrt(np.diag(self._cov))
+
+    def cov(self):
+        return self._cov
+    
+    def get_expr(self,xvar):
+        """Return symbolic representation."""
+
+        expr = ''
+        
+        for i in range(len(self._a)):
+            if i == 0: expr += '%10.5g'%self._a[i]
+            else: expr += '+ (%10.5g)*pow(%s,%i)'%(self._a[i],xvar,i)
+
+        return expr
+
+    def save_to_dict(self):
+        o = {}
+        o['order'] = self._n
+        o['coeff'] = self._a.tolist()
+        o['type'] = self.__class__.__name__
+        return o
+
+    @staticmethod
+    def create_from_dict(o):
+        return PolyFn(o['order'],o['coeff'])
+    
+    @staticmethod
+    def fit_hist(h,n,rng):
+        
+        msk = (hq._center[0] > rng[0]) & (hq._center[0] < rng[1])
+        a = fit_svd(hq._center[0][msk],
+                    hq._counts[msk],np.sqrt(hq._var[msk]),n)
+
+        return PolyFn(n,a)
+
+    @staticmethod
+    def fit(n,x,y,yerr=None):
+        if yerr is None: yerr = np.ones(len(x))
+        a, cov = fit_svd(x,y,yerr,n)            
+        return PolyFn(n,a,cov)
+
+    def roots(self,a=None,offset=0,imag=True):
+        
+        if a is None: a = copy.deepcopy(self._a)
+        else: a = np.array(a,copy=True)
+        
+        a[0] -= offset
+        roots = np.roots(a[::-1])
+    
+        if not imag:
+            roots = roots[np.imag(roots)==0]
+            return np.real(roots)
+        else:
+            return roots
+
+    def __call__(self,x,a=None):
+
+        if a is None: a = self._a        
+        return np.polyval(a[::-1],x)

@@ -426,7 +426,6 @@ class Catalog(object):
                                 max='5.0',
                                 value=str(src['beta']),
                                 scale=str(1.0)))
-
         
         create_xml_element(root,'parameter',
                            dict(name='Eb',
@@ -477,9 +476,6 @@ class Catalog(object):
         for icol, col in enumerate(table.columns.names):
 
             col_data = hdulist[1].data[col]
-
-#            print icol, col, type(col_data)
-
             if type(col_data[0]) == np.float32: 
                 cols[col] = np.array(col_data,dtype=float)
             elif type(col_data[0]) == str: 
@@ -495,19 +491,10 @@ class Catalog(object):
 
             src = {}
             for icol, col in enumerate(cols):
-
                 if not col in cols: continue
-
                 src[col] = cols[col][i]
-#                v = hdulist[1].data[col][i]
 
-#                continue
-
-#                if type(v) == np.float32: src[col] = float(v)
-#                elif type(v) == str: src[col] = v
-#                elif type(v) == np.int16: src[col] = int(v)
-            src['Source_Name'] = src['Source_Name'].strip()
-                
+            src['Source_Name'] = src['Source_Name'].strip()                
             cat.load_source(CatalogSource(src))
 
         return cat

@@ -119,9 +119,23 @@ class HistogramND(object):
         
         self._dims = np.array(range(self._ndim),dtype=int)
 
+    @property
     def shape(self):
         """Return the shape of this histogram (length along each dimension)."""
         return self._counts.shape
+
+    @property
+    def counts(self):
+        """Return the counts array."""
+        return self._counts
+        
+    @property
+    def var(self):
+        return self._var
+
+    @property
+    def err(self):
+        return np.sqrt(self._var)
 
     def ndim(self):
         return len(self._axes)
@@ -155,18 +169,7 @@ class HistogramND(object):
 
             return np.array(cv)
 
-    @property
-    def counts(self):
-        """Return the counts array."""
-        return self._counts
-        
-    @property
-    def var(self):
-        return self._var
-
-    @property
-    def err(self):
-        return np.sqrt(self._var)
+ 
 
     @staticmethod
     def createFromTH3(hist,label = '__nolabel__'):
@@ -570,14 +573,17 @@ class HistogramND(object):
             y1v = self._var
             y2v = x._var
 
-            f0 = np.zeros(self.axis().nbins)
-            f1 = np.zeros(self.axis().nbins)
+            f1 = np.zeros(self.shape)
+            f2 = np.zeros(self.shape)
 
-            f0[y1 != 0] = y1v/y1**2
-            f1[y2 != 0] = y2v/y2**2
+            msk1 = (y1 != 0)
+            msk2 = (y2 != 0)
+
+            f1[msk1] = y1v[msk1]/y1[msk1]**2
+            f2[msk2] = y2v[msk2]/y2[msk2]**2
 
             o._counts = y1*y2
-            o._var = x._counts**2*(f0+f1)
+            o._var = x._counts**2*(f1+f2)
         else:
             o._counts *= x
             o._var *= x*x

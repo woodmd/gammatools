@@ -29,6 +29,10 @@ from gammatools.fermi.catalog import *
 from gammatools.core.util import *
 from gammatools.core.histogram import *
 
+def bintable_to_array(data):
+
+    return copy.deepcopy(data.view((data.dtype[0], len(data.dtype.names))))
+
 def stack_images(files,output_file,hdu_index=0):
 
     hdulist0 = None
@@ -168,11 +172,12 @@ class FITSAxis(Axis):
         return axes
 
 
-class HealpixImage(HistogramND):
-
+class HealpixImage(HistogramND):    
+    """Base class for 2-D and 3-D HEALPix sky maps."""
     def __init__(self,axes,hp_axis_index=0,counts=None,var=None):
         super(HealpixImage, self).__init__(axes,counts=counts,var=var)
 
+        self._hp_axis_index = hp_axis_index
         self._hp_axis = self.axes()[hp_axis_index]
         self._nside = hp.npix2nside(self._hp_axis.nbins)
         self._nest=False
@@ -194,15 +199,21 @@ class HealpixImage(HistogramND):
         else:
             return HealpixSkyImage(h.axes(),h.counts)
 
+    def sliceByLatLon(self,lat,lon):
+        ipix = hp.ang2pix(self.nside,np.pi/2.-lat,lon,nest=self.nest)
+        return self.slice(1,ipix)
+
     def slice(self,sdims,dim_index):
 
         h = HistogramND.slice(self,sdims,dim_index)
+
+        print h.ndim()
+
         if h.ndim() == 2:
             return HealpixSkyCube(h.axes(),h.counts)
-        elif h.ndim() == 1:        
+        elif h.ndim() == 1 and h.axis(0).nbins == self._hp_axis.nbins:        
             return HealpixSkyImage(h.axes(),h.counts)
         else:
-            h._axes[0] = Axis(h.axis().pix_to_coord(h.axis().edges()))
             return h
 
     def project(self,pdims,bin_range=None):
@@ -217,6 +228,7 @@ class HealpixImage(HistogramND):
         return self.project(pdims,bin_range)
         
 class HealpixSkyImage(HealpixImage):
+    """HEALPix representation of a 2-D sky map."""
 
     def __init__(self,axes,counts=None,var=None):
         super(HealpixSkyImage, self).__init__(axes,counts=counts,var=var)
@@ -225,11 +237,11 @@ class HealpixSkyImage(HealpixImage):
         ipix = hp.ang2pix(self.nside,lat,lon,nest=self.nest)
         super(HealpixSkyImage,self).fill(ipix,w)
 
-    def interpolate(self,lon,lat):
-        
-        pixcrd = self._wcs.wcs_world2pix(lon, lat, 0)
-        return interpolate2d(self._xedge,self._yedge,self._counts,
-                             *pixcrd)
+#    def interpolate(self,lon,lat):
+#        hp.pixelfunc.get_interp_val()       
+#        pixcrd = self._wcs.wcs_world2pix(lon, lat, 0)
+#        return interpolate2d(self._xedge,self._yedge,self._counts,
+#                             *pixcrd)
 
     def center(self):
         """Returns lon,lat."""
@@ -242,7 +254,6 @@ class HealpixSkyImage(HealpixImage):
         pixang0 = np.pi/2. - pixang0
         
         return np.vstack((np.degrees(pixang1),np.degrees(pixang0)))
-    
 
     def mask(self,lonrange=None,latrange=None):
         
@@ -305,7 +316,25 @@ class HealpixSkyImage(HealpixImage):
         
         fig = plt.gcf()
 
-        extent = (0.02,0.05,0.96,0.9)
+
+        if 'sub' in kwargs:
+            sub = kwargs['sub']
+            nrows, ncols, idx = sub/100, (sub%100)/10, (sub%10)
+            
+            c,r = (idx-1)%ncols,(idx-1)/ncols
+#            if not margins:
+            margins = (0.01,0.0,0.0,0.02)
+            extent = (c*1./ncols+margins[0], 
+                      1.-(r+1)*1./nrows+margins[1],
+                      1./ncols-margins[2]-margins[0],
+                      1./nrows-margins[3]-margins[1])
+            extent = (extent[0]+margins[0],
+                      extent[1]+margins[1],
+                      extent[2]-margins[2]-margins[0],
+                      extent[3]-margins[3]-margins[1])
+        else:
+            extent = (0.02,0.05,0.96,0.9)
+
         ax=PA.HpxMollweideAxes(fig,extent,coord=None,rot=None,
                                format='%g',flipconv='astro')
 
@@ -349,18 +378,28 @@ class HealpixSkyImage(HealpixImage):
     
 class HealpixSkyCube(HealpixImage):
 
-    def __init__(self,axes,hp_axis_index=0,counts=None):
+    def __init__(self,axes,hp_axis_index=1,counts=None):
         super(HealpixSkyCube, self).__init__(axes,hp_axis_index,counts)
+
+#    def fill(self,lon,lat,loge,w=1.0):
+#        ipix = hp.ang2pix(self.nside,lat,lon,nest=self.nest)
+#        super(HealpixSkyImage,self).fill(ipix,w)
+
+#    def interpolate(self,lon,lat,loge):
+#        ipix = hp.ang2pix(self.nside,lat,lon,nest=self.nest)
+#        epix = self.axis(0).valToBin(loge)
+#        v0 = hp.pixelfunc.get_interp_val()
+#            hp.pixelfunc.get_interp_val()    
+#        pixcrd = self._wcs.wcs_world2pix(lon, lat, 0)
+#        return interpolate2d(self._xedge,self._yedge,self._counts,
+#                             *pixcrd)
 
     def center(self):
         pixcrd = np.array(self.axes()[1].edges[:-1],dtype=int)
         pixang0, pixang1 = hp.pixelfunc.pix2ang(self.nside,pixcrd)
 
-        pixloge = self.axes()[0].center
+        pixloge = self.axis(0).center
 
-#        print pixloge        
-#        x,y = np.meshgrid(pixloge,pixang0,indexing='ij')
-        
         pixloge = np.repeat(pixloge[:,np.newaxis],len(pixang0),axis=1)
         pixang0 = np.repeat(pixang0[np.newaxis,:],len(pixloge),axis=0)
         pixang1 = np.repeat(pixang1[np.newaxis,:],len(pixloge),axis=0)
@@ -369,26 +408,29 @@ class HealpixSkyCube(HealpixImage):
         pixang0 = np.ravel(pixang0)
         pixang1 = np.ravel(pixang1)
         pixang0 = np.pi/2. - pixang0
-
-        
+       
         return np.vstack((pixloge,np.degrees(pixang1),np.degrees(pixang0)))
+         
+    def ud_grade(self,nside):
+
+        counts = np.vsplit(self._counts,self.shape[0])
+
+        for i in range(len(counts)):
+            counts[i] = np.squeeze(counts[i])
+
+        counts = hp.pixelfunc.ud_grade(counts,nside)
+#        var = hp.pixelfunc.ud_grade(np.vsplit(self._var,self.shape[0]),nside)
+        counts = np.vstack(counts)
         
-        print pixloge.shape
-        print pixang0.shape
+        npix0 = hp.pixelfunc.nside2npix(nside)
+        npix1 = hp.pixelfunc.nside2npix(self.nside)
 
-        print x.shape
-        print y.shape
-        print self.counts.shape
-
-
-        print x[:,1000]
-        print pixloge[:,1000]
-
-        print y[10,:]
-        print pixang0[10,:]
+        counts *= npix1/npix0
         
-        return pixang
-        
+
+        hp_axis = Axis.create(0,counts.shape[1],counts.shape[1])
+        return HealpixSkyCube([self.axis(0),hp_axis],1,counts)
+
     @staticmethod
     def create(energy_axis,nside):
 
@@ -397,30 +439,54 @@ class HealpixSkyCube(HealpixImage):
         return HealpixSkyCube([energy_axis,hp_axis],1)
         
     @staticmethod
-    def createFromFITS(fitsfile,image_hdu='SKYMAP'):
+    def createFromFITS(fitsfile,image_hdu='SKYMAP',energy_hdu='EBOUNDS'):
         """ """
 
         hdulist = pyfits.open(fitsfile)        
-        header = hdulist[image_hdu].header
-        ebounds = hdulist['EBOUNDS'].data
 
+        hdulist.info()
+
+        header = hdulist[image_hdu].header
         v = hdulist[image_hdu].data
 
-        dtype = v.dtype[0]
-        image_data = copy.deepcopy(v.view((dtype, len(v.dtype.names))))
+        if image_hdu == 'SKYMAP':
+            dtype = v.dtype[0]
+            image_data = copy.deepcopy(v.view((dtype, len(v.dtype.names)))).T
+        else:
+            image_data = copy.deepcopy(v)
         #np.array(hdulist[image_hdu].data).astype(float)
-        
-        nbin = len(ebounds)        
-        emin = ebounds[0][1]/1E3
-        emax = ebounds[-1][2]/1E3
-        delta = np.log10(emax/emin)/nbin
 
-        energy_axis = Axis.create(np.log10(emin),np.log10(emax),nbin)
-        hp_axis = Axis.create(0,image_data.shape[0],image_data.shape[0])
-        
-        return HealpixSkyCube([energy_axis,hp_axis],1,image_data.T)
+        if energy_hdu == 'EBOUNDS':
+            ebounds = hdulist[energy_hdu].data
+            nbin = len(ebounds)        
+            emin = ebounds[0][1]/1E3
+            emax = ebounds[-1][2]/1E3
+            delta = np.log10(emax/emin)/nbin
+            energy_axis = Axis.create(np.log10(emin),np.log10(emax),nbin)
+        elif energy_hdu == 'ENERGIES':
+            energies = bintable_to_array(hdulist[energy_hdu].data)
+            energy_axis = Axis.createFromArray(np.log10(energies))
+        else:
+            raise Exception('Unknown HDU name.')
 
-    
+        print image_data.shape
+
+        hp_axis = Axis.create(0,image_data.shape[1],image_data.shape[1])
+        return HealpixSkyCube([energy_axis,hp_axis],1,image_data)
+
+
+    def save(self,fitsfile):
+
+        hdu_image = pyfits.PrimaryHDU(self._counts)
+
+        ecol = pyfits.Column(name='ENERGIES', format='D', 
+                             array=10**self.axis(0).center)
+#        cols = pyfits.ColDefs([ecol])
+        hdu_energies = pyfits.BinTableHDU.from_columns([ecol],name='ENERGIES')
+        hdulist = pyfits.HDUList([hdu_image,hdu_energies])
+
+        hdulist.writeto(fitsfile,clobber=True)
+
 class FITSImage(HistogramND):
     """Base class for SkyImage and SkyCube classes.  Handles common
     functionality for performing sky to pixel coordinate conversions."""
@@ -543,14 +609,18 @@ class FITSImage(HistogramND):
         if header['NAXIS'] == 3: return SkyCube.createFromHDU(hdu)
         elif header['NAXIS'] == 2: return SkyImage.createFromHDU(hdu)
         else:
-            print 'Wrong number of axes.'
-            sys.exit(1)
+            raise Exception('Wrong number of axes.')
         
     @staticmethod
     def createFromFITS(fitsfile,ihdu=0):
         """ """
-        hdulist = pyfits.open(fitsfile)
-        return FITSImage.createFromHDU(hdulist[ihdu])
+        hdu = pyfits.open(fitsfile)[ihdu]
+        header = hdu.header
+
+        if header['NAXIS'] == 3: return SkyCube.createFromFITS(fitsfile,ihdu)
+        elif header['NAXIS'] == 2: return SkyImage.createFromFITS(fitsfile,ihdu)
+        else:
+            raise Exception('Wrong number of axes.')
     
 class SkyCube(FITSImage):
     """Container class for a FITS counts cube with two space
@@ -617,6 +687,21 @@ class SkyCube(FITSImage):
         ecrd = np.array(self._axes[2].coord_to_pix(loge),ndmin=1)
         return super(SkyCube,self).interpolate(pixcrd[0],pixcrd[1],ecrd)
         
+    def createHEALPixMap(self,nside=4,energy_axis=None):
+
+        # Convert this projection to HP map
+#        energy_axis = Axis.create(np.log10(emin),np.log10(emax),nbin)
+
+        if energy_axis is None:
+            energy_axis = Axis(self.axis(2).pix_to_coord(self.axis(2).edges,True))
+
+        hp = HealpixSkyCube.create(energy_axis,nside)
+        c = hp.center()
+        counts = self.interpolate(c[1],c[2],c[0]).reshape(hp.counts.shape)
+        hp._counts = counts
+
+        return hp
+
     @staticmethod
     def createFromHDU(hdu):
         
@@ -635,11 +720,8 @@ class SkyCube(FITSImage):
         header = hdulist[ihdu].header
         wcs = pywcs.WCS(header,naxis=[1,2],relax=True)
 
-        print hdulist.info()
-
         if hdulist[1].name == 'ENERGIES':
-            v = hdulist[1].data
-            v = copy.deepcopy(v.view((v.dtype[0], len(v.dtype.names))))
+            v = bintable_to_array(hdulist[1].data)
             v = np.log10(v)
             energy_axis = Axis.createFromArray(v)
             axes = copy.deepcopy(FITSAxis.create_axes(header))
@@ -706,6 +788,8 @@ class SkyImage(FITSImage):
         
         hdulist = pyfits.open(fitsfile)
         return SkyImage.createFromFITS(hdulist[ihdu])
+
+
 
     @staticmethod
     def createWCS(ra,dec,roi_radius_deg,bin_size_deg=0.2,coordsys='cel'):
@@ -828,7 +912,7 @@ class SkyImage(FITSImage):
         self._ax.set_ylim(self.axis(1).lo_edge(),self.axis(1).hi_edge())    
 
         
-    def plot(self,subplot=111,logz=False,catalog=None,cmap='jet',**kwargs):
+    def plot(self,subplot=111,catalog=None,cmap='jet',**kwargs):
 
         from matplotlib.colors import NoNorm, LogNorm, Normalize
 
@@ -846,7 +930,9 @@ class SkyImage(FITSImage):
         
         if zscale == 'pow':
             kwargs_imshow['norm'] = PowerNormalize(power=zscale_power)
-        elif logz: kwargs_imshow['norm'] = LogNorm()
+        elif zscale == 'sqrt': 
+            kwargs_imshow['norm'] = PowerNormalize(power=2.0)
+        elif zscale == 'log': kwargs_imshow['norm'] = LogNorm()
         else: kwargs_imshow['norm'] = Normalize()
 
         ax = pywcsgrid2.subplot(subplot, header=self._wcs.to_header())
