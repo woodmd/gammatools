@@ -26,6 +26,10 @@ Project Status
 .. image:: https://travis-ci.org/woodmd/gammatools.png
     :target: https://travis-ci.org/woodmd/gammatools
 
+
+.. image:: https://coveralls.io/repos/woodmd/gammatools/badge.svg
+  :target: https://coveralls.io/r/woodmd/gammatools
+
 License
 -------
 gammatools is licensed under a 3-clause BSD style license - see the
