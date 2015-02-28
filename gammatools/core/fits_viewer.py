@@ -17,20 +17,6 @@ from matplotlib.colors import NoNorm, LogNorm, Normalize
 
 from itertools import cycle
 
-def make_projection_plots_skyimage(im):
-
-    plt.figure()
-
-    im.project(0).plot()
-    
-    plt.figure()
-
-    im.project(1).plot()
-
-
-
-
-    
 class FITSPlotter(object):
 
     fignum = 0
@@ -56,19 +42,40 @@ class FITSPlotter(object):
         h = self._im.project(2)
         hm = self._im_mdl.project(2)
 
-        fig = self._ft.create(self._prefix + suffix,
+        bins = np.linspace(0,h.axis(0).nbins,h.axis(0).nbins+1)
+        bins = np.concatenate((bins[:10],bins[10:16:2],bins[16::4]))
+        
+        print bins
+        
+        h = h.rebin(bins)
+        hm = hm.rebin(bins)
+        
+        fig = self._ft.create(self._prefix + '_' + suffix,
                               figstyle='residual2',
                               yscale='log',
                               ylabel='Counts',
                               xlabel='Energy [log$_{10}$(E/MeV)]')
 
         fig[0].add_hist(hm,hist_style='line',label='Model')
-        fig[0].add_hist(h,linestyle='None',label='Data')
-
-        fig[1].set_style('ylim',[-0.3,0.3])
-
-
+        fig[0].add_hist(h,linestyle='None',label='Data',color='k')
+        fig[1].set_style('ylim',[-0.2,0.2])
         fig.plot()
+
+
+        fig = self._ft.create(self._prefix + '_' + suffix + 'e2',
+                              figstyle='residual2',
+                              yscale='log',
+                              ylabel='E$^{2}$dN/dE [MeV]',
+                              xlabel='Energy [log$_{10}$(E/MeV)]')
+
+        e2 = 10**(2*h.axis(0).center)/(10**h.axis(0).edges[1:]-
+                                       10**h.axis(0).edges[:-1])
+        
+        fig[0].add_hist(hm*e2,hist_style='line',label='Model')
+        fig[0].add_hist(h*e2,linestyle='None',label='Data',color='k')
+        fig[1].set_style('ylim',[-0.2,0.2])
+        fig.plot()
+        
 #        fig.savefig('%s_%s.png'%(self._prefix,suffix))
 
     def make_plots_skycube(self,delta_bin=None,paxis=None,plots_per_fig=4,
@@ -83,18 +90,10 @@ class FITSPlotter(object):
             bins = np.array([0,nbins])
             nplots = 1
         else:
-#            delta_bin = np.array([0,2,4,4,12])
-#            nplots = 4
-
             bins = np.cumsum(np.concatenate(([0],delta_bin)))
             nplots = len(bins)-1
 
         nfig = int(np.ceil(float(nplots)/float(plots_per_fig)))
-
-        print 'bins ', bins
-        print 'nplots ', nplots
-        print 'nfig ', nfig
-        print 'plots_per_fig ', plots_per_fig
         
         if plots_per_fig > 4 and plots_per_fig <= 8:
             nx, ny = 4, 2
@@ -109,14 +108,14 @@ class FITSPlotter(object):
 
         figs = []
         for i in range(nfig):
-            
-#            fig_label = '%0'%(fig_emin*1000,fig_emax*1000)
-            fig_label = '%02i'%i
-            fig_name = '%s_%s%s.png'%(self._prefix_path,fig_label,suffix)
-            fig2_name = '%s_%s%s_zproj.png'%(self._prefix_path,fig_label,suffix)
-            fig3_name = '%s_%s%s_xproj.png'%(self._prefix_path,fig_label,suffix)
-            fig4_name = '%s_%s%s_yproj.png'%(self._prefix_path,fig_label,suffix)
-            
+
+            if nfig > 1: fig_suffix = '_%02i'%i
+            else: fig_suffix = ''
+                
+            fig_name = '%s_%s%s.png'%(self._prefix_path,suffix,fig_suffix)
+            fig2_name = '%s_%s_zproj%s.png'%(self._prefix_path,suffix,fig_suffix)
+            fig3_name = '%s_%s_xproj%s.png'%(self._prefix_path,suffix,fig_suffix)
+            fig4_name = '%s_%s_yproj%s.png'%(self._prefix_path,suffix,fig_suffix)
             
             figs.append({'fig'  : self.create_figure(figsize=(fig_sx,fig_sy)),
                          'fig2' : self.create_figure(figsize=(fig_sx,fig_sy)),
@@ -140,22 +139,11 @@ class FITSPlotter(object):
                           'subplot' : i%plots_per_fig,
                          })
                           
-
-        print plots
-            
-        
-#        figs = []
-#        for i in range(nfig): figs.append(plt.figure(figsize=(fig_sx,fig_sy)))
-        
         for i, p in enumerate(plots):
-            ##plt.figure(FITSPlotter.fignum,figsize=(fig_sx,fig_sy))
-
             
             ibin0, ibin1 = p['ibin']
             emin = im.axis(2).pix_to_coord(ibin0)
             emax = im.axis(2).pix_to_coord(ibin1)
-
-            print 'ibin0, ibin1 ', ibin0, ibin1            
             
             rpsf68 = self._irf.quantile(10**emin,10**emax,0.2,1.0,0.68)
             rpsf95 = self._irf.quantile(10**emin,10**emax,0.2,1.0,0.95)
@@ -213,37 +201,9 @@ class FITSPlotter(object):
 
             if make_projection:
                 ax = fig3.add_subplot(subplot)
-                plt.sca(ax)
-                
-                hpx = h.project(0,[[x0,x1]],offset_coord=True)
-                hpx.plot(ax=ax,linestyle='None',label='Data',**kwargs)
-                
-                if hm:
-                    hmpx = hm.project(0,[[x0,x1]],offset_coord=True)
-                    hmpx.plot(ax=ax,label='Model',hist_style='line',linestyle='-',**kwargs)
-
-                ax.grid(True)
-                ax.set_xlabel('GLON Offset')
-                ax.set_xlim(*hpx.axis().lims())
-                ax.legend(loc='upper right')
-                ax.set_ylim(0)
-                ax.set_title(title)
-                
+                self.make_projection_plot(ax,h,0,[x0,x1],title=title,hm=hm,**kwargs)                
                 ax = fig4.add_subplot(subplot)
-                plt.sca(ax)
-                hpy = h.project(1,[[y0,y1]],offset_coord=True)
-                hpy.plot(ax=ax,linestyle='None',label='Data',**kwargs)
-
-                if hm:
-                    hmpy = hm.project(1,[[y0,y1]],offset_coord=True)
-                    hmpy.plot(ax=ax,label='Model',hist_style='line',linestyle='-',**kwargs)
-            
-                ax.grid(True)
-                ax.set_xlabel('GLAT Offset')
-                ax.set_xlim(*hpy.axis().lims())
-                ax.legend(loc='upper right')                
-                ax.set_ylim(0)
-                ax.set_title(title)
+                self.make_projection_plot(ax,h,1,[y0,y1],title=title,hm=hm,**kwargs) 
 
         for f in figs:
             f['fig'].savefig(f['fig_name'])
@@ -259,7 +219,32 @@ class FITSPlotter(object):
         fig = plt.figure('Figure %i'%FITSPlotter.fignum,**kwargs)
         FITSPlotter.fignum += 1
         return fig
+
+    def make_projection_plot(self,ax,h,pindex,plims,title='',hm=None,**kwargs):
+        plt.sca(ax)
+                
+        hp = h.project(pindex,[plims],offset_coord=True)
+        hp.plot(ax=ax,linestyle='None',label='Data',**kwargs)
+                
+        if hm:
+            hmp = hm.project(pindex,[plims],offset_coord=True)
+            hmp.plot(ax=ax,label='Model',hist_style='line',linestyle='-',**kwargs)
+
+        ax.grid(True)
+
+        if pindex == 0:
+            ax.set_xlabel('GLON Offset')
+        elif pindex == 1:
+            ax.set_xlabel('GLAT Offset')
+            
+        ax.set_xlim(*hp.axis().lims())
+        ax.legend(loc='upper right')
+        ax.set_ylim(0)
+        ax.set_title(title)
+                
+
         
+    
     def make_residual_map(self,h,hm,smooth,mc=False,resid_type='fractional'):
         
         if mc:
@@ -323,6 +308,11 @@ class FITSPlotter(object):
                           shrink=0.9,pad=0.15,
                           fraction=0.05)
 
+        if kwargs.get('zscale',None) is not None:
+            import matplotlib.ticker        
+            cb.locator = matplotlib.ticker.MaxNLocator(nbins=5)
+            cb.update_ticks()
+        
         cb.set_label(cb_label)
 
         cat = Catalog.get('3fgl')

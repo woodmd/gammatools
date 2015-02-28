@@ -929,9 +929,9 @@ class SkyImage(FITSImage):
         beam_size = kwargs.get('beam_size',None)
         
         if zscale == 'pow':
-            kwargs_imshow['norm'] = PowerNormalize(power=zscale_power)
+            kwargs_imshow['norm'] = PowerNorm(gamma=1./zscale_power)
         elif zscale == 'sqrt': 
-            kwargs_imshow['norm'] = PowerNormalize(power=2.0)
+            kwargs_imshow['norm'] = PowerNorm(gamma=1./2.0)
         elif zscale == 'log': kwargs_imshow['norm'] = LogNorm()
         else: kwargs_imshow['norm'] = Normalize()
 

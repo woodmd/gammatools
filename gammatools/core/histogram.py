@@ -1422,7 +1422,7 @@ class Histogram(HistogramND):
 
         if isinstance(bins,int) and bins <= 1: return copy.deepcopy(self)
 
-        bins = np.array(bins)
+        bins = np.array(bins,dtype=int)
 
         if bins.ndim == 0:
             bin_index = list(range(0,self._axes[0].nbins,bins))
