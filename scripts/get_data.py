@@ -9,7 +9,9 @@ import numpy as np
 event_samples = { 'pass6' : 'P6_public_v3',
                   'pass7' : 'P7.6_P120_BASE',
                   'pass7r' : 'P7_P202_BASE',
-                  'pass8'  : 'P8_P301_BASE' }
+                  'pass8_p301' : 'P8_P301_BASE',
+                  'pass8_p302' : 'P8_P302_BASE',
+                  }
 
 usage = "usage: %prog [options] "
 description = "Download data with astro server tool."

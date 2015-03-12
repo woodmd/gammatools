@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from gammatools.core.fits_util import *
 from gammatools.fermi.irf_util import *
 from gammatools.fermi.psf_model import *
@@ -19,8 +21,10 @@ parser.add_argument('--min_counts', default=3, type=float)
 parser.add_argument('--ts_threshold', default=25.0, type=float)
 parser.add_argument('--bexp_scale', default=1.0, type=float)
 parser.add_argument('--nside', default=16, type=int)
-parser.add_argument('--irf', default='P8_SOURCE_V5')
+parser.add_argument('--irfs', default='P8_SOURCE_V5')
 parser.add_argument('--bexpmap', default=None,required=True)
+parser.add_argument('--galdiff', default=None,required=True)
+parser.add_argument('--isodiff', default=None,required=True)
 parser.add_argument('--prefix', default='p8source')
 parser.add_argument('--emin', default=1.5,type=float)
 parser.add_argument('--emax', default=5.75,type=float)
@@ -36,7 +40,7 @@ filename = filename.format(**{'prefix' : args.prefix,
                               'ts_threshold' : args.ts_threshold,
                               'nside' : args.nside})
 
-iso = np.loadtxt('isotropic_source_4years_P8V3.txt',unpack=True)
+iso = np.loadtxt(args.isodiff,unpack=True)
 
 fn_iso = BSpline.fit(np.log10(iso[0]),np.log10(iso[1]),None,10,3)
 
@@ -49,7 +53,7 @@ if 'CUSTOM_IRF_DIR' in os.environ:
 irf = None
 m = None
 
-irf = IRFManager.create(args.irf, True,irf_dir=irf_dir)
+irf = IRFManager.create(args.irfs, True,irf_dir=irf_dir)
 #ltfile = '/Users/mdwood/fermi/data/p301/ltcube_5years_zmax100.fits'
 m = PSFModelLT(irf,src_type='iso')
 
@@ -101,7 +105,7 @@ ts_threshold = args.ts_threshold
 
 # Setup galactic diffuse model
 
-im_gdiff = FITSImage.createFromFITS('template_4years_P8_V2_scaled.fits')
+im_gdiff = FITSImage.createFromFITS(args.galdiff)
 im_gdiff._counts = np.log10(im_gdiff._counts)
 hp_gdiff = im_gdiff.createHEALPixMap(nside=nside,energy_axis=energy_axis)
 hp_gdiff._counts = 10**hp_gdiff._counts
@@ -109,7 +113,7 @@ hp_gdiff._counts = 10**hp_gdiff._counts
 for i in range(energy_axis.nbins):
     hp_gdiff._counts[i] += 10**fn_iso(energy_axis.center[i])
 
-im_bexp = SkyCube.createFromFITS(bexpmap_file)
+im_bexp = SkyCube.createFromFITS(args.bexpmap)
 hp_bexp = im_bexp.createHEALPixMap(hp_gdiff.nside,hp_gdiff.axis(0))
 hp_bexp *= args.bexp_scale
 

@@ -864,7 +864,7 @@ class FITSViewerFrame(wx.Frame):
 
 #        is_model_map = False
         if ('CREATOR' in hdu.header and hdu.header['CREATOR'] == 'gtsrcmaps') or \
-                'mcube' in str(hdu.header['FILENAME']):
+                ('FILENAME' in hdu.header and 'mcube' in str(hdu.header['FILENAME'])):
             style['hist_style'] = 'line'
             style['linestyle'] = '-'
 
