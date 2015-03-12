@@ -24,7 +24,7 @@ def sigma_to_pval(s):
 
 def gauss_pval_to_sigma(p):
     """Convert the pval of a two-sided confidence interval to sigma."""
-    return norm().isf(0.5+p*0.5)
+    return norm().isf(0.5+(1-p)*0.5)
 
 def gauss_sigma_to_pval(s):
     return 2.0*(norm().cdf(s)-0.5)

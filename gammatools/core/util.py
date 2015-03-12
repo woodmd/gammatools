@@ -453,11 +453,10 @@ def interpolatend(x0,z,x):
 
 def percentile(x,cdf,frac=0.68):
     """Given a cumulative distribution function C(x) find the value
-    of x for which C(x) = f."""
-    indx = bisect.bisect(cdf, frac) - 1
+    of x for which C(x) = frac."""
+    indx = np.searchsorted(cdf, frac) - 1
     return ((frac - cdf[indx])/(cdf[indx+1] - cdf[indx])
             *(x[indx+1] - x[indx]) + x[indx])
-
 
 def edge_to_center(edges):
     return 0.5*(edges[1:]+edges[:-1])

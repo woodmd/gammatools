@@ -164,7 +164,7 @@ class FITSPlotter(object):
                 x1 = x0+1
                 y1 = y0+1
 
-            title = 'log$_{10}$(E/MeV) = [%.3f, %.3f]'%(emin,emax)                
+            title = 'log$_{10}$(E/MeV) = [%.3f, %.3f]'%(emin,emax) 
             subplot = '%i%i%i'%(ny,nx,p['subplot']+1)
             
             fig = p['fig']

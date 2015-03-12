@@ -935,6 +935,8 @@ class SkyImage(FITSImage):
         elif zscale == 'log': kwargs_imshow['norm'] = LogNorm()
         else: kwargs_imshow['norm'] = Normalize()
 
+#        ax = kwargs.get('ax',None)        
+#        if ax is None:
         ax = pywcsgrid2.subplot(subplot, header=self._wcs.to_header())
 #        ax = pywcsgrid2.axes(header=self._wcs.to_header())
 
@@ -967,12 +969,19 @@ class SkyImage(FITSImage):
         
         ax.set_ticklabel_type("d", "d")
 
+
+
         if self._axes[0]._coordsys == 'gal':
             ax.set_xlabel('GLON')
             ax.set_ylabel('GLAT')
         else:        
             ax.set_xlabel('RA')
             ax.set_ylabel('DEC')
+
+        xlabel = kwargs.get('xlabel',None)
+        ylabel = kwargs.get('ylabel',None)
+        if xlabel is not None: ax.set_xlabel(xlabel)
+        if ylabel is not None: ax.set_ylabel(ylabel)
 
 #        plt.colorbar(im,orientation='horizontal',shrink=0.7,pad=0.15,
 #                     fraction=0.05)

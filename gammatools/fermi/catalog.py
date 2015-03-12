@@ -536,9 +536,12 @@ class Catalog(object):
         fp.close()
 
     def plot(self,im,src_color='k',marker_threshold=0,
-             label_threshold=20., ax=None,radius_deg=10.0,**kwargs):
+             label_threshold=20., ax=None,radius_deg=10.0,
+             **kwargs):
 
         if ax is None: ax = plt.gca()
+        min_radius_deg = kwargs.get('min_radius_deg',None)
+        fontweight = kwargs.get('fontweight','normal')
         
         if im.axis(0)._coordsys == 'gal':
             ra, dec = gal2eq(im.lon,im.lat)
@@ -547,7 +550,8 @@ class Catalog(object):
 
         #srcs = cat.get_source_by_position(ra,dec,self._roi_radius_deg)
         # Try to determine the search radius from the input file
-        srcs = self.get_source_by_position(ra,dec,radius_deg)
+        srcs = self.get_source_by_position(ra,dec,radius_deg,
+                                           min_radius=min_radius_deg)
 
         src_lon = []
         src_lat = []
@@ -577,7 +581,8 @@ class Catalog(object):
 
             if signif_avg[i] > label_threshold:             
                 ax.text(pixcrd[0][i]+2.0,pixcrd[1][i]+2.0,labels[i],
-                        color=src_color,size=8,clip_on=True)
+                        color=src_color,size=8,clip_on=True,
+                        fontweight=fontweight)
 
             if signif_avg[i] > marker_threshold:      
                 ax.plot(pixcrd[0][i],pixcrd[1][i],
