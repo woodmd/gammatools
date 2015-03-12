@@ -3,6 +3,7 @@ import errno
 import numpy as np
 import scipy.special as spfn
 import re
+import copy
 
 try:
     import cPickle as pickle
@@ -127,7 +128,43 @@ def tolist(x):
     else:
         return x
 
+def merge_dict(d0,d1,add_new_keys=False,append_arrays=False):
+    """Recursively merge the contents of python dictionary d0 with
+    the contents of another python dictionary, d1.
 
+    add_new_keys : Do not skip keys that only exist in d1.
+
+    append_arrays : If an element is a numpy array set the value of
+    that element by concatenating the two arrays.
+    """
+    
+    if d1 is None: return d0
+    elif d0 is None: return d1
+    elif d0 is None and d1 is None: return {}
+
+    od = {}
+    
+    for k, v in d0.iteritems():
+        
+        if not k in d1:
+            od[k] = copy.copy(d0[k])
+        elif isinstance(v,dict) and isinstance(d1[k],dict):
+            od[k] = merge_dict(d0[k],d1[k],add_new_keys,append_arrays)
+        elif isinstance(v,list) and isinstance(d1[k],str):
+            od[k] = d1[k].split(',')            
+        elif isinstance(v,np.ndarray) and append_arrays:
+            od[k] = np.concatenate((v,d1[k]))
+        elif (d0[k] is not None and d1[k] is not None) and \
+                (type(d0[k]) != type(d1[k])):
+            raise Exception('Conflicting types in dictionary merge. ' + k + str(type(d0[k])) + str(type(d1[k])))
+        else: od[k] = copy.copy(d1[k])
+
+    if add_new_keys:
+        for k, v in d1.iteritems(): 
+            if not k in d0: od[k] = copy.copy(d1[k])
+
+    return od
+    
 def update_dict(d0,d1,add_new_keys=False,append=False):
     """Recursively update the contents of python dictionary d0 with
     the contents of python dictionary d1."""

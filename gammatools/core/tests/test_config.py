@@ -39,7 +39,7 @@ class TestConfigurable(unittest.TestCase):
 
         config = {'BaseClass_par0'     : 1, 
                   'BaseClass_par2'     : 'y', 
-                  'DerivedClass_par0'  : 'z',
+                  'DerivedClass_par0'  : 3,
                   'DerivedClass2_par2' : 4 }
 
         kwargs = {'BaseClass_par0' : 2 }
@@ -141,11 +141,11 @@ class TestConfigurable(unittest.TestCase):
 
         class BaseClass(Configurable):
 
-            default_config = {'BaseClass_par0' : 0,
-                              'BaseClass_par1' : 'x',
-                              'BaseClass_group0.par0' : 'y',
-                              'BaseClass_group0.par1' : 'z',
-                              }
+            default_config = {
+                'BaseClass_par0' : 0,
+                'BaseClass_par1' : 'x',
+                'BaseClass_group0' : {'par0' : 'y', 'par1' : 'z' }
+                }
 
             def __init__(self,config=None,**kwargs):
                 super(BaseClass,self).__init__(config,**kwargs)
@@ -164,11 +164,11 @@ class TestConfigurable(unittest.TestCase):
 
         # Test no config input
         base_class = BaseClass()
-        base_class.update_default_config(extra_defaults,'group1')
+        base_class.update_default_config(extra_defaults)
 
         test_dict = copy.deepcopy(base_class_defaults)
-        test_dict['group1'] = extra_defaults
-
+        test_dict.update(extra_defaults)
+        
         self.assertEqual(base_class.config,test_dict)
 
         # Test dict input

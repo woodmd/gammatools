@@ -1,7 +1,7 @@
 import inspect
 import os
 import copy
-from gammatools.core.util import update_dict
+from gammatools.core.util import update_dict, merge_dict
 
 class Option(object):
 
@@ -11,7 +11,7 @@ class Option(object):
         self._docstring = docstring
         self._option_type = option_type
         self._group = group
-
+        
         if option_type == list and len(value):
             self._list_type = type(value[0])
         else:
@@ -41,83 +41,117 @@ class Option(object):
     @property
     def group(self):
         return self._group
-
+    
     @property
     def argname(self):
-
-        if self._group is not None:
-            return self._group + '.' + self._name
-        else: return self._name
+        return self._name
     
     @staticmethod
-    def create(name,x,group=None):
+    def create(name,x):
         """Create an instance of an option from a tuple or a scalar."""
-
-        if len(name.split('.')) > 1:        
-            group, name = name.split('.')
             
         #isinstance(x,list): return Option(x[0],x[1])
         if isinstance(x,Option): return x
         elif isinstance(x,tuple):
-            if len(x) == 1:
-                value, docstring, option_type = x[0], '', str
-            elif len(x) == 2:
-                value, docstring, option_type = x[0], x[1], str
-            elif len(x) == 3:
-                value, docstring, option_type = x[0], x[1], x[2]
-            else:
-                raise Exception('Wrong size for option tuple.')
 
-            if value is not None: option_type = type(value)
+            item_list = [None,'',None,str]
+            item_list[:len(x)] = x
+            value, docstring, groupname, option_type = item_list
             
-            return Option(name,value,docstring,option_type,group=group)
+#            if len(x) == 1:
+#                value, docstring, option_type = x[0], '', str
+#            elif len(x) == 2:
+#                value, docstring, option_type = x[0], x[1], str
+#            elif len(x) == 3:
+#                value, docstring, option_type = x[0], x[1], x[2]
+#            else:
+#                raise Exception('Wrong size for option tuple.')
+
+            if value is None and (option_type == list or option_type == dict):
+                value = option_type()
+                            
+            if value is not None:
+                option_type = type(value)
+            
+            return Option(name,value,docstring,option_type)
         else:
             if x is not None: option_type = type(x)
             else: option_type = str            
-            return Option(name,x,option_type=option_type,group=group)
+            return Option(name,x,option_type=option_type)
+
+def create_options_dict(o):
+
+    od = {}
+            
+    for k,v in o.items():
+        if isinstance(v,dict):
+            od[k] = create_options_dict(v)
+        else:
+            od[k] = Option.create(k,v)
+            
+    return od
+
 
 class Configurable(object):
 
     def __init__(self,config=None,register_defaults=True,**kwargs):
         
         self._config = {}
-        self._default_config = {}
-        if register_defaults: self.register_default_config(self)
+        if register_defaults:
+            self._default_config = self.create_default_config()
+            self._config = self.create_config(self._default_config)
+
         self.configure(config,**kwargs)
 
     @property
     def config(self):
         return self._config
         
-    @classmethod
-    def register_default_config(cls,c,key='default_config',
-                                group_key='default_subsection'):
-        """Register default configuration dictionaries for this class
-        and all classes from which it inherits."""
-        
-        for base_class in inspect.getmro(cls):
+#    @classmethod
+#    def create_default_config(cls,key='default_config'):
+#        """Create default configuration dictionaries for this class
+#        and all classes from which it inherits."""
+#
+#        config = {}        
+#        for base_class in inspect.getmro(cls):
+#
+#            if key in base_class.__dict__:
+#                c = Configurable.create_config(base_class.__dict__[key])
+#                config = merge_dict(config,c,add_new_keys=True)
+#        return config
 
-            if key in base_class.__dict__:
-                c.update_default_config(base_class.__dict__[key])
-#            else:
-#                raise Exception('No config dictionary with key %s '%key +
-#                                'in %s'%str(cls))
-                
+    def update_default_config(self,default_dict):
+        """Update the defaults dictionary for this class."""
+        
+        if not isinstance(default_dict,dict) and issubclass(default_dict,Configurable):
+            default_dict = default_dict.default_config
+        elif not isinstance(default_dict,dict):
+            raise Exception('Wrong type for default dict.')
+        
+        default_config = merge_dict(self._default_config,default_dict,
+                                    add_new_keys=True)
+
+        default_config = create_options_dict(default_config)
+
+        self._default_config = default_config
+        self._config = self.create_config(self._default_config)
+        
     @classmethod
-    def get_default_config(cls,key='default_config',group=None):
+    def create_default_config(cls,key='default_config'):
         
         o = {}        
         for base_class in inspect.getmro(cls):
             if key in base_class.__dict__:
-                o.update(base_class.__dict__[key])
-                
-        for k in o.keys():
-            o[k] = Option.create(k,o[k],group=group)
-
+                o = merge_dict(o,base_class.__dict__[key],add_new_keys=True)
+                #            else:
+#                raise Exception('No config dictionary with key %s '%key +
+#                                'in %s'%str(cls))
+        
+        o = create_options_dict(o)
         return o
 
     @classmethod
-    def get_class_config(cls,key='default_config',group=None):
+    def get_class_config(cls,key='default_config'):
         
         o = copy.deepcopy(cls.__dict__[key])
         for k in o.keys():
@@ -126,22 +160,26 @@ class Configurable(object):
         return o
 
     @classmethod
-    def add_arguments(cls,parser,config=None,group=None,skip=None):
+    def add_arguments(cls,parser,config=None,skip=None):
         
         if config is None:
-            config = cls.get_default_config(group=group).values()
+            config = cls.create_default_config()
             
         groups = {}
-        for v in config:
-            if v.group is not None and not v.group in groups:
-                groups[v.group] = parser.add_argument_group(v.group)
+#        for k, v in config.items():
+#            if v.group is not None and not v.group in groups:
+#                groups[v.group] = parser.add_argument_group(v.group)
 
-        for v in config:
+        for k, v in config.items():
 
             if skip is not None and v.name in skip: continue
+
+            if v.group is not None and not v.group in groups:
+                groups[v.group] = parser.add_argument_group(v.group)
+                group = groups[v.group]
+            else:
+                group=parser
             
-            if v.group is None: group = parser
-            else: group = groups[v.group]
 
             if v.type == bool:
                 group.add_argument('--' + v.argname,default=v.value,
@@ -162,38 +200,34 @@ class Configurable(object):
         
                 
     def update_config(self,config):
-        update_dict(self._config,config)
+        self._config = merge_dict(self._config,config)
 
-    def update_default_config(self,default_dict,group=None):
-        """Update configuration for the object adding keys for
-        elements that are not present.  If group is defined then
-        this configuration will be nested in a dictionary with that
-        key."""
-        if default_dict is None: return
+    @staticmethod
+    def create_config(default_dict,options_dict=False):
+        """Create a configuration dictionary from an options dictionary."""
 
-        if not isinstance(default_dict,dict) and \
-                issubclass(default_dict,Configurable):
+        o = {}
+        if not isinstance(default_dict,dict) and issubclass(default_dict,Configurable):
             default_dict = default_dict.default_config
         elif not isinstance(default_dict,dict):
             raise Exception('Wrong type for default dict.')
+        
+        for k, v in default_dict.items():
 
-        if group:
-            default_config = self._default_config.setdefault(group,{})
-            self._config.setdefault(group,{})
-        else:
-            default_config = self._default_config
-            
-        update_dict(default_config,default_dict,True)
-        for k in default_dict.keys():
-#            if not isinstance(self._default_config[k],Option):
-            option = Option.create(k,default_dict[k],group=group) 
-            default_config[option.name] = option
-
-            if option.group:
-                self._config.setdefault(option.group,{})
-                self._config[option.group][option.name] = option.value
+            if isinstance(v,dict):
+                o[k] = Configurable.create_config(v)
             else:
-                self._config[option.name] = self._default_config[k].value
+                if not isinstance(v,Option):
+                    option = Option.create(k,v)
+                else:
+                    option = v
+                    
+                if not options_dict:
+                    o[option.name] = option.value
+                else:
+                    o[option.name] = option
+                    
+        return o
        
     def print_config(self):
         
@@ -212,9 +246,6 @@ class Configurable(object):
         self._config[key] = value
 
     def parse_opts(self,opts):
-
-#        import pprint
-#        pprint.pprint(self._config)
         
         for k,v in opts.__dict__.items():
 
@@ -246,26 +277,18 @@ class Configurable(object):
             config[name] = v
 
         
-    def configure(self,config=None,opts=None,group=None,**kwargs):
+    def configure(self,config=None,opts=None,**kwargs):
         """Update the configuration of this object with the contents
         of 'config'.  When the same option is defined in multiple
         inputs the order of precedence is config -> opts -> kwargs."""
         
         if not config is None:
-
-            if group and not group in config:
-                raise Exception('Exception')
-
-            if group:
-                update_dict(self._config,config[group])
-            else:
-                update_dict(self._config,config)
+            self._config = merge_dict(self._config,config)
                 
         if not opts is None: self.parse_opts(opts)
                 
-        update_dict(self._config,kwargs)
+        self._config = merge_dict(self._config,kwargs)
         
         for k, v in self._config.items():
-
             if v is None or not isinstance(v,str): continue            
             if os.path.isfile(v): self._config[k] = os.path.abspath(v)
