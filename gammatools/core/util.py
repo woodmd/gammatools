@@ -144,7 +144,7 @@ def merge_dict(d0,d1,add_new_keys=False,append_arrays=False):
 
     od = {}
     
-    for k, v in d0.iteritems():
+    for k, v in d0.items():
         
         if not k in d1:
             od[k] = copy.copy(d0[k])
@@ -160,7 +160,7 @@ def merge_dict(d0,d1,add_new_keys=False,append_arrays=False):
         else: od[k] = copy.copy(d1[k])
 
     if add_new_keys:
-        for k, v in d1.iteritems(): 
+        for k, v in d1.items(): 
             if not k in d0: od[k] = copy.copy(d1[k])
 
     return od
@@ -215,7 +215,7 @@ def dispatch_jobs(exe,args,opts,queue=None,
         queue = opts.queue
         
     cmd_opts = ''
-    for k, v in opts.__dict__.iteritems():
+    for k, v in opts.__dict__.items():
         if k in skip_keywords: continue                
         if isinstance(v,list): continue
 
