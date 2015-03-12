@@ -79,50 +79,11 @@ for f in args.files:
         else: outfile = os.path.splitext(f)[0] + '_sel.fits'
     else:
         outfile = args.output
-
-    
                   
     gt_task = SelectorTask(f,outfile,opts=args)
     gt_task.run()
-
-
     
 sys.exit(0)
-        
-#output_prefix = 'gtselect'
-#logfile = 'gtselect.log'
-#m = re.search("(.+)_(ft1|ls1).fits",os.path.basename(args[1]))
-#if m is not None:
-#    outfile = m.group(1) + '_sel_' + m.group(2) + '.fits'
-#    logfile = output_prefix + '.log'
-
-
-    
-# Redirect stdout and stderr
-#sys.stdout = LogFile('stdout',logfile,quiet=False)
-#sys.stderr = LogFile('stderr',logfile,quiet=False)
-
-#source_ra = opts.ra
-#source_dec = opts.dec
-#if opts.source is not None:
-#    pysim = pySimbad()
-#    pysim.findSource(opts.source)
-#    source_ra = pysim.ra
-#    source_dec = pysim.dec
-#elif source_ra is None or source_dec is None:
-#    # Find RA/DEC from FITS file
-#    hdulist = pyfits.open(args[1])
-#    print hdulist[1].header['DSVAL2']
-#    m = re.search("circle\(([0-9\.]+),([0-9\.]+)",hdulist[1].header['DSVAL2'])
-#    if m is not None:
-#        source_ra = float(m.group(1))
-#        source_dec = float(m.group(2))
-#    else:
-#        source_ra = 'INDEF'
-#        source_dec = 'INDEF'        
-#print 'RA:  %s'%(source_ra)
-#print 'DEC: %s'%(source_dec)
-
 
 files = []
 for i in range(1,len(args)):

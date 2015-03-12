@@ -189,8 +189,7 @@ class SrcMapTask(Task):
 
     def __init__(self,outfile,config=None,**kwargs):
         super(SrcMapTask,self).__init__()
-        self.update_default_config(SrcMapTask)
-        self.configure(config,subsection='gtsrcmaps',**kwargs)
+        self.configure(config,**kwargs)
         
         self._outfile = os.path.abspath(outfile)
         self.register_output_file(self._outfile)
@@ -219,6 +218,7 @@ class BExpTask(Task):
                        'enumbins' : 16,
                        'infile'   : None,
                        'irfs'     : None,
+                       'evtype'   : None,
                        'cmap' : 'none',
                        'coordsys' : 'CEL',
                        'ebinalg'  : 'LOG',
@@ -226,8 +226,7 @@ class BExpTask(Task):
     
     def __init__(self,outfile,config=None,**kwargs):
         super(BExpTask,self).__init__()
-        self.update_default_config(BExpTask)
-        self.configure(config,subsection='gtexpcube',**kwargs)
+        self.configure(config,**kwargs)
 
         if self.config['allsky']:
             self.set_config('nxpix',360)
@@ -240,7 +239,7 @@ class BExpTask(Task):
         self._outfile = os.path.abspath(outfile)
         self.register_output_file(self._outfile)
         
-        self._gtapp = GtApp('gtexpcube2','Likelihood')
+        self._gtapp = GtApp('gtexpcube2')
         
 
     def run_task(self):
@@ -271,7 +270,7 @@ class BinTask(Task):
     
     def __init__(self,infile,outfile,config=None,opts=None,**kwargs):
         super(BinTask,self).__init__()
-        self.configure(config,opts=opts,subsection='gtbin',**kwargs)
+        self.configure(config,opts=opts,**kwargs)
         
         self._infile = os.path.abspath(infile)
         self._outfile = os.path.abspath(outfile)
