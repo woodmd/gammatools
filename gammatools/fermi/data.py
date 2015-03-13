@@ -141,12 +141,9 @@ class PhotonData(object):
         self.apply_mask(msk)
     
     @staticmethod
-    def get_mask(data,selections=None,conversion_type=None,
-                 event_class=None,
-                 event_class_id=None,
-                 event_type_id=None,
-                 phases=None,cuts=None,
-                 src_index=None,cuts_file=None):
+    def get_mask(data,selections=None, conversion_type=None,
+                 event_class_id=None, event_type_id=None,
+                 phases=None, src_index=None):
         
         mask = data['energy'] > 0
 
@@ -164,44 +161,13 @@ class PhotonData(object):
             else:
                 mask &= (data['conversion_type'] == 1)
         
-        if not cuts is None and not cuts_file is None:
-            cut_defs = yaml.load(open(cuts_file,'r'))
-            cut_defs['CTBBestLogEnergy'] = 'data[\'energy\']'
-            cut_defs['CTBCORE'] = 'data[\'psfcore\']'
-            cut_defs['pow'] = 'np.power'
-
-            for c in cuts.split(','):
-            
-                cv = c.split('/')
-
-                if len(cv) == 1:
-                    cut_expr = expand_aliases(cut_defs,cv[0])
-                    mask &= eval(cut_expr)
-                else:
-                    clo = float(cv[1])
-                    chi = float(cv[2])
-
-                if len(cv) == 3 and cv[0] in data._data:
-                    mask &= (data[cv[0]] >= clo)&(data[cv[0]] <= chi)
-
         if not event_class_id is None:
             mask &= (data['event_class'].astype('int')&
                      ((0x1)<<event_class_id)>0)
-        elif event_class == 'source':
-            mask &= (data['event_class'].astype('int')&((0x1)<<2)>0)
-        elif event_class == 'clean':
-            mask &= (data['event_class'].astype('int')&((0x1)<<3)>0)
-        elif event_class == 'ultraclean':
-            mask &= (data['event_class'].astype('int')&((0x1)<<4)>0)
 
         if not event_type_id is None:
-
-            print np.sum(mask)
-            
             mask &= (data['event_type'].astype('int')&
                      ((0x1)<<event_type_id)>0)
-
-            print np.sum(mask)
             
         if src_index is not None:
 

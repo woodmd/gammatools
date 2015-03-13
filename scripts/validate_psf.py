@@ -25,7 +25,7 @@ if __name__ == '__main__':
 pulsar data samples."""
     parser = argparse.ArgumentParser(usage=usage, description=description)
 
-    parser.add_argument('files', nargs='+')
+    parser.add_argument('evfile', nargs='*')
     parser.add_argument('--config', default=None )
     
     PSFValidate.add_arguments(parser)

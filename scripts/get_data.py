@@ -11,6 +11,7 @@ event_samples = { 'pass6' : 'P6_public_v3',
                   'pass7r' : 'P7_P202_BASE',
                   'pass8_p301' : 'P8_P301_BASE',
                   'pass8_p302' : 'P8_P302_BASE',
+                  'pass8_p302_all' : 'P8_P302_ALL',
                   }
 
 usage = "usage: %prog [options] "
@@ -28,7 +29,7 @@ parser.add_option('--dec', default = 0, type = float,
                   help = 'Maximum energy')
 
 parser.add_option('--event_sample', default='pass7r',
-                  choices=event_samples.keys(),
+                  choices=event_samples.keys() + event_samples.values(),
                   help='Event Sample (pass6,pass7,pass7r,pass8)')
 
 parser.add_option('--event_class', default='Source', type = "string",
@@ -95,11 +96,14 @@ else:
 
 astroserv = '~glast/astroserver/prod/astro'
 
-if not opts.event_sample in event_samples:
-    sys.exit(1)
+
+if opts.event_sample in event_samples:
+    event_sample = event_samples[opts.event_sample]
+else:
+    event_sample = opts.event_sample
 
 command  = astroserv
-command += ' --event-sample %s  '%(event_samples[opts.event_sample])
+command += ' --event-sample %s  '%(event_sample)
 command += ' --event-class-name %s '%(opts.event_class)
 command += ' --ra %9.5f --dec %9.5f ' %(ra,dec)
 

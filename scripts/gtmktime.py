@@ -24,7 +24,7 @@ parser.add_argument('--outdir', default = None,
                     help = 'Set the output directory.')
 parser.add_argument('--queue', default = None, 
                     help = 'Set queue name.')
-parser.add_argument('--filter', default = 'default_r52', 
+parser.add_argument('--filter', default = 'default', 
                     help = 'Set the mktime filter.')
 
 args = parser.parse_args()

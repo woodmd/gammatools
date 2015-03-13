@@ -5,14 +5,17 @@ from gammatools.core.util import update_dict, merge_dict
 
 class Option(object):
 
-    def __init__(self,name,value,docstring='',option_type=str,group=None):
+    def __init__(self,name,value,docstring='',option_type=str,group=None,
+                 list_type=None):
         self._name = name
         self._value = value
         self._docstring = docstring
         self._option_type = option_type
         self._group = group
-        
-        if option_type == list and len(value):
+
+        if list_type is not None:
+            self._list_type = list_type
+        elif option_type == list and value is not None and len(value):
             self._list_type = type(value[0])
         else:
             self._list_type = str
@@ -57,23 +60,20 @@ class Option(object):
             item_list = [None,'',None,str]
             item_list[:len(x)] = x
             value, docstring, groupname, option_type = item_list
-            
-#            if len(x) == 1:
-#                value, docstring, option_type = x[0], '', str
-#            elif len(x) == 2:
-#                value, docstring, option_type = x[0], x[1], str
-#            elif len(x) == 3:
-#                value, docstring, option_type = x[0], x[1], x[2]
-#            else:
-#                raise Exception('Wrong size for option tuple.')
 
-            if value is None and (option_type == list or option_type == dict):
-                value = option_type()
+            list_type = None
+
+            if isinstance(option_type,tuple):
+                option_type, list_type = option_type
+            
+#                raise Exception('Wrong size for option tuple.')
+#            if value is None and (option_type == list or option_type == dict):
+#                value = option_type()
                             
             if value is not None:
                 option_type = type(value)
             
-            return Option(name,value,docstring,option_type)
+            return Option(name,value,docstring,option_type,list_type=list_type)
         else:
             if x is not None: option_type = type(x)
             else: option_type = str            
@@ -127,11 +127,13 @@ class Configurable(object):
             default_dict = default_dict.default_config
         elif not isinstance(default_dict,dict):
             raise Exception('Wrong type for default dict.')
+
+        new_default_config = create_options_dict(default_dict)
         
-        default_config = merge_dict(self._default_config,default_dict,
+        default_config = merge_dict(self._default_config,new_default_config,
                                     add_new_keys=True)
 
-        default_config = create_options_dict(default_config)
+#        default_config = create_options_dict(default_config)
 
         self._default_config = default_config
         self._config = self.create_config(self._default_config)
@@ -170,8 +172,8 @@ class Configurable(object):
 #            if v.group is not None and not v.group in groups:
 #                groups[v.group] = parser.add_argument_group(v.group)
 
-        for k, v in config.items():
-
+        for k, v in sorted(config.items()):
+            
             if skip is not None and v.name in skip: continue
 
             if v.group is not None and not v.group in groups:
@@ -187,13 +189,17 @@ class Configurable(object):
                                    help=v.docstring + ' [default: %s]'%v.value)
             else:
 
-                if isinstance(v.value,list):
-                    value=','.join(map(str,v.value))
+                if v.type == list:
+                    if v.value is not None:
+                        value=','.join(map(str,v.value))
+                    else:
+                        value = v.value
+                        
                     opt_type = str
                 else:
                     value = v.value
                     opt_type = v.type
-                
+                    
                 group.add_argument('--' + v.argname,default=value,
                                     type=opt_type,
                                     help=v.docstring + ' [default: %s]'%v.value)
@@ -246,35 +252,25 @@ class Configurable(object):
         self._config[key] = value
 
     def parse_opts(self,opts):
+
+        import pprint
+        pprint.pprint(opts.__dict__)
         
         for k,v in opts.__dict__.items():
 
             if v is None: continue
-            
-            argname = k.split('.')
-            if len(argname) == 2:
-                group = argname[0]
-                name = argname[1]
+            if not k in self._default_config: continue
                 
-                default_config = self._default_config[group][name]
-                config = self._config[group]
-            else:
-                name = argname[0]
+            default_config = self._default_config[k]
+            config = self._config[k]
 
-                if not name in self._default_config: continue
-                
-                default_config = self._default_config[name]
-                config = self._config
-            
-                
-            if isinstance(config,list) and not isinstance(v,list):
+            if default_config.type == list and v is not None:
                 value = v.split(',')
                 value = map(default_config.list_type,value)
-#                self.set_config(k,value)
             else:
                 value = v
-
-            config[name] = v
+                
+            self._config[k] = value
 
         
     def configure(self,config=None,opts=None,**kwargs):

@@ -174,28 +174,50 @@ class PSFData(Data):
 
 
 
+#        parser.add_argument('--output_dir', default=None,
+#                            help='Set the output directory name.')
+
+#        parser.add_argument('--output_prefix', default=None,
+#                            help='Set the string prefix that will be appended '
+#                                 'to all output files.')
+
+#        parser.add_argument('--phase_selection', default=None,
+#                            help='Type of input data (pulsar/agn).')
+        
+#        parser.add_argument('--src', default='Vela',
+#                            help='Set the source model.')
+
+#        parser.add_argument('--mask_srcs', default=None,
+#                            help='Define a list of sources to exclude.')
+
+                    
 class PSFValidate(Configurable):
 
-    default_config = { 'egy_bin' : '2.0/4.0/0.25',
-                       'egy_bin_edge'   : None,
-                       'cth_bin'        : None,
-                       'cth_bin_edge'   : None,
-                       'event_class_id' : None,
-                       'event_type_id'  : None,
-                       'data_type'      : 'agn',
-                       'spectrum'       : None,
-                       'spectrum_pars'  : None,
-                       'output_prefix'  : None,
-                       'output_dir'     : None,
-                       'conversion_type' : None,
-                       'phase_selection' : None,
-                       'on_phase'       : None,
-                       'off_phase'      : None,
-                       'ltfile'         : None,
-                       'theta_max'      : 30.0,
-                       'psf_scaling_fn' : None,
-                       'irf'            : None,
-                       'src'            : 'iso' }
+    default_config = {
+        'egy_bin'         : (None,'Set low/high and energy bin size.'),
+        'egy_bin_edge'    : (None,'Edges of energy bins.','',(list,float)),
+        'cth_bin'         : (None),
+        'cth_bin_edge'    : (None,'Set edges of cos(theta) bins.','',(list,float)),
+        'event_class_id'  : (None,'Set the event class ID.'),
+        'event_type_id'   : (None,'Set the event type ID.'),
+        'data_type'       : 'agn',
+        'spectrum'        : (None),
+        'spectrum_pars'   : (None),
+        'output_prefix'   : (None),
+        'output_dir'      : (None),
+        'conversion_type' : (None,'Set conversion type.'),
+        'phase_selection' : (None),
+        'on_phase'        : (None),
+        'off_phase'       : (None),
+        'ltfile'          : (None,'Set the livetime cube which will be used to generate the exposure-weighted PSF model.'),
+        'theta_max'       : (30.0),
+        'psf_scaling_fn'  : (None,'Set the scaling function to use for determining the edge of the ROI at each energy.'),
+        'irf'             : (None,'Set the names of one or more IRF models.'),
+        'irf_labels'      : (None,'IRF Labels.'),
+        'make_sky_image'  : (False,'Plot distribution of photons on the sky.'),
+        'show'            : (False,'Draw plots to screen.'),
+        'quantiles'       : ([0.34,0.68,0.90,0.95],'Set quantiles.'),
+        'src'             : 'iso' }
     
     def __init__(self, config, opts,**kwargs):
         """
@@ -209,6 +231,8 @@ class PSFValidate(Configurable):
 
         cfg = self.config
 
+        sys.exit(0)
+        
         self.irf_colors = ['green', 'red', 'magenta', 'gray', 'orange']
         self.on_phases = []
         self.off_phases = []
@@ -219,15 +243,11 @@ class PSFValidate(Configurable):
         self.font = font_manager.FontProperties(size=10)
 
         if cfg['egy_bin_edge'] is not None:
-            self.egy_bin_edge = string_to_array(cfg['egy_bin_edge'])
+            self.egy_bin_edge = cfg['egy_bin_edge']
         elif cfg['egy_bin'] is not None:
             [elo, ehi, ebin] = string_to_array(cfg['egy_bin'],'/')
             self.egy_bin_edge = \
                 np.linspace(elo, ehi, 1 + int((ehi - elo) / ebin))
-        elif cfg['data_type'] == 'agn':
-            self.egy_bin_edge = np.linspace(3.5, 5, 7)
-        else:
-            self.egy_bin_edge = np.linspace(1.5, 5.0, 15)
             
         self.cth_bin_edge = string_to_array(cfg['cth_bin_edge'])
         self.output_prefix = cfg['output_prefix']
@@ -283,7 +303,6 @@ class PSFValidate(Configurable):
             cfg['off_phase'] = vela_phase_selection['off_phase']
 
         self.conversion_type = cfg['conversion_type']
-        self.opts = opts
 
         if not cfg['on_phase'] is None: self.data_type = 'pulsar'
         
@@ -309,86 +328,6 @@ class PSFValidate(Configurable):
             
         self.psf_data.init_hist(self.thetamax_fn, self.config['theta_max'])
         self.build_models()
-
-    @staticmethod
-    def add_arguments(parser):
-
-        IRFManager.add_arguments(parser)
-        FigTool.add_arguments(parser)
-
-        parser.add_argument('--ltfile', default=None,
-                            help='Set the livetime cube which will be used '
-                                 'to generate the exposure-weighted PSF model.')
-
-        parser.add_argument('--irf', default=None,
-                            help='Set the names of one or more IRF models.')
-
-        parser.add_argument('--theta_max', default=None, type=float,
-                            help='Set the names of one or more IRF models.')
-
-        parser.add_argument('--irf_labels', default=None,
-                            help='IRF labels')
-
-        parser.add_argument('--output_dir', default=None,
-                            help='Set the output directory name.')
-
-        parser.add_argument('--output_prefix', default=None,
-                            help='Set the string prefix that will be appended '
-                                 'to all output files.')
-
-        parser.add_argument('--on_phase', default=None,
-                            help='Type of input data (pulsar/agn).')
-
-        parser.add_argument('--off_phase', default=None,
-                            help='Type of input data (pulsar/agn).')
-
-        parser.add_argument('--phase_selection', default=None,
-                            help='Type of input data (pulsar/agn).')
-        
-        parser.add_argument('--cth_bin_edge', default='0.2,1.0',
-                            help='Edges of cos(theta) bins (e.g. 0.2,0.5,1.0).')
-
-        parser.add_argument('--egy_bin_edge', default=None,
-                            help='Edges of energy bins.')
-
-        parser.add_argument('--egy_bin', default=None,
-                            help='Set low/high and energy bin size.')
-
-        parser.add_argument('--cuts', default=None,
-                            help='Set min/max redshift.')
-
-        parser.add_argument('--src', default='Vela',
-                            help='Set the source model.')
-
-
-        parser.add_argument('--show', default=False, action='store_true',
-                            help='Draw plots to screen.')
-
-        parser.add_argument('--make_sky_image', default=False,
-                            action='store_true',
-                            help='Plot distribution of photons on the sky.')
-
-        parser.add_argument('--conversion_type', default=None,
-                            help='Draw plots.')
-
-        parser.add_argument('--event_class', default=None,
-                            help='Set the event class name.')
-
-        parser.add_argument('--event_class_id', default=None, type=int,
-                            help='Set the event class ID.')
-
-        parser.add_argument('--event_type_id', default=None, type=int,
-                            help='Set the event type ID.')
-
-        parser.add_argument('--psf_scaling_fn', default=None, 
-                            help='Set the scaling function to use for '
-                            'determining the edge of the ROI at each energy.')
-        
-        parser.add_argument('--quantiles', default='0.34,0.68,0.90,0.95',
-                            help='Draw plots.')
-
-        parser.add_argument('--mask_srcs', default=None,
-                            help='Define a list of sources to exclude.')
 
     def build_models(self):
 
@@ -418,8 +357,7 @@ class PSFValidate(Configurable):
                                         self.cth_bin_edge,
                                         'model')
 
-    def load(self, opts):
-
+    def load(self):
 
         for f in opts.files:
             print 'Loading ', f
@@ -443,13 +381,11 @@ class PSFValidate(Configurable):
             
     def run(self):
 
-        for f in self.opts.files:
+        
+        
+        for f in self.config['evfile']:
             print 'Loading ', f
             d = load_object(f)
-
-
-            print self.config['event_class_id']
-            
             d.mask(event_class_id=self.config['event_class_id'],
                    event_type_id=self.config['event_type_id'],
                    conversion_type=self.config['conversion_type'])
@@ -472,11 +408,6 @@ class PSFValidate(Configurable):
                              self.output_prefix + 'psfdata')
 
         self.psf_data.save(fname + '.P')
-
-        #        psf_data.print_quantiles()
-
-        #        psf_data.print_quantiles_tex(os.path.join(self.output_dir,
-        #                                                  self.output_prefix))
 
         for ml in self.models:
             fname = self.output_prefix + 'psfdata_' + ml
@@ -677,9 +608,7 @@ class PSFValidate(Configurable):
 
         mask = PhotonData.get_mask(data, {'energy': egy_range,
                                           'cth': cth_range},
-                                   conversion_type=self.conversion_type,
-                                   event_class=self.opts.event_class,
-                                   cuts=self.opts.cuts)
+                                   conversion_type=self.conversion_type)
 
         hcounts = data.hist('dtheta', mask=mask, edges=theta_edges)
 
@@ -918,22 +847,16 @@ class PSFValidate(Configurable):
 
         mask = PhotonData.get_mask(data, {'energy': egy_range,
                                           'cth': cth_range},
-                                   conversion_type=self.conversion_type,
-                                   event_class=self.opts.event_class,
-                                   cuts=self.opts.cuts)
+                                   conversion_type=self.conversion_type)
 
         on_mask = PhotonData.get_mask(data, {'energy': egy_range,
                                              'cth': cth_range},
                                       conversion_type=self.conversion_type,
-                                      event_class=self.opts.event_class,
-                                      cuts=self.opts.cuts,
                                       phases=self.on_phases)
 
         off_mask = PhotonData.get_mask(data, {'energy': egy_range,
                                              'cth': cth_range},
                                       conversion_type=self.conversion_type,
-                                      event_class=self.opts.event_class,
-                                      cuts=self.opts.cuts,
                                       phases=self.off_phases)
 
         (hon, hoff, hoffs) = getOnOffHist(data, 'dtheta', phases=self.phases,
