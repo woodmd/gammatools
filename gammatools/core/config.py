@@ -176,6 +176,8 @@ class Configurable(object):
             
             if skip is not None and v.name in skip: continue
 
+            if isinstance(v,dict): continue
+
             if v.group is not None and not v.group in groups:
                 groups[v.group] = parser.add_argument_group(v.group)
                 group = groups[v.group]
@@ -232,7 +234,7 @@ class Configurable(object):
                     o[option.name] = option.value
                 else:
                     o[option.name] = option
-                    
+
         return o
        
     def print_config(self):

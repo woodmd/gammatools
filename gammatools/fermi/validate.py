@@ -17,6 +17,7 @@ from gammatools.core.histogram import Histogram, Histogram2D
 from matplotlib import font_manager
 
 from gammatools.fermi.psf_model import *
+from gammatools.fermi.ft1_loader import *
 from gammatools.core.quantile import *
 from gammatools.fermi.catalog import Catalog
 from gammatools.core.plot_util import *
@@ -191,9 +192,19 @@ class PSFData(Data):
 #                            help='Define a list of sources to exclude.')
 
                     
-class PSFValidate(Configurable):
+class IRFValidate(Configurable):
+
+    default_config = {}
+
+    def __init__(self, config, opts,**kwargs):
+        super(IRFValidate,self).__init__()
+
+
+
+class PSFValidate(IRFValidate):
 
     default_config = {
+        'ft1loader'       : FT1Loader.default_config,
         'egy_bin'         : (None,'Set low/high and energy bin size.'),
         'egy_bin_edge'    : (None,'Edges of energy bins.','',(list,float)),
         'cth_bin'         : (None),
@@ -210,6 +221,7 @@ class PSFValidate(Configurable):
         'on_phase'        : (None),
         'off_phase'       : (None),
         'ltfile'          : (None,'Set the livetime cube which will be used to generate the exposure-weighted PSF model.'),
+        'evfile'          : (None),
         'theta_max'       : (30.0),
         'psf_scaling_fn'  : (None,'Set the scaling function to use for determining the edge of the ROI at each energy.'),
         'irf'             : (None,'Set the names of one or more IRF models.'),
@@ -223,16 +235,12 @@ class PSFValidate(Configurable):
         """
         @type self: object
         """
-        super(PSFValidate,self).__init__()
+        super(PSFValidate,self).__init__(config,opts,**kwargs)
 
-        self.update_default_config(IRFManager.defaults)
-        
+        self.update_default_config(IRFManager.defaults)        
         self.configure(config,opts=opts,**kwargs)
-
         cfg = self.config
 
-        sys.exit(0)
-        
         self.irf_colors = ['green', 'red', 'magenta', 'gray', 'orange']
         self.on_phases = []
         self.off_phases = []
@@ -249,12 +257,12 @@ class PSFValidate(Configurable):
             self.egy_bin_edge = \
                 np.linspace(elo, ehi, 1 + int((ehi - elo) / ebin))
             
-        self.cth_bin_edge = string_to_array(cfg['cth_bin_edge'])
+        self.cth_bin_edge = cfg['cth_bin_edge']
         self.output_prefix = cfg['output_prefix']
         if self.output_prefix is None:
 #            prefix = os.path.splitext(opts.files[0])[0]
-            m = re.search('(.+).P.gz',opts.files[0])
-            if m is None: prefix = os.path.splitext(opts.files[0])[0] 
+            m = re.search('(.+).P.gz',self.config['evfile'][0])
+            if m is None: prefix = os.path.splitext(self.config['evfile'][0])[0] 
             else: prefix = m.group(1) 
             
             cth_label = '%03.f%03.f' % (self.cth_bin_edge[0] * 100,
@@ -295,8 +303,6 @@ class PSFValidate(Configurable):
         else:
             self.model_labels = self.models
 
-        self.mask_srcs = opts.mask_srcs
-
         self.data_type = 'agn'
         if cfg['phase_selection'] == 'vela':
             cfg['on_phase'] = vela_phase_selection['on_phase']
@@ -322,9 +328,9 @@ class PSFValidate(Configurable):
         if cfg['psf_scaling_fn']:
             self.thetamax_fn = psf_scaling_fn[cfg['psf_scaling_fn']]
         elif cfg['conversion_type'] == 'back' or cfg['conversion_type'] is None:
-            self.thetamax_fn = psf_scaling_function['back']
+            self.thetamax_fn = psf_scaling_fn['back']
         else:
-            self.thetamax_fn = psf_scaling_function['front']
+            self.thetamax_fn = psf_scaling_fn['front']
             
         self.psf_data.init_hist(self.thetamax_fn, self.config['theta_max'])
         self.build_models()
@@ -381,16 +387,37 @@ class PSFValidate(Configurable):
             
     def run(self):
 
-        
-        
+        evfile = []
+
         for f in self.config['evfile']:
+
+            if os.path.splitext(f)[1] == '.txt':
+                evfile += list(np.genfromtxt(f,unpack=True,dtype=None))
+            else:
+                evfile += [f]
+
+        
+        for f in evfile: #self.config['evfile']:
             print 'Loading ', f
-            d = load_object(f)
+
+
+            basename = os.path.splitext(f)[0] 
+
+            if os.path.isfile(basename + '.P.gz'):
+                d = load_object(basename + '.P.gz')
+            else:
+#                wlif os.path.splitext(f)[1] == '.fits':
+                loader = FT1Loader(self.config['ft1loader'])
+                loader.load_photons(f)
+                d = loader._photon_data
+                loader.save(basename + '.P')
+
+            print 'Masking'
+
             d.mask(event_class_id=self.config['event_class_id'],
                    event_type_id=self.config['event_type_id'],
                    conversion_type=self.config['conversion_type'])
             d['dtheta'] = np.degrees(d['dtheta'])
-
             self.fill(d)
             
         for iegy in range(self.psf_data.egy_axis.nbins):
@@ -407,7 +434,7 @@ class PSFValidate(Configurable):
         fname = os.path.join(self.output_dir,
                              self.output_prefix + 'psfdata')
 
-        self.psf_data.save(fname + '.P')
+        self.psf_data.save(fname + '.P',compress=True)
 
         for ml in self.models:
             fname = self.output_prefix + 'psfdata_' + ml
@@ -628,11 +655,10 @@ class PSFValidate(Configurable):
                               qdata.bkg.counts[iegy,icth]/bkg_domega,
                               qdata.bkg.counts[iegy,icth]/bkg_domega**2)
 
-        hbkg = copy.deepcopy(hcounts)
-        hbkg.clear()
-        for b in hbkg.iterbins():
-            bin_area = (b.hi_edge() ** 2 - b.lo_edge() ** 2) * np.pi
-            b.set_counts(bin_area * bkg_density)
+        hbkg = Histogram(hcounts.axis(0),
+                         counts=(hcounts.axis(0).edges[1:]**2 - 
+                                 hcounts.axis(0).edges[:-1]**2)*np.pi*bkg_density,
+                         var=0)
 
         hexcess = hcounts - hbkg
         

@@ -2,7 +2,7 @@ import os
 import sys
 import re
 import bisect
-import pyfits
+from gammatools.core.astropy_helper import pyfits
 import healpy
 import numpy as np
 import matplotlib.pyplot as plt

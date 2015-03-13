@@ -12,7 +12,7 @@ __date__     = "01/01/2013"
 import numpy as np
 import re
 import copy
-import pyfits
+from gammatools.core.astropy_helper import pyfits
 from gammatools.core.algebra import Vector3D
 import matplotlib.pyplot as plt
 from catalog import Catalog, CatalogSource
@@ -33,21 +33,19 @@ class Data(object):
     def __setitem__(self,key,val):
         self._data[key] = val
 
-    def save(self,outfile):
+    def save(self,outfile,compress=True):
+        save_object(self,outfile)
 
-        import cPickle as pickle
-        fp = open(outfile,'w')
-        pickle.dump(self,fp,protocol = pickle.HIGHEST_PROTOCOL)
-        fp.close()
+#        import cPickle as pickle
+#        fp = open(outfile,'w')
+#        pickle.dump(self,fp,protocol = pickle.HIGHEST_PROTOCOL)
+#        fp.close()
 
     @staticmethod
     def load(infile):
-
-        import cPickle as pickle
-        return pickle.load(open(infile,'rb'))
-
-
-
+        return load_object(infile)
+#        import cPickle as pickle
+#        return pickle.load(open(infile,'rb'))
 
 
 class PhotonData(object):
@@ -126,18 +124,8 @@ class PhotonData(object):
         else: h.fill(self._data[var_name])
         return h
 
-    def mask(self,selections=None,conversion_type=None,
-             event_class=None,
-             event_class_id=None,
-             event_type_id=None,
-             phases=None,cuts=None,
-             src_index=None,cuts_file=None):
-
-        msk = PhotonData.get_mask(self,selections,conversion_type,event_class,
-                                  event_class_id,event_type_id,phases,
-                                  cuts,src_index,
-                                  cuts_file)
-        
+    def mask(self,**kwargs):
+        msk = PhotonData.get_mask(self,**kwargs)        
         self.apply_mask(msk)
     
     @staticmethod

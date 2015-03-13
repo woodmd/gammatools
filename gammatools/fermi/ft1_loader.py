@@ -3,9 +3,8 @@ import sys
 import copy
 import argparse
 
-import pyfits
-import skymaps
-import pointlike
+from gammatools.core.astropy_helper import pyfits
+
 import numpy as np
 from gammatools.core.algebra import Vector3D
 from gammatools.fermi.catalog import Catalog
@@ -18,16 +17,16 @@ from gammatools.core.config import *
 class FT1Loader(Configurable):
 
     default_config = {
-        'zenith_cut'      : (None),
+        'zmax'            : (None),
         'conversion_type' : (None),
         'event_class_id'  : (None),
         'event_type_id'   : (None),
-        'zenith_cut'      : (None),
-        'max_dist_deg'    : (None),
+        'max_dist'        : (None),
         'max_events'      : (None),
         'phase_selection' : (None),
         'erange'          : (None),
         'ft2file'         : (None),
+        'src_list'        : (None)
         }
     
     def __init__(self,config,opts=None,**kwargs):
@@ -38,11 +37,15 @@ class FT1Loader(Configurable):
         if self.config['ft2file'] is not None:
             self.setFT2File(self.config['ft2file'])
         
+        if self.config['src_list'] is not None:
+            self.loadsrclist(self.config['src_list'])
+
         self._phist = None
         self._photon_data = PhotonData()
 
     def setFT2File(self,ft2file):
 
+        import pointlike
         if ft2file is None:
             return        
         elif not os.path.isfile(ft2file):
@@ -51,9 +54,8 @@ class FT1Loader(Configurable):
         
         self._phist = pointlike.PointingHistory(ft2file)
         
-    def load_photons(self,ft1file,ft2file=None):
+    def load_photons(self,ft1file):
 
-        if ft2file is not None: setFT2File(ft2file)
         hdulist = pyfits.open(ft1file)
 
         evhdu = hdulist['EVENTS']
@@ -63,38 +65,38 @@ class FT1Loader(Configurable):
         else:
             table = evhdu.data
         
-        msk = table.field('ZENITH_ANGLE')<self.config['zenith_cut']
+        msk = table.field('ZENITH_ANGLE')<self.config['zmax']
 
-        if not self.event_class_id is None:
+        if not self.config['event_class_id'] is None:
             event_class = bitarray_to_int(table.field('EVENT_CLASS'),True)
-            msk &= (event_class&((0x1)<<int(self.event_class_id))>0)
+            msk &= (event_class&((0x1)<<int(self.config['event_class_id']))>0)
 
-        if not self.event_type_id is None:
+        if not self.config['event_type_id'] is None:
             event_type = bitarray_to_int(table.field('EVENT_TYPE'),True)
-            msk &= (event_type&((0x1)<<int(self.event_type_id))>0)
+            msk &= (event_type&((0x1)<<int(self.config['event_type_id']))>0)
             
         table = table[msk]
         
-        if self.erange is not None:
+        if self.config['erange'] is not None:
 
-            erange = [float(t) for t in self.erange.split('/')]
+            erange = [float(t) for t in self.config['erange'].split('/')]
             
             msk = ((np.log10(table.field('ENERGY')) > erange[0]) &
                    (np.log10(table.field('ENERGY')) < erange[1]))
             table = table[msk]
                             
-        if self.conversion_type is not None:
+        if self.config['conversion_type'] is not None:
 
-            if self.conversion_type == 'front':
+            if self.config['conversion_type'] == 'front':
                 msk = table.field('CONVERSION_TYPE') == 0
             else:
                 msk = table.field('CONVERSION_TYPE') == 1
 
             table = table[msk]
                 
-        if self.phase_selection is not None:
+        if self.config['phase_selection'] is not None:
             msk = table.field('PULSE_PHASE')<0
-            phases = self.phase_selection.split(',')
+            phases = self.config['phase_selection'].split(',')
             for p in phases:
                 (plo,phi) = p.split('/')
                 msk |= ((table.field('PULSE_PHASE')>float(plo)) & 
@@ -105,17 +107,17 @@ class FT1Loader(Configurable):
             
         nevent = len(table)
         
-        print 'Loading ', fname, ' nevent: ', nevent
+        print 'Loading ', ft1file, ' nevent: ', nevent
 
         pd = self._photon_data
         
-        for isrc, src in enumerate(self.srcs):
+        for isrc, (src_ra,src_dec) in enumerate(zip(self.src_ra_deg,self.src_dec_deg)):
 
-            vsrc = Vector3D.createLatLon(np.radians(src.dec()),
-                                         np.radians(src.ra()))
+            vsrc = Vector3D.createLatLon(np.radians(src_dec),
+                                         np.radians(src_ra))
             
-            msk = (table.field('DEC')>(src.dec()-np.degrees(self.max_dist))) & \
-                (table.field('DEC')<(src.dec()+np.degrees(self.max_dist)))
+            msk = ((table.field('DEC')>(src_dec-self.config['max_dist'])) & 
+                   (table.field('DEC')<(src_dec+self.config['max_dist'])))
             table_src = table[msk]
 
             vra = np.array(table_src.field('RA'),dtype=float)
@@ -129,7 +131,7 @@ class FT1Loader(Configurable):
                                    np.radians(vra),
                                    np.radians(vdec))
 
-            msk = dth < self.max_dist
+            msk = dth < np.radians(self.config['max_dist'])
             table_src = table_src[msk]
             vra = vra[msk]
             vdec = vdec[msk]
@@ -181,14 +183,9 @@ class FT1Loader(Configurable):
             
 #            vx2 = np.degrees(vp.theta()*np.sin(vp.phi()))
 #            vy2 = -np.degrees(vp.theta()*np.cos(vp.phi()))   
-            
-            
+                        
             src_index = np.zeros(len(table_src),dtype=int)
             src_index[:] = isrc
-
-#            src_redshift = np.zeros(len(table_src))
-#            src_redshift[:] = self.src_redshifts[isrc]
-#            self.redshift += list(src_redshift)
 
             src_phase = np.zeros(len(table_src))
             if 'PULSE_PHASE' in evhdu.columns.names:
@@ -234,9 +231,13 @@ class FT1Loader(Configurable):
 #                time = event.field('TIME')
 
                 if self._phist is not None: 
+                    import skymaps
+                    sd = skymaps.SkyDir(src_ra,src_dec)
                     pi = self._phist(table_src.field('TIME')[k])            
                     cth = np.cos(pi.zAxis().difference(src))
                     cthv.append(cth)
+                else:
+                    cthv.append(np.cos(np.radians(table_src.field('THETA'))))
 
             pd.append('cth',cthv)
 
@@ -245,7 +246,7 @@ class FT1Loader(Configurable):
                     
         hdulist.close()
 
-    def loadsrclist(self,fname,srcs):
+    def loadsrclist(self,fname):
         self.srcs = []
         self.src_names = []
         self.src_redshifts = []
@@ -253,36 +254,29 @@ class FT1Loader(Configurable):
         self.src_dec_deg = []
         self.src_radec = []
 
-        if not fname is None:
-            src_names = np.genfromtxt(fname,unpack=True,dtype=None)
-        else:
-            src_names = np.array(srcs.split(','))
+#        if not fname is None:
+#            src_names = np.genfromtxt(fname,unpack=True,dtype=None)
+#        else:
+#            src_names = np.array(srcs.split(','))
+
+        if isinstance(fname,list):
+            src_names = np.array(fname)
             
         if src_names.ndim == 0: src_names = src_names.reshape(1)
 
         cat = Catalog.get()
         
         for name in src_names:
-
             src = cat.get_source_by_name(name)
-
             name = src['Source_Name']
             ra = src['RAJ2000']
             dec = src['DEJ2000']
-
-            print 'Loading ', name
-            
-            self._photon_data._srcs.append(src)
-
-            sd = skymaps.SkyDir(ra,dec)
-            self.srcs.append(sd)
+#            self._photon_data._srcs.append(src)
+#            self.src_skydirs.append(sd)
             self.src_names.append(name)
-
             self.src_ra_deg.append(ra)
             self.src_dec_deg.append(dec)
             self.src_radec.append((np.radians(ra),np.radians(dec)))
-            
-            self.src_redshifts.append(0.)
             
     def save(self,fname):
         save_object(self._photon_data,fname,compress=True)
