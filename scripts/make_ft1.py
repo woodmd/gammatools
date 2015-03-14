@@ -23,6 +23,9 @@ parser.add_argument('--dict_file', default = None,
                     help = 'Set the file that defines the mapping from Merit '
                     'to FT1 variables.')
 
+parser.add_argument('--outdir', default = None,
+                    help = 'Set the output directory.')
+
 parser.add_argument('--queue', default = None,
                     help='Set the batch queue name.')
 
@@ -34,7 +37,11 @@ if not args.queue is None:
 
 xml_classifier = os.path.abspath(args.xml_classifier)
 dict_file = os.path.abspath(args.dict_file)
-    
+
+outdir = None
+if args.outdir is not None:
+    outdir = os.path.abspath(args.outdir)
+
 input_files = []
 for x in args.files: input_files.append(os.path.abspath(x))
 
@@ -48,6 +55,10 @@ os.chdir(tmpdir)
 for x in input_files:
 
     fitsFile = os.path.splitext(x)[0] + '_ft1.fits'
+
+    if outdir is not None:
+        fitsFile = os.path.join(outdir,os.path.basename(fitsFile))
+
     inFile = os.path.basename(x)
 
     print 'cp %s %s'%(x,inFile)

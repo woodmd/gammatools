@@ -117,9 +117,9 @@ class PhotonData(object):
         pickle.dump(self,fp,protocol = pickle.HIGHEST_PROTOCOL)
         fp.close()
 
-    def hist(self,var_name,mask=None,edges=None):
+    def hist(self,var_name,mask=None,axis=None):
     
-        h = Histogram(edges)    
+        h = Histogram(axis)    
         if not mask is None: h.fill(self._data[var_name][mask])
         else: h.fill(self._data[var_name])
         return h

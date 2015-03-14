@@ -56,6 +56,9 @@ class FT1Loader(Configurable):
         
     def load_photons(self,ft1file):
 
+        import pprint
+        pprint.pprint(self.config)
+        
         hdulist = pyfits.open(ft1file)
 
         evhdu = hdulist['EVENTS']

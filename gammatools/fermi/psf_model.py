@@ -132,8 +132,8 @@ class PSFModel(object):
         ilo = np.argwhere(self._energy > emin)[0,0]
         ihi = np.argwhere(self._energy < emax)[-1,0]+1
         
-        jlo = np.argwhere(self._ctheta_axis.center > cthmin)[0,0]
-        jhi = np.argwhere(self._ctheta_axis.center < cthmax)[-1,0] +1
+        jlo = np.argwhere(self._cth_axis.center > cthmin)[0,0]
+        jhi = np.argwhere(self._cth_axis.center < cthmax)[-1,0] +1
         
         weights = (self._energy[ilo:ihi,np.newaxis]*
                    self._exp[ilo:ihi,jlo:jhi]*
@@ -193,11 +193,10 @@ class PSFModelLT(PSFModel):
                  src_type='iso',
                  spectrum='powerlaw',
                  spectrum_pars=[2.0],
-                 build_model=True,
-                 ltfile=None,
+                 ltcube=None,
                  edisp_table=None):
 
-        PSFModel.__init__(self,model=spectrum,sp_param=spectrum_pars)
+        super(PSFModelLT,self).__init__(model=spectrum,sp_param=spectrum_pars)
 
         self._src_type = src_type
         self._nbin_dtheta = nbin
@@ -227,20 +226,19 @@ class PSFModelLT(PSFModel):
 
 
         self._dtheta_axis = Axis(self._dtheta)
-        self._ctheta_axis = Axis.create(0.2,1.0,40)
-        self._tau = np.zeros(self._ctheta_axis.nbins)
+        self._cth_axis = Axis.create(0.2,1.0,40)
+        self._tau = np.zeros(self._cth_axis.nbins)
         
-        self.loadLTCube(ltfile)
-        self.fillLivetime()
-
-        if build_model: self.buildModel()
+#        self.loadLTCube(ltfile)
+        self.fillLivetime(ltcube)
+        self.buildModel()
 
     def buildModel(self):
         """Build a model for the exposure-weighted PSF averaged over
         instrument inclination angle."""
 
         gx, gy = np.meshgrid(np.log10(self._energy),
-                             self._ctheta_axis.center) 
+                             self._cth_axis.center) 
 
         gx = gx.T
         gy = gy.T
@@ -248,7 +246,7 @@ class PSFModelLT(PSFModel):
         self._psf = np.zeros((self._loge_axis.nbins,self._nbin_dtheta))
         self._edisp = None
 
-        shape = (self._loge_axis.nbins, self._ctheta_axis.nbins)
+        shape = (self._loge_axis.nbins, self._cth_axis.nbins)
         
         aeff = self._irf.aeff(np.ravel(gx),np.ravel(gy))
         aeff = aeff.reshape(shape)
@@ -297,54 +295,40 @@ class PSFModelLT(PSFModel):
             
         return
 
-                
-    def loadLTCube(self,ltcube_file):
-
-        if ltcube_file is None: return
-        hdulist = pyfits.open(ltcube_file)
-
-        self._ltmap = hdulist[1].data.field(0)[:,::-1]
+    def fillLivetime(self,ltc):
         
-        ctheta = np.array(hdulist[3].data.field(0))
-        self._ctheta_axis = Axis(np.concatenate(([1],ctheta))[::-1])
-        
-#        self._ctheta_center = \
-#            np.array([1-(0.5*(np.sqrt(1-self._ctheta[i]) + 
-#                              np.sqrt(1-self._ctheta[i+1])))**2 
-#                      for i in range(len(self._ctheta)-1)])
-#        self._dcostheta = np.array([self._ctheta[i]-self._ctheta[i+1]
-#                                    for i in range(len(self._ctheta)-1)])
-#        self._theta_center = np.arccos(self._ctheta_center)*180/np.pi  
-        
-        self._tau = np.zeros(self._ctheta_axis.nbins)
-
-    def fillLivetime(self):
-        
-        for i, cth in enumerate(self._ctheta_axis.center):
-
-            dcostheta = self._ctheta_axis.width[i]
+        self._tau = np.zeros(self._cth_axis.nbins)
             
-            if self._src_type == 'iso':
-                self._tau[i] = dcostheta
-            elif self._src_type == 'isodec':
-                sinlat = np.linspace(-1,1,48)
+        if self._src_type == 'iso':
+            self._tau = self._cth_axis.width
+        elif self._src_type == 'isodec':
+            sinlat = np.linspace(-1,1,48)
 
-                m = self._ltmap[:,i]
+            m = ltc._ltmap[:,i]
 
-                self._tau[i] = 0
-                for s in sinlat:                    
-                    lat = np.arcsin(s)
-                    th = np.pi/2. - lat                    
-                    ipix = healpy.ang2pix(64,th,0,nest=True)
-                    self._tau[i] += m[ipix]
-                                       
-            else:
-                th = np.pi/2. - self._lonlat[1]*np.pi/180.
-                phi = self._lonlat[0]*np.pi/180.
-                m = self._ltmap[:,i]
-                ipix = healpy.ang2pix(64,th,phi,nest=True)
+            self._tau[i] = 0
+            for s in sinlat:                    
+                lat = np.arcsin(s)
+                th = np.pi/2. - lat                    
+                ipix = healpy.ang2pix(64,th,0,nest=True)
+                self._tau[i] += m[ipix]                                       
+        else:
+            th = np.pi/2. - self._lonlat[1]*np.pi/180.
+            phi = self._lonlat[0]*np.pi/180.
+            m = ltc._ltmap
+            ipix = healpy.ang2pix(64,th,phi,nest=True)
 #            tau = healpy.get_interp_val(m,th,phi,nest=True)
-                self._tau[i] = m[ipix]
+            cth_axis = Axis.create(self._cth_axis.edges[0],
+                                   self._cth_axis.edges[-1],
+                                   self._cth_axis.nbins*4)
+
+            tau = interpolate(ltc._cth_axis.center,m[ipix,:]/ltc._cth_axis.width,
+                              cth_axis.center)*cth_axis.width
+
+            tau = np.sum(tau.reshape(-1,4),axis=1)            
+            self._tau = tau
+
+            
 
 
 if __name__ == '__main__':

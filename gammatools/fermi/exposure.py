@@ -1,3 +1,5 @@
+
+import glob
 import numpy as np
 from gammatools.core.histogram import *
 from irf_util import IRFManager
@@ -12,17 +14,36 @@ def get_src_mask(src,ra,dec,radius=5.0):
 
 class LTCube(object):
 
-    def __init__(self,ltfile):
+    def __init__(self,ltfile=None):
 
         self._ltmap = None
 
-        if isinstance(ltfile,list):
+        if ltfile is None: return
+        elif isinstance(ltfile,list):
             for f in ltfile: self.load_ltfile(f)
         elif not re.search('\.txt?',ltfile) is None:
             files=np.loadtxt(ltfile,unpack=True,dtype='str')
             for f in files: self.load_ltfile(f)
         else:
             self.load_ltfile(ltfile)
+
+
+    @staticmethod
+    def create(ltfile):
+
+        ltc = LTCube()
+
+        print ltfile
+        
+        if not isinstance(ltfile,list):
+            ltfile = glob.glob(ltfile)
+
+        print 'ltfile ', ltfile
+            
+        for f in ltfile:  
+            ltc.load_ltfile(f)
+
+        return ltc
         
 
     def load_ltfile(self,ltfile):
@@ -168,36 +189,43 @@ class ExposureCalc(object):
         self._irfm = irfm
         self._ltc = ltc
 
-    def getExpByName(self,src_names,egy_edges):
+    def getExpByName(self,src_names,egy_axis):
 
-        exp = None
+        exph = None
 
-        cat = Catalog()
+        cat = Catalog.get()
         for s in src_names:
+
+            print s
+            
             src = cat.get_source_by_name(s) 
             
-            if exp is None:
-                exp = self.eval(src['RAJ2000'], src['DEJ2000'],egy_edges)
+            if exph is None:
+                exph = self.eval(src['RAJ2000'], src['DEJ2000'],egy_axis)
             else:
-                exp += self.eval(src['RAJ2000'], src['DEJ2000'],egy_edges)
+                exph += self.eval(src['RAJ2000'], src['DEJ2000'],egy_axis)
 
-        return exp
+        exph /= len(src_names)
+                
+        return exph
 
-    def eval(self,ra,dec,egy_edges):
+    def eval(self,ra,dec,egy_axis):
 
-        cth = self._ltc._cth_center
-        egy = 0.5*(egy_edges[1:] + egy_edges[:-1])
+        cth = self._ltc._cth_axis.center
+        egy = egy_axis.center
 
-        x, y = np.meshgrid(egy,cth)
+        x, y = np.meshgrid(egy,cth,indexing='ij')
 
-        aeff = self._irfm.aeff(x.T.flat,y.T.flat)
+        print x.shape
+        
+        aeff = self._irfm.aeff(x,y)
 
+        exph = Histogram(egy_axis)
+        
         aeff = aeff.reshape((len(egy),len(cth)))
         lthist = self._ltc.get_src_lthist(ra,dec)
-
-        exp = np.sum(aeff*lthist._counts,axis=1)
-
-        return exp
+        exph._counts = np.sum(aeff*lthist.counts[np.newaxis,:],axis=1)
+        return exph
         
 
 

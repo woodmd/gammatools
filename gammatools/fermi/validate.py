@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 from gammatools.core.histogram import Histogram, Histogram2D
 from matplotlib import font_manager
 
+from gammatools.fermi.exposure import *
 from gammatools.fermi.psf_model import *
 from gammatools.fermi.ft1_loader import *
 from gammatools.core.quantile import *
@@ -55,7 +56,9 @@ class PSFScalingFunction(object):
 
          return np.sqrt((self._c0*np.power(np.power(10,x-2),self._beta))**2 +
                         self._c1**2)
-        
+
+
+    
 
 psf_scaling_fn = { 'front' : PSFScalingFunction(30.0,1.0,-0.8),
                    'back' : PSFScalingFunction(35.0,1.5,-0.8),
@@ -67,10 +70,32 @@ psf_scaling_fn = { 'front' : PSFScalingFunction(30.0,1.0,-0.8),
                    'p8psf3' : PSFScalingFunction(6.185*3.0,0.078*3.0,-0.8) }
 
 
+class AeffData(Data):
+
+    def __init__(self,egy_axis,cth_axis):
+
+        self.egy_axis = egy_axis
+        self.cth_axis = cth_axis
+
+        # Excess (S - a*B)
+        self.sig_hist = Histogram(egy_axis)
+
+        # Off (Background)
+        self.off_hist = Histogram(egy_axis)
+
+        # On (S + B)
+        self.on_hist = Histogram(egy_axis)
+
+        # Unscaled Background
+        self.bkg_hist = Histogram(egy_axis)
+        
+        # Efficiency
+        self.eff_hist = Histogram(egy_axis)
+        
 class PSFData(Data):
 
     
-    def __init__(self,egy_bin_edge,cth_bin_edge,dtype):
+    def __init__(self,egy_axis,cth_bin_edge,dtype):
 
         egy_bin_edge = np.array(egy_bin_edge,ndmin=1)
         cth_bin_edge = np.array(cth_bin_edge,ndmin=1)
@@ -104,11 +129,6 @@ class PSFData(Data):
         self.sky_image_off = np.empty(shape=hist_shape, dtype=object)
         self.lat_image = np.empty(shape=hist_shape, dtype=object)
         self.lat_image_off = np.empty(shape=hist_shape, dtype=object)
-        
-#        self.q34 = Histogram2D(egy_bin_edge,cth_bin_edge)
-#        self.q68 = Histogram2D(egy_bin_edge,cth_bin_edge)
-#        self.q90 = Histogram2D(egy_bin_edge,cth_bin_edge)
-#        self.q95 = Histogram2D(egy_bin_edge,cth_bin_edge)
 
         self.qdata = []
         for i in range(len(self.quantiles)):
@@ -155,25 +175,6 @@ class PSFData(Data):
 
                     f.write(line + '\n')
 
-    def print_quantiles_tex(self,prefix):
-
-        for i, q in enumerate(self.qdata):
-
-            filename = prefix + '_' + ql + '.tex'
-            f = open(filename,'w')
-
-            for icth in range(self.cth_nbin):
-                for iegy in range(self.egy_nbin):
-
-                    line = '%5.2f %5.2f '%(self.cth_range[icth][0],
-                                           self.cth_range[icth][1])
-                    line += '%5.2f %5.2f '%(self.egy_range[iegy][0],
-                                            self.egy_range[iegy][1])
-                    line += format_error(q.mean[iegy,icth],
-                                         q.err[iegy,icth],1,True)
-                    f.write(line + '\n')
-
-
 
 #        parser.add_argument('--output_dir', default=None,
 #                            help='Set the output directory name.')
@@ -194,37 +195,212 @@ class PSFData(Data):
                     
 class IRFValidate(Configurable):
 
-    default_config = {}
-
+    default_config = {
+        'ft1loader'       : FT1Loader.default_config,
+        'output_prefix'   : (None),
+        'output_dir'      : (None),        
+        'ltfile'          : (None,'Set the livetime cube.'),
+        'evfile'          : (None),
+        'egy_bin'         : (None,'Set low/high and energy bin size.','',(list,float)),
+        'egy_bin_edge'    : (None,'Edges of energy bins.','',(list,float)),
+        'cth_bin'         : (None,'','',(list,float)),
+        'cth_bin_edge'    : (None,'Set edges of cos(theta) bins.','',(list,float)),
+        'event_class'     : (None,'Set the event class ID.'),
+        'event_type'      : (None,'Set the event type ID.'),
+        'conversion_type' : (None,'Set conversion type.'),
+        }
+    
     def __init__(self, config, opts,**kwargs):
         super(IRFValidate,self).__init__()
+        self.update_default_config(IRFManager.defaults)  
+
+    def load(self):
+        """Load data from FITS."""
+        
+        evfile = []
+
+        for f in self.config['evfile']:
+
+            if os.path.splitext(f)[1] == '.txt':
+                evfile += list(np.genfromtxt(f,unpack=True,dtype=None))
+            else:
+                evfile += [f]
+
+        
+        for f in evfile: #self.config['evfile']:
+            print 'Loading ', f
+            basename = os.path.splitext(f)[0] 
+            if self.config['output_dir']:
+                basename = os.path.join(self.config['output_dir'],
+                                        os.path.basename(basename))
+            
+            if os.path.isfile(basename + '.P.gz'):
+                d = load_object(basename + '.P.gz')
+            else:
+#                wlif os.path.splitext(f)[1] == '.fits':
+                loader = FT1Loader(self.config['ft1loader'])
+                loader.load_photons(f)
+                d = loader._photon_data
+                loader.save(basename + '.P')
+
+            print 'Masking'
+
+            d.mask(event_class_id=self.config['event_class'],
+                   event_type_id=self.config['event_type'],
+                   conversion_type=self.config['conversion_type'])
+            d['dtheta'] = np.degrees(d['dtheta'])
+            self.fill(d)
 
 
+class AeffValidate(IRFValidate):
 
+    default_config = {
+        'refclass': (None,'',''),
+        'classes' : (None,'','',list),
+        'event_class_ids' : (None,'','',(list,int))
+        }
+
+    def __init__(self, config, opts,**kwargs):
+        super(AeffValidate,self).__init__(config,opts,**kwargs)
+        self.configure(config,opts=opts,**kwargs)
+        cfg = self.config
+        
+        if cfg['egy_bin_edge'] is not None:
+            self.egy_axis = Axis(cfg['egy_bin_edge'])
+        elif cfg['egy_bin'] is not None:
+            self.egy_axis = Axis.create(*cfg['egy_bin'])
+        
+        if cfg['cth_bin_edge'] is not None:
+            self.cth_axis = Axis(cfg['cth_bin_edge'])
+        elif cfg['cth_bin'] is not None:
+            self.cth_axis = Axis.create(*cfg['cth_bin'])
+        
+        self._ltc = LTCube.create(self.config['ltfile'])
+        
+        self.build_models()
+
+        self._class_data = {}
+        for c in self.config['classes']:
+            self._class_data[c] = AeffData(self.egy_axis,self.cth_axis)
+        
+    def build_models(self):
+
+        for c in self.config['classes']:
+            
+            irfm = IRFManager.create(c, True,
+                                     irf_dir=self.config['irf_dir'])
+
+            exp = ExposureCalc(irfm,self._ltc)
+            exph = exp.getExpByName(self.config['ft1loader']['src_list'],
+                                    self.egy_axis)
+
+            m = PSFModelLT(irfm,
+                           src_type='vela',#self.config['src'],
+                           ltcube=self._ltc)
+#                           spectrum=sp,spectrum_pars=sp_pars)
+            
+
+#            plt.figure()
+#            exph.plot()
+#            plt.show()
+
+    def fill(self,data):
+
+        self.fill_agn(data)
+
+    def fill_agn(self,data):
+
+        cd = self._class_data
+        
+        # Loop over classes
+        for c,cid in zip(self.config['classes'],self.config['event_class_ids']):
+
+            domega_on = 1.0**2*np.pi
+            domega_off = (3.5**2-2.5**2)*np.pi
+            
+            msk_on = PhotonData.get_mask(data,{'cth': [0.2,1.0],
+                                             'dtheta' : [0.0,1.0]},event_class_id=cid)
+
+            msk_off = PhotonData.get_mask(data,{'cth': [0.2,1.0],
+                                                'dtheta' : [2.5,3.5]},event_class_id=cid)
+
+            
+            cd[c].on_hist.fill(data['energy'][msk_on])
+            cd[c].off_hist.fill(data['energy'][msk_off])
+        
+    def compute_eff(self):
+
+        cd = self._class_data
+
+        domega_on = 1.0**2*np.pi
+        domega_off = (3.5**2-2.5**2)*np.pi
+        alpha = domega_on/domega_off
+        
+        # Loop over classes
+        for c,cid in zip(self.config['classes'],self.config['event_class_ids']):
+            cd[c].sig_hist += cd[c].on_hist - cd[c].off_hist*alpha
+            cd[c].bkg_hist += cd[c].off_hist*alpha
+
+        ns0 = cd[self.config['refclass']].on_hist.counts
+        nb0 = cd[self.config['refclass']].off_hist.counts
+            
+        for c,cid in zip(self.config['classes'],self.config['event_class_ids']):
+            
+            ns1 = cd[c].on_hist.counts
+            nb1 = cd[c].off_hist.counts
+
+            eff = (ns1-alpha*nb1)/(ns0-alpha*nb0)
+            eff_var = (((ns0-ns1+alpha**2*(nb0-nb1))*eff**2 + (ns1+alpha**2*nb1)*(1-eff)**2)/
+                       (ns0-alpha*nb0)**2)
+
+            cd[c].eff_hist._counts = eff
+            cd[c].eff_hist._var = eff_var
+            
+            
+    def run(self):
+
+        self.load()
+
+        self.compute_eff()
+        
+        outfile = self.config['output_prefix'] + 'aeffdata.P'
+
+        if self.config['output_dir']:
+            outfile = os.path.join(self.config['output_dir'],
+                                   os.path.basename(outfile))
+
+        save_object(self._class_data,outfile,compress=True)
+            
+#        self.aeff_data.save(outfile,compress=True)
+
+#        for ml in self.models:
+#            fname = self.config['output_prefix'] + 'psfdata_' + ml
+#            self.irf_data[ml].save(fname + '.P')
+            
+
+#        self.irf_data = {}
+#        for ml in self.models:
+#            self.irf_data[ml] = AeffData(self.egy_bin_edge,
+#                                         self.cth_bin_edge,
+#                                         'model')
+        
 class PSFValidate(IRFValidate):
 
     default_config = {
-        'ft1loader'       : FT1Loader.default_config,
-        'egy_bin'         : (None,'Set low/high and energy bin size.'),
-        'egy_bin_edge'    : (None,'Edges of energy bins.','',(list,float)),
-        'cth_bin'         : (None),
-        'cth_bin_edge'    : (None,'Set edges of cos(theta) bins.','',(list,float)),
-        'event_class_id'  : (None,'Set the event class ID.'),
-        'event_type_id'   : (None,'Set the event type ID.'),
+
         'data_type'       : 'agn',
         'spectrum'        : (None),
         'spectrum_pars'   : (None),
-        'output_prefix'   : (None),
-        'output_dir'      : (None),
-        'conversion_type' : (None,'Set conversion type.'),
+
+
         'phase_selection' : (None),
         'on_phase'        : (None),
         'off_phase'       : (None),
-        'ltfile'          : (None,'Set the livetime cube which will be used to generate the exposure-weighted PSF model.'),
-        'evfile'          : (None),
+
         'theta_max'       : (30.0),
-        'psf_scaling_fn'  : (None,'Set the scaling function to use for determining the edge of the ROI at each energy.'),
-        'irf'             : (None,'Set the names of one or more IRF models.'),
+        'psf_scaling_fn'  :
+            (None,'Set the scaling function to use for determining the edge of the ROI at each energy.'),
+        'irf'             : (None,'Set the names of one or more IRF models.','',list),
         'irf_labels'      : (None,'IRF Labels.'),
         'make_sky_image'  : (False,'Plot distribution of photons on the sky.'),
         'show'            : (False,'Draw plots to screen.'),
@@ -232,34 +408,28 @@ class PSFValidate(IRFValidate):
         'src'             : 'iso' }
     
     def __init__(self, config, opts,**kwargs):
-        """
-        @type self: object
-        """
         super(PSFValidate,self).__init__(config,opts,**kwargs)
-
-        self.update_default_config(IRFManager.defaults)        
         self.configure(config,opts=opts,**kwargs)
         cfg = self.config
 
         self.irf_colors = ['green', 'red', 'magenta', 'gray', 'orange']
         self.on_phases = []
         self.off_phases = []
-        self.data = PhotonData()
-
         self._ft = FigTool(opts=opts)
 
         self.font = font_manager.FontProperties(size=10)
 
         if cfg['egy_bin_edge'] is not None:
-            self.egy_bin_edge = cfg['egy_bin_edge']
+            self.egy_axis = Axis(cfg['egy_bin_edge'])
         elif cfg['egy_bin'] is not None:
-            [elo, ehi, ebin] = string_to_array(cfg['egy_bin'],'/')
-            self.egy_bin_edge = \
-                np.linspace(elo, ehi, 1 + int((ehi - elo) / ebin))
-            
-        self.cth_bin_edge = cfg['cth_bin_edge']
-        self.output_prefix = cfg['output_prefix']
-        if self.output_prefix is None:
+            self.egy_axis = Axis.create(cfg['egy_bin'])
+        
+        if cfg['cth_bin_edge'] is not None:
+            self.cth_axis = Axis(cfg['cth_bin_edge'])
+        elif cfg['cth_bin'] is not None:
+            self.cth_axis = Axis.create(cfg['cth_bin'])
+        
+        if cfg['output_prefix'] is None:
 #            prefix = os.path.splitext(opts.files[0])[0]
             m = re.search('(.+).P.gz',self.config['evfile'][0])
             if m is None: prefix = os.path.splitext(self.config['evfile'][0])[0] 
@@ -274,29 +444,18 @@ class PSFValidate(IRFValidate):
             if not self.config['event_type_id'] is None:
                 cth_label += '_t%02i'%(self.config['event_type_id'])
                 
-            self.output_prefix = '%s_' % (prefix)
+            cfg['output_prefix'] = '%s_' % (prefix)
 
             if not cfg['conversion_type'] is None:
                 self.output_prefix += '%s_' % (cfg['conversion_type'])
             
-            self.output_prefix += '%s_' % (cth_label)
+            cfg['output_prefix'] += '%s_' % (cth_label)
 
         if cfg['output_dir'] is None:
             self.output_dir = os.getcwd()
         else:
             self.output_dir = cfg['output_dir']
 
-        self.show = opts.show
-
-        self.models = []
-        if self.config['irf'] is not None:
-            self.models = self.config['irf'].split(',')
-
-            for i in range(len(self.models)):
-                if cfg['conversion_type'] == 'front':
-                    self.models[i] += '::FRONT'
-                elif cfg['conversion_type'] == 'back':
-                    self.models[i] += '::BACK'
 
         if opts.irf_labels is not None:
             self.model_labels = opts.irf_labels.split(',')
@@ -321,8 +480,7 @@ class PSFValidate(IRFValidate):
             self.off_phases = self.phases[1]
             self.alpha = self.phases[2]
 
-        self.psf_data = PSFData(self.egy_bin_edge,
-                                self.cth_bin_edge,
+        self.psf_data = PSFData(self.egy_axis,self.cth_axis,
                                 'data')
 
         if cfg['psf_scaling_fn']:
@@ -363,18 +521,6 @@ class PSFValidate(IRFValidate):
                                         self.cth_bin_edge,
                                         'model')
 
-    def load(self):
-
-        for f in opts.files:
-            print 'Loading ', f
-            d = load_object(f)
-            d.mask(event_class_id=self.config['event_class_id'],
-                   event_type_id=self.config['event_type_id'],
-                   conversion_type=self.config['conversion_type'])
-
-            self.data.merge(d)
-
-        self.data['dtheta'] = np.degrees(self.data['dtheta'])
 
     def fill(self,data):
 
@@ -387,38 +533,7 @@ class PSFValidate(IRFValidate):
             
     def run(self):
 
-        evfile = []
-
-        for f in self.config['evfile']:
-
-            if os.path.splitext(f)[1] == '.txt':
-                evfile += list(np.genfromtxt(f,unpack=True,dtype=None))
-            else:
-                evfile += [f]
-
-        
-        for f in evfile: #self.config['evfile']:
-            print 'Loading ', f
-
-
-            basename = os.path.splitext(f)[0] 
-
-            if os.path.isfile(basename + '.P.gz'):
-                d = load_object(basename + '.P.gz')
-            else:
-#                wlif os.path.splitext(f)[1] == '.fits':
-                loader = FT1Loader(self.config['ft1loader'])
-                loader.load_photons(f)
-                d = loader._photon_data
-                loader.save(basename + '.P')
-
-            print 'Masking'
-
-            d.mask(event_class_id=self.config['event_class_id'],
-                   event_type_id=self.config['event_type_id'],
-                   conversion_type=self.config['conversion_type'])
-            d['dtheta'] = np.degrees(d['dtheta'])
-            self.fill(d)
+        self.load()
             
         for iegy in range(self.psf_data.egy_axis.nbins):
             for icth in range(self.psf_data.cth_axis.nbins):
@@ -431,10 +546,13 @@ class PSFValidate(IRFValidate):
                 else:
                     self.fit_agn(iegy, icth)
 
-        fname = os.path.join(self.output_dir,
-                             self.output_prefix + 'psfdata')
+        outfile = self.output_prefix + 'psfdata.P'
 
-        self.psf_data.save(fname + '.P',compress=True)
+        if self.config['output_dir']:
+            outfile = os.path.join(self.config['output_dir'],
+                                   os.path.basename(outfile))
+        
+        self.psf_data.save(outfile,compress=True)
 
         for ml in self.models:
             fname = self.output_prefix + 'psfdata_' + ml
@@ -645,8 +763,6 @@ class PSFValidate(IRFValidate):
         bkg_domega = (bkg_edge[1] ** 2 - bkg_edge[0] ** 2) * np.pi
         bkg_counts = self.get_counts(data, bkg_edge, mask)
         bkg_density = bkg_counts / bkg_domega
-
-#        print 'BKG ', bkg_counts, bkg_edge
 
         qdata.bkg.fill(self.psf_data.egy_axis.center[iegy],
                        self.psf_data.cth_axis.center[icth],

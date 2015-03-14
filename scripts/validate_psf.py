@@ -27,6 +27,7 @@ pulsar data samples."""
 
     parser.add_argument('evfile', nargs='*')
     parser.add_argument('--config', default=None )
+    parser.add_argument('--mode', default='psf' )
     
     PSFValidate.add_arguments(parser)
     
@@ -35,10 +36,13 @@ pulsar data samples."""
     config = {}
     if not args.config is None and os.path.isfile(args.config):
         config = yaml.load(open(args.config,'r'))
-    
-    psfv = PSFValidate(config,args)
 
+    if args.mode == 'psf':        
+        irfv = PSFValidate(config,args)
+    else:
+        irfv = AeffValidate(config,args)
+        
     if not args.config is None and not os.path.isfile(args.config):
-        yaml.dump(psfv.config(),open(args.config,'w'))
+        yaml.dump(irfv.config(),open(args.config,'w'))
             
-    psfv.run()
+    irfv.run()
