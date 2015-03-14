@@ -9,6 +9,7 @@ import copy
 import re
 import pickle
 import argparse
+import yaml
 
 import math
 import numpy as np
@@ -36,29 +37,28 @@ from gammatools.core.mpl_util import SqrtScale, PowerNormalize
 from matplotlib import scale as mscale
 mscale.register_scale(SqrtScale)
 
-
-    
-
-
 vela_phase_selection = {'on_phase' : '0.0/0.15,0.6/0.7',
                         'off_phase' : '0.2/0.5' }
 
-
-
 class PSFScalingFunction(object):
 
-    def __init__(self,c0,c1,beta):
+    def __init__(self,c0,c1,beta,thmax=None):
         self._c0 = c0
         self._c1 = c1
         self._beta = beta
+        self._thmax = thmax
         
     def __call__(self,x):
 
-         return np.sqrt((self._c0*np.power(np.power(10,x-2),self._beta))**2 +
-                        self._c1**2)
+         v = np.sqrt((self._c0*np.power(np.power(10,x-2),self._beta))**2 +
+                     self._c1**2)
+
+         if self._thmax is not None:
+             v[v>self._thmax] = self._thmax
+
+         return v
 
 
-    
 
 psf_scaling_fn = { 'front' : PSFScalingFunction(30.0,1.0,-0.8),
                    'back' : PSFScalingFunction(35.0,1.5,-0.8),
@@ -70,12 +70,30 @@ psf_scaling_fn = { 'front' : PSFScalingFunction(30.0,1.0,-0.8),
                    'p8psf3' : PSFScalingFunction(6.185*3.0,0.078*3.0,-0.8) }
 
 
+pass8_type_map = {
+    0 : 'FRONT',
+    1 : 'BACK',
+    2 : 'PSF0',
+    3 : 'PSF1',
+    4 : 'PSF2',
+    5 : 'PSF3',
+    6 : 'EDISP0',
+    7 : 'EDISP1',
+    8 : 'EDISP2',
+    9 : 'EDISP3',
+    }
+
 class AeffData(Data):
 
-    def __init__(self,egy_axis,cth_axis):
+    def __init__(self,egy_axis,cth_axis,
+                 class_name,class_id,**kwargs):
 
         self.egy_axis = egy_axis
         self.cth_axis = cth_axis
+        self.class_name = class_name
+        self.type_name = kwargs.get('type_name',None)
+        self.class_id = class_id
+        self.type_id = kwargs.get('type_id',[])
 
         # Excess (S - a*B)
         self.sig_hist = Histogram(egy_axis)
@@ -89,34 +107,34 @@ class AeffData(Data):
         # Unscaled Background
         self.bkg_hist = Histogram(egy_axis)
         
-        # Efficiency
+        # Data Efficiency
         self.eff_hist = Histogram(egy_axis)
-        
+
+        # IRF Efficiency
+        self.irf_eff_hist = Histogram(egy_axis)
+
+        # Weighted Exposure
+        self.exp_hist = Histogram(egy_axis)
+
 class PSFData(Data):
 
     
     def __init__(self,egy_axis,cth_bin_edge,dtype):
 
-        egy_bin_edge = np.array(egy_bin_edge,ndmin=1)
-        cth_bin_edge = np.array(cth_bin_edge,ndmin=1)
-
         self.dtype = dtype
         self.quantiles = [0.34,0.68,0.90,0.95]
         self.quantile_labels = ['r%2.f'%(q*100) for q in self.quantiles]
+        self.egy_axis = Axis(egy_axis.edges)
+        self.cth_axis = Axis(cth_axis.edges)
 
-        self.egy_axis = Axis(egy_bin_edge)
-        self.cth_axis = Axis(cth_bin_edge)
-        self.egy_nbin = self.egy_axis.nbins
-        self.cth_nbin = self.cth_axis.nbins
+        self.chi2 = Histogram2D(egy_axis.edges,cth_axis.edges)
+        self.rchi2 = Histogram2D(egy_axis.edges,cth_axis.edges)
+        self.ndf = Histogram2D(egy_axis.edges,cth_axis.edges)
+        self.excess = Histogram2D(egy_axis.edges,cth_axis.edges)
+        self.bkg = Histogram2D(egy_axis.edges,cth_axis.edges)
+        self.bkg_density = Histogram2D(egy_axis.edges,cth_axis.edges)
 
-        self.chi2 = Histogram2D(egy_bin_edge,cth_bin_edge)
-        self.rchi2 = Histogram2D(egy_bin_edge,cth_bin_edge)
-        self.ndf = Histogram2D(egy_bin_edge,cth_bin_edge)
-        self.excess = Histogram2D(egy_bin_edge,cth_bin_edge)
-        self.bkg = Histogram2D(egy_bin_edge,cth_bin_edge)
-        self.bkg_density = Histogram2D(egy_bin_edge,cth_bin_edge)
-
-        hist_shape = (self.egy_nbin,self.cth_nbin)
+        hist_shape = (self.egy_axis.nbins,self.cth_axis.nbins)
 
         self.sig_density_hist = np.empty(shape=hist_shape, dtype=object)
         self.tot_density_hist = np.empty(shape=hist_shape, dtype=object)
@@ -132,7 +150,7 @@ class PSFData(Data):
 
         self.qdata = []
         for i in range(len(self.quantiles)):
-            self.qdata.append(Histogram2D(egy_bin_edge,cth_bin_edge))
+            self.qdata.append(Histogram2D(egy_axis.edges,cth_axis.edges))
 
     def init_hist(self,fn,theta_max):
 
@@ -176,9 +194,6 @@ class PSFData(Data):
                     f.write(line + '\n')
 
 
-#        parser.add_argument('--output_dir', default=None,
-#                            help='Set the output directory name.')
-
 #        parser.add_argument('--output_prefix', default=None,
 #                            help='Set the string prefix that will be appended '
 #                                 'to all output files.')
@@ -196,9 +211,10 @@ class PSFData(Data):
 class IRFValidate(Configurable):
 
     default_config = {
+        'irfmanager'      : IRFManager.defaults,
         'ft1loader'       : FT1Loader.default_config,
         'output_prefix'   : (None),
-        'output_dir'      : (None),        
+        'output_dir'      : (None,'Set the output directory name.'),        
         'ltfile'          : (None,'Set the livetime cube.'),
         'evfile'          : (None),
         'egy_bin'         : (None,'Set low/high and energy bin size.','',(list,float)),
@@ -208,11 +224,37 @@ class IRFValidate(Configurable):
         'event_class'     : (None,'Set the event class ID.'),
         'event_type'      : (None,'Set the event type ID.'),
         'conversion_type' : (None,'Set conversion type.'),
+        'phase_selection' : (None),
+        'on_phase'        : (None),
+        'off_phase'       : (None),
         }
     
     def __init__(self, config, opts,**kwargs):
-        super(IRFValidate,self).__init__()
-        self.update_default_config(IRFManager.defaults)  
+        super(IRFValidate,self).__init__(config,opts,**kwargs)
+#        self.update_default_config(IRFManager.defaults)  
+
+        self._ft = FigTool(opts=opts)
+        cfg = self._config
+
+        import pprint
+
+        pprint.pprint(cfg)
+
+        self.data_type = 'agn'
+        if cfg['phase_selection'] == 'vela':
+            cfg['on_phase'] = vela_phase_selection['on_phase']
+            cfg['off_phase'] = vela_phase_selection['off_phase']
+
+        self.conversion_type = cfg['conversion_type']
+
+        if not cfg['on_phase'] is None: self.data_type = 'pulsar'
+
+        if self.data_type == 'pulsar':
+            self.phases = parse_phases(cfg['on_phase'],cfg['off_phase'])
+            self.on_phases = self.phases[0]
+            self.off_phases = self.phases[1]
+            self.alpha = self.phases[2]
+
 
     def load(self):
         """Load data from FITS."""
@@ -256,13 +298,13 @@ class AeffValidate(IRFValidate):
 
     default_config = {
         'refclass': (None,'',''),
-        'classes' : (None,'','',list),
-        'event_class_ids' : (None,'','',(list,int))
+        'event_class_selections' : (None,'',''),
+        'event_type_selections' : (None,'',''),
+        'event_class_irfs' : (None,'','')
         }
 
     def __init__(self, config, opts,**kwargs):
         super(AeffValidate,self).__init__(config,opts,**kwargs)
-        self.configure(config,opts=opts,**kwargs)
         cfg = self.config
         
         if cfg['egy_bin_edge'] is not None:
@@ -276,57 +318,125 @@ class AeffValidate(IRFValidate):
             self.cth_axis = Axis.create(*cfg['cth_bin'])
         
         self._ltc = LTCube.create(self.config['ltfile'])
-        
-        self.build_models()
 
         self._class_data = {}
-        for c in self.config['classes']:
-            self._class_data[c] = AeffData(self.egy_axis,self.cth_axis)
-        
+        self._class_irfs = {}
+        for c, cid in self.config['event_class_selections'].items():
+            self._class_data[c] = AeffData(self.egy_axis,self.cth_axis,
+                                           class_name=c,class_id=cid)
+
+            for t,tid in self.config['event_type_selections'].items():
+                self._class_data[c + '_' + t] = AeffData(self.egy_axis,self.cth_axis,
+                                                         class_name=c,class_id=cid,
+                                                         type_name=t,type_id=tid)
+
+        self.build_models()
+
     def build_models(self):
 
-        for c in self.config['classes']:
+        cd = self._class_data
+
+#        for c in self.config['event_class_irfs']:
+        for k,v in self._class_data.items():
             
-            irfm = IRFManager.create(c, True,
-                                     irf_dir=self.config['irf_dir'])
+            class_name = '%s_%s_%s'%(self.config['event_class_irfs']['release'],
+                                     v.class_name,
+                                     self.config['event_class_irfs']['version'])
+
+            
+            type_names = []
+            for t in v.type_id:
+                type_names.append(pass8_type_map[t])
+            
+
+            print 'Creating IRF ', class_name, type_names
+
+            irfm = IRFManager.create(class_name, type_names,True,
+                                     irf_dir=self.config['irfmanager']['irf_dir'])
 
             exp = ExposureCalc(irfm,self._ltc)
             exph = exp.getExpByName(self.config['ft1loader']['src_list'],
                                     self.egy_axis)
 
             m = PSFModelLT(irfm,
-                           src_type='vela',#self.config['src'],
+                           src_type='iso',#self.config['src'],
                            ltcube=self._ltc)
 #                           spectrum=sp,spectrum_pars=sp_pars)
-            
 
-#            plt.figure()
-#            exph.plot()
-#            plt.show()
+            cd[k].exp_hist += exph
+
+        # Renormalize
+        exp_hist0 = self._class_data[self.config['refclass']].exp_hist
+        for k,v in self._class_data.items():
+            self._class_data[k].irf_eff_hist = v.exp_hist/exp_hist0
 
     def fill(self,data):
 
-        self.fill_agn(data)
+        if self.data_type =='agn':
+            self.fill_agn(data)
+        else:
+            self.fill_pulsar(data)
+
+    def fill_pulsar(self,data):
+
+        cd = self._class_data
+        
+        # Loop over classes
+        for k,v in self._class_data.items():
+            
+            evclass = list_to_bitfield(v.class_id)
+            evtype = list_to_bitfield(v.type_id)
+
+            fn = psf_scaling_fn['back'] 
+
+            msk_on = PhotonData.get_mask(data,
+                                         {'cth': self.cth_axis.lims()},
+                                         evclass=evclass,evtype=evtype,
+                                         phases=self.on_phases,
+                                         theta_fn=[fn])
+
+            msk_off = PhotonData.get_mask(data,
+                                          {'cth': self.cth_axis.lims()},
+                                          evclass=evclass,evtype=evtype,
+                                          phases=self.off_phases,
+                                          theta_fn=[fn])
+            
+            cd[k].on_hist.fill(data['energy'][msk_on])
+            cd[k].off_hist.fill(data['energy'][msk_off])
+
+            plt.figure()
+
+            plt.scatter(data['energy'][msk_on],data['dtheta'][msk_on])
+
+            plt.show()
+
 
     def fill_agn(self,data):
 
         cd = self._class_data
         
         # Loop over classes
-        for c,cid in zip(self.config['classes'],self.config['event_class_ids']):
+        for k,v in self._class_data.items():
 
             domega_on = 1.0**2*np.pi
             domega_off = (3.5**2-2.5**2)*np.pi
             
-            msk_on = PhotonData.get_mask(data,{'cth': [0.2,1.0],
-                                             'dtheta' : [0.0,1.0]},event_class_id=cid)
+            evclass = list_to_bitfield(v.class_id)
+            evtype = list_to_bitfield(v.type_id)
 
-            msk_off = PhotonData.get_mask(data,{'cth': [0.2,1.0],
-                                                'dtheta' : [2.5,3.5]},event_class_id=cid)
+            msk_on = PhotonData.get_mask(data,
+                                         {'cth': self.cth_axis.lims(),
+                                          'dtheta' : [0.0,1.0]},
+                                         evclass=evclass,evtype=evtype)
+
+            msk_off = PhotonData.get_mask(data,
+                                          {'cth': self.cth_axis.lims(),
+                                           'dtheta' : [2.5,3.5]},
+                                          evclass=evclass,evtype=evtype)
 
             
-            cd[c].on_hist.fill(data['energy'][msk_on])
-            cd[c].off_hist.fill(data['energy'][msk_off])
+            cd[k].on_hist.fill(data['energy'][msk_on])
+            cd[k].off_hist.fill(data['energy'][msk_off])
         
     def compute_eff(self):
 
@@ -337,32 +447,46 @@ class AeffValidate(IRFValidate):
         alpha = domega_on/domega_off
         
         # Loop over classes
-        for c,cid in zip(self.config['classes'],self.config['event_class_ids']):
-            cd[c].sig_hist += cd[c].on_hist - cd[c].off_hist*alpha
-            cd[c].bkg_hist += cd[c].off_hist*alpha
+        for k,v in self._class_data.items():
+            cd[k].sig_hist += cd[k].on_hist - cd[k].off_hist*alpha
+            cd[k].bkg_hist += cd[k].off_hist*alpha
 
         ns0 = cd[self.config['refclass']].on_hist.counts
         nb0 = cd[self.config['refclass']].off_hist.counts
             
-        for c,cid in zip(self.config['classes'],self.config['event_class_ids']):
+        for k,v in self._class_data.items():
             
-            ns1 = cd[c].on_hist.counts
-            nb1 = cd[c].off_hist.counts
+            ns1 = cd[k].on_hist.counts
+            nb1 = cd[k].off_hist.counts
 
             eff = (ns1-alpha*nb1)/(ns0-alpha*nb0)
             eff_var = (((ns0-ns1+alpha**2*(nb0-nb1))*eff**2 + (ns1+alpha**2*nb1)*(1-eff)**2)/
                        (ns0-alpha*nb0)**2)
 
-            cd[c].eff_hist._counts = eff
-            cd[c].eff_hist._var = eff_var
+            cd[k].eff_hist._counts = eff
+            cd[k].eff_hist._var = eff_var
             
-            
+    def plot(self):
+
+        for k,v in self._class_data.items():
+            fig = self._ft.create(k,figstyle='residual2',
+                                  norm_interpolation='lin',
+                                  legend_loc='upper right',
+                                  ylim_ratio=[-0.5,0.5])
+
+            fig[0].add_hist(v.irf_eff_hist,label='data',hist_style='line')
+            fig[0].add_hist(v.eff_hist,label='data')
+            fig.plot()
+
     def run(self):
 
         self.load()
+        self.compute_eff()        
+        self.plot()
+        self.save()
+            
+    def save(self):
 
-        self.compute_eff()
-        
         outfile = self.config['output_prefix'] + 'aeffdata.P'
 
         if self.config['output_dir']:
@@ -370,14 +494,23 @@ class AeffValidate(IRFValidate):
                                    os.path.basename(outfile))
 
         save_object(self._class_data,outfile,compress=True)
-            
-#        self.aeff_data.save(outfile,compress=True)
 
+        o = {}
+        for k,v in self._class_data.items():
+            o[k] = self._class_data[k].to_dict()
+
+        outfile = self.config['output_prefix'] + 'aeffdata.yaml'
+
+        if self.config['output_dir']:
+            outfile = os.path.join(self.config['output_dir'],
+                                   os.path.basename(outfile))
+
+        yaml.dump(o,open(outfile,'w'),Dumper=yaml.CDumper)
+        
 #        for ml in self.models:
 #            fname = self.config['output_prefix'] + 'psfdata_' + ml
 #            self.irf_data[ml].save(fname + '.P')
             
-
 #        self.irf_data = {}
 #        for ml in self.models:
 #            self.irf_data[ml] = AeffData(self.egy_bin_edge,
@@ -387,16 +520,9 @@ class AeffValidate(IRFValidate):
 class PSFValidate(IRFValidate):
 
     default_config = {
-
         'data_type'       : 'agn',
         'spectrum'        : (None),
-        'spectrum_pars'   : (None),
-
-
-        'phase_selection' : (None),
-        'on_phase'        : (None),
-        'off_phase'       : (None),
-
+        'spectrum_pars'   : (None), 
         'theta_max'       : (30.0),
         'psf_scaling_fn'  :
             (None,'Set the scaling function to use for determining the edge of the ROI at each energy.'),
@@ -409,14 +535,9 @@ class PSFValidate(IRFValidate):
     
     def __init__(self, config, opts,**kwargs):
         super(PSFValidate,self).__init__(config,opts,**kwargs)
-        self.configure(config,opts=opts,**kwargs)
         cfg = self.config
 
         self.irf_colors = ['green', 'red', 'magenta', 'gray', 'orange']
-        self.on_phases = []
-        self.off_phases = []
-        self._ft = FigTool(opts=opts)
-
         self.font = font_manager.FontProperties(size=10)
 
         if cfg['egy_bin_edge'] is not None:
@@ -462,23 +583,10 @@ class PSFValidate(IRFValidate):
         else:
             self.model_labels = self.models
 
-        self.data_type = 'agn'
-        if cfg['phase_selection'] == 'vela':
-            cfg['on_phase'] = vela_phase_selection['on_phase']
-            cfg['off_phase'] = vela_phase_selection['off_phase']
-
         self.conversion_type = cfg['conversion_type']
-
-        if not cfg['on_phase'] is None: self.data_type = 'pulsar'
         
 #        self.quantiles = [float(t) for t in opts.quantiles.split(',')]
 #        self.quantile_labels = ['r%2.f' % (q * 100) for q in self.quantiles]
-
-        if self.data_type == 'pulsar':
-            self.phases = parse_phases(cfg['on_phase'],cfg['off_phase'])
-            self.on_phases = self.phases[0]
-            self.off_phases = self.phases[1]
-            self.alpha = self.phases[2]
 
         self.psf_data = PSFData(self.egy_axis,self.cth_axis,
                                 'data')

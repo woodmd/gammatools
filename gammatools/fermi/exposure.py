@@ -6,6 +6,7 @@ from irf_util import IRFManager
 from catalog import Catalog
 from gammatools.core.util import eq2gal, gal2eq
 import healpy
+from gammatools.core.astropy_helper import pyfits
 
 def get_src_mask(src,ra,dec,radius=5.0):
     dist = np.sqrt( ((src[0]-ra)*np.cos(src[1]))**2 + (src[1]-dec)**2)
@@ -32,14 +33,8 @@ class LTCube(object):
     def create(ltfile):
 
         ltc = LTCube()
-
-        print ltfile
-        
         if not isinstance(ltfile,list):
             ltfile = glob.glob(ltfile)
-
-        print 'ltfile ', ltfile
-            
         for f in ltfile:  
             ltc.load_ltfile(f)
 
@@ -49,9 +44,6 @@ class LTCube(object):
     def load_ltfile(self,ltfile):
 
         print 'Loading ', ltfile
-        
-        import healpy
-        import pyfits
         
         hdulist = pyfits.open(ltfile)
                 
@@ -64,24 +56,36 @@ class LTCube(object):
             self._tstart = min(self._tstart,hdulist[0].header['TSTART'])
             self._tstop = max(self._tstop,hdulist[0].header['TSTOP'])
 
-        self._cth_edges = np.array(hdulist[3].data.field(0))
-        self._cth_edges = np.concatenate(([1],self._cth_edges))
-        self._cth_edges = self._cth_edges[::-1]
-        self._cth_axis = Axis(self._cth_edges)
+        cth_edges = np.array(hdulist[3].data.field(0))
+        cth_edges = np.concatenate(([1],cth_edges))
+        cth_edges = cth_edges[::-1]
+        self._cth_axis = Axis(cth_edges)
 
-        self._domega = (self._cth_edges[1:]-self._cth_edges[:-1])*2*np.pi
+        self._domega = (self._cth_axis.edges[1:]-self._cth_axis.edges[:-1])*2*np.pi
             
-    def get_src_lthist(self,ra,dec):
+    def get_src_lthist(self,ra,dec,cth_axis=None):
         
-        lthist = Histogram(self._cth_axis)
+        if cth_axis is None:
+            cth_axis = copy.deepcopy(self._cth_axis)
+            new_axis = False
+        else:
+            tmp_cth_axis = Axis.create(cth_axis.edges[0],
+                                       cth_axis.edges[-1],
+                                       cth_axis.nbins*4)
+            new_axis = True
+
         ipix = healpy.ang2pix(64,np.pi/2. - np.radians(dec),
                               np.radians(ra),nest=True)
 
-        lt = self._ltmap[ipix,::-1]
+        if new_axis:
+            lt = interpolate(self._cth_axis.center,
+                             self._ltmap[ipix,::-1]/self._cth_axis.width,
+                             tmp_cth_axis.center)*tmp_cth_axis.width
+            lt = np.sum(lt.reshape(-1,4),axis=1)  
+        else:
+            lt = self._ltmap[ipix,::-1]
 
-        lthist._counts = lt
-
-        return lthist
+        return Histogram(cth_axis,counts=lt,var=0)
 
     def get_allsky_lthist(self,slat_axis,lon_axis,coordsys='gal'):
 
@@ -189,45 +193,39 @@ class ExposureCalc(object):
         self._irfm = irfm
         self._ltc = ltc
 
-    def getExpByName(self,src_names,egy_axis):
+    def getExpByName(self,src_names,egy_axis,cth_axis=None):
+
+        print 'cth_axis ', cth_axis
 
         exph = None
 
         cat = Catalog.get()
         for s in src_names:
-
-            print s
-            
             src = cat.get_source_by_name(s) 
-            
-            if exph is None:
-                exph = self.eval(src['RAJ2000'], src['DEJ2000'],egy_axis)
-            else:
-                exph += self.eval(src['RAJ2000'], src['DEJ2000'],egy_axis)
+            h = self.eval(src['RAJ2000'], src['DEJ2000'],egy_axis,
+                          cth_axis)
+       
+            if exph is None: exph = h
+            else: exph += h
 
-        exph /= len(src_names)
-                
+        exph /= float(len(src_names))        
         return exph
 
-    def eval(self,ra,dec,egy_axis):
+    def eval(self,ra,dec,egy_axis,cth_axis=None):
 
-        cth = self._ltc._cth_axis.center
+        if cth_axis is None:
+            cth_axis = self._ltc._cth_axis
+
+        cth = cth_axis.center
         egy = egy_axis.center
 
         x, y = np.meshgrid(egy,cth,indexing='ij')
-
-        print x.shape
-        
         aeff = self._irfm.aeff(x,y)
 
         exph = Histogram(egy_axis)
-        
-        aeff = aeff.reshape((len(egy),len(cth)))
-        lthist = self._ltc.get_src_lthist(ra,dec)
+        lthist = self._ltc.get_src_lthist(ra,dec,cth_axis)
         exph._counts = np.sum(aeff*lthist.counts[np.newaxis,:],axis=1)
         return exph
-        
-
 
     @staticmethod
     def create(irf,ltfile,irf_dir=None):

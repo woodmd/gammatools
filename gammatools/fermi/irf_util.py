@@ -44,48 +44,51 @@ class IRFManager(object):
                             help = 'Set the IRF directory.')
         
     @staticmethod
-    def create(irf_name,load_from_file=False,irf_dir=None):
+    def create(class_name,type_names=None,load_from_file=False,irf_dir=None):
         
-        if load_from_file:  return IRFManager.createFromFile(irf_name,irf_dir)
-        else: return IRFManager.createFromPyIRF(irf_name)
+        m = re.search('(.+)::(.+)',class_name)
+        if m is not None:
+            class_name = m.groups(0)
+            type_names = [m.groups(1)]
+
+        if type_names is None:
+            type_names = ['FRONT','BACK']
+        elif isinstance(type_names,list) and len(type_names) == 0:
+            type_names = ['FRONT','BACK']
+        elif not isinstance(type_names,list):
+            type_names = [type_names]
+
+        if load_from_file:  
+            return IRFManager.createFromFile(class_name,type_names,irf_dir)
+        else: 
+            return IRFManager.createFromPyIRF(class_name,type_names)
 
     @staticmethod
-    def createFromFile(irf_name,irf_dir=None,expand_irf_name=True):
+    def createFromFile(class_name,type_names=None,irf_dir=None):
 
-        print 'Create From File ', irf_name
-        
-        if expand_irf_name: irf_names = expand_irf(irf_name)
-        else: irf_names = [irf_name]
-
-        print irf_names
-        
+        irf_names = []
+        for t in type_names:
+            irf_names.append(class_name + '::' + t)
+               
         irfset = IRFManager()
         
         for name in irf_names:     
             irf = IRF.createFromFile(name,irf_dir)
             irfset.add_irf(irf)
-#        irf.loadPyIRF(irf_name)
         return irfset
 
     @staticmethod
-    def createFromPyIRF(irf_name,expand_irf_name=True):
-
-        if expand_irf_name: irf_names = expand_irf(irf_name)
-        else: irf_names = [irf_name]
+    def createFromPyIRF(irf_name,type_names=None):
         
+        irf_names = []
+        for t in type_names:
+            irf_names.append(class_name + '::' + t)
+
         irfset = IRFManager()
-
         for name in irf_names:
-
-            print 'Creating ', name
-            
             irf = IRF.createFromPyIRF(name)
             irfset.add_irf(irf)
         return irfset
-        
-        #        irf = IRFManager()
-#        irf.loadPyIRF(irf_name)
-#        return irf
 
     def add_irf(self,irf):
         self._irfs.append(irf)
@@ -191,9 +194,7 @@ class IRF(object):
         
         if irf_dir is None: irf_dir = 'custom_irfs'
 
-        irf_name = irf_name.replace('::FRONT','_front')
-        irf_name = irf_name.replace('::BACK','_back')
-
+        irf_name = irf_name.replace('::','_')
         psf_file = os.path.join(irf_dir,'psf_%s.fits'%(irf_name))
         aeff_file = os.path.join(irf_dir,'aeff_%s.fits'%(irf_name))
         edisp_file = os.path.join(irf_dir,'edisp_%s.fits'%(irf_name))
@@ -395,15 +396,13 @@ class PSFIRF(IRFComponent):
         self._interpolate_density = interpolate_density
         self._hdulist = pyfits.open(fits_file)
         hdulist = self._hdulist
-        hdulist.info()
+#        hdulist.info()
 
         if re.search('front',fits_file.lower()) is not None: self._ct = 'front'
         elif re.search('back',fits_file.lower()) is not None: self._ct = 'back'
         else: self._ct = 'none'
 
-        self._cfront = hdulist['PSF_SCALING_PARAMS'].data[0][0][0:2]
-        self._cback = hdulist['PSF_SCALING_PARAMS'].data[0][0][2:4]
-        self._beta = hdulist['PSF_SCALING_PARAMS'].data[0][0][4]
+        self.load_scaling_params(hdulist)
         
         self.setup_axes(hdulist[1].data)
         nx = self._cth_axis.nbins
@@ -523,6 +522,23 @@ class PSFIRF(IRFComponent):
 
         return
 
+    def load_scaling_params(self,hdulist):
+
+        if len(hdulist['PSF_SCALING_PARAMS'].data[0][0]) == 5:
+
+            cfront = hdulist['PSF_SCALING_PARAMS'].data[0][0][0:2]
+            cback = hdulist['PSF_SCALING_PARAMS'].data[0][0][2:4]
+            self._beta = hdulist['PSF_SCALING_PARAMS'].data[0][0][4]
+
+            if self._ct == 'front':
+                self._sparam = cfront
+            else:
+                self._sparam = cback
+        else:
+            self._sparam = hdulist['PSF_SCALING_PARAMS'].data[0][0][0:2]
+            self._beta = hdulist['PSF_SCALING_PARAMS'].data[0][0][2]
+
+
     def dump(self):
         self._hdulist.info()
 
@@ -584,9 +600,7 @@ class PSFIRF(IRFComponent):
 
     def psf_scale(self,loge):
 
-        if self._ct == 'back': c = self._cback
-        else: c = self._cfront
-        
+        c = self._sparam
         return np.sqrt(np.power(c[0]*np.power(10,-self._beta*(2.0-loge)),2) +
                        np.power(c[1],2))
     
@@ -594,9 +608,7 @@ class PSFIRF(IRFComponent):
     def eval(self,dtheta,egy,cth):
         """Evaluate PSF by interpolating in PSF parameters."""
         
-        if self._ct == 'back': c = self._cback
-        else: c = self._cfront
-        
+        c = self._sparam
         spx = np.sqrt(np.power(c[0]*np.power(10,-self._beta*(2.0-egy)),2) +
                       np.power(c[1],2))
 
@@ -670,9 +682,9 @@ class PSFIRF(IRFComponent):
         self._hdulist[1].data[0][8] = self._gcore
         self._hdulist[1].data[0][9] = self._gtail
         
-        self._hdulist[2].data[0][0][0:2] = self._cfront
-        self._hdulist[2].data[0][0][2:4] = self._cback
-        self._hdulist[2].data[0][0][4] = self._beta
+#        self._hdulist[2].data[0][0][0:2] = self._cfront
+#        self._hdulist[2].data[0][0][2:4] = self._cback
+#        self._hdulist[2].data[0][0][4] = self._beta
         
         print 'Writing ', filename
         self._hdulist.writeto(filename,clobber=True)

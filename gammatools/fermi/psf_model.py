@@ -227,9 +227,8 @@ class PSFModelLT(PSFModel):
 
         self._dtheta_axis = Axis(self._dtheta)
         self._cth_axis = Axis.create(0.2,1.0,40)
-        self._tau = np.zeros(self._cth_axis.nbins)
+        self._tau = Histogram(self._cth_axis)
         
-#        self.loadLTCube(ltfile)
         self.fillLivetime(ltcube)
         self.buildModel()
 
@@ -238,10 +237,8 @@ class PSFModelLT(PSFModel):
         instrument inclination angle."""
 
         gx, gy = np.meshgrid(np.log10(self._energy),
-                             self._cth_axis.center) 
-
-        gx = gx.T
-        gy = gy.T
+                             self._cth_axis.center,
+                             indexing='ij') 
         
         self._psf = np.zeros((self._loge_axis.nbins,self._nbin_dtheta))
         self._edisp = None
@@ -253,14 +250,12 @@ class PSFModelLT(PSFModel):
         aeff[aeff < 0] = 0
         aeff[np.isnan(aeff)] = 0
 
-        dtheta = self._dtheta.reshape(self._dtheta.shape + (1,))
-        
-        self._exp = self._tau*aeff
+        self._exp = self._tau.counts*aeff
         self._exps = np.sum(self._exp,axis=1)
         
-        psf = self._irf.psf(self._dtheta[...,np.newaxis],
-                            np.ravel(gx)[np.newaxis,...],
-                            np.ravel(gy)[np.newaxis,...])
+        psf = self._irf.psf(self._dtheta[...,np.newaxis,np.newaxis],
+                            gx[np.newaxis,...],
+                            gy[np.newaxis,...])
         
         psf[psf<0] = 0
         psf[np.isnan(psf)] = 0
@@ -297,10 +292,10 @@ class PSFModelLT(PSFModel):
 
     def fillLivetime(self,ltc):
         
-        self._tau = np.zeros(self._cth_axis.nbins)
+        self._tau = Histogram(self._cth_axis)
             
         if self._src_type == 'iso':
-            self._tau = self._cth_axis.width
+            self._tau += self._cth_axis.width
         elif self._src_type == 'isodec':
             sinlat = np.linspace(-1,1,48)
 
@@ -313,23 +308,9 @@ class PSFModelLT(PSFModel):
                 ipix = healpy.ang2pix(64,th,0,nest=True)
                 self._tau[i] += m[ipix]                                       
         else:
-            th = np.pi/2. - self._lonlat[1]*np.pi/180.
-            phi = self._lonlat[0]*np.pi/180.
-            m = ltc._ltmap
-            ipix = healpy.ang2pix(64,th,phi,nest=True)
-#            tau = healpy.get_interp_val(m,th,phi,nest=True)
-            cth_axis = Axis.create(self._cth_axis.edges[0],
-                                   self._cth_axis.edges[-1],
-                                   self._cth_axis.nbins*4)
-
-            tau = interpolate(ltc._cth_axis.center,m[ipix,:]/ltc._cth_axis.width,
-                              cth_axis.center)*cth_axis.width
-
-            tau = np.sum(tau.reshape(-1,4),axis=1)            
-            self._tau = tau
-
-            
-
+            self._tau = ltc.get_src_lthist(self._lonlat[0],
+                                           self._lonlat[1],
+                                           cth_axis=self._cth_axis)
 
 if __name__ == '__main__':
 

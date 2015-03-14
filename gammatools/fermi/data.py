@@ -41,6 +41,20 @@ class Data(object):
 #        pickle.dump(self,fp,protocol = pickle.HIGHEST_PROTOCOL)
 #        fp.close()
 
+    def to_dict(self):
+        
+        o = {}
+        for k,v in self.__dict__.items():           
+
+            print k, v
+ 
+            if isinstance(v,Axis) or isinstance(v,HistogramND):
+                o[k] = v.to_dict()
+            else:
+                o[k] = v
+
+        return o
+
     @staticmethod
     def load(infile):
         return load_object(infile)
@@ -131,9 +145,21 @@ class PhotonData(object):
     @staticmethod
     def get_mask(data,selections=None, conversion_type=None,
                  event_class_id=None, event_type_id=None,
-                 phases=None, src_index=None):
+                 phases=None, src_index=None,**kwargs):
         
+        evclass = kwargs.get('evclass',None)
+        evtype = kwargs.get('evtype',None)
+        theta_fn = kwargs.get('theta_fn',None)
+
         mask = data['energy'] > 0
+
+        if theta_fn is not None:
+
+            if len(theta_fn) == 1:
+                mask &= data['dtheta'] <= theta_fn[0](data['energy'])
+            else:
+                mask &= data['dtheta'] >= theta_fn[0](data['energy'])
+                mask &= data['dtheta'] <= theta_fn[1](data['energy'])
 
         if not selections is None:
             for k, v in selections.iteritems():
@@ -149,6 +175,12 @@ class PhotonData(object):
             else:
                 mask &= (data['conversion_type'] == 1)
         
+        if not evclass is None:
+            mask &= ((data['event_class'].astype('int')&evclass)>0)
+
+        if not evtype is None:
+            mask &= ((data['event_type'].astype('int')&evtype)>0)
+
         if not event_class_id is None:
             mask &= (data['event_class'].astype('int')&
                      ((0x1)<<event_class_id)>0)
