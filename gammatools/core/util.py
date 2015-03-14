@@ -293,7 +293,20 @@ def bitarray_to_int(x,big_endian=False):
 
     return o
 
+def bitfield_to_list(x):    
+    o = []
+    for i in range(32):
+        if (x&(1<<i)): o.append(i)
 
+            
+def list_to_bitfield(x):
+
+    if x is None: return x
+    if not isinstance(x,list): return 2**x 
+    if isinstance(x,list) and len(x) == 0: return None
+    v = 0
+    for t in x: v += 2**t        
+    return v
 
 def make_dir(d):
     try: os.makedirs(d)

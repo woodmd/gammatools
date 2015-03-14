@@ -208,6 +208,19 @@ class HistogramND(object):
 
         return h
 
+    def to_dict(self):
+
+        axes = []
+        for ax in self.axes():
+            axes.append(ax.to_dict())
+
+        o = {'axes' : axes,
+             'counts' : copy.copy(self.counts),
+             'var' : copy.copy(self.var),
+             }
+
+        return o
+
     def to_root(self,name,title=None):
 
         if title is None: title=name
@@ -736,8 +749,6 @@ class Axis(object):
 
         self._edges = edges
         self._nbins = len(edges)-1
-        self._xmin = self._edges[0]
-        self._xmax = self._edges[-1]
         self._center = 0.5*(self._edges[1:] + self._edges[:-1])
         self._err = 0.5*(self._edges[1:] - self._edges[:-1])
         self._width = 2*self._err
@@ -766,12 +777,16 @@ class Axis(object):
         else: delta = x[1]-x[0]
         return Axis.create(x[0]-0.5*delta,x[-1]+0.5*delta,len(x),label=label)
 
+    @staticmethod
+    def createFromDict(d):
+        return Axis(d['edges'],name=d['name'],label=d['label'])
+
     def slice(self,lobin,hibin):
         if hibin is None: hibin = self._nbins
         if lobin < 0: lobin -= 1
         
         edges = self._edges[lobin:hibin+1]        
-        return Axis(edges,label=self._label)
+        return Axis(edges,label=self._label,name=self._label)
 
     @property
     def nbins(self):
@@ -828,6 +843,12 @@ class Axis(object):
         ibin[ibin < 0] = 0
         ibin[ibin > self.nbins-1] = self.nbins-1
         return ibin
+
+    def to_dict(self):
+        o = {'edges' : copy.copy(self.edges),
+             'label' : self._label,
+             'name'  : self._name}
+        return o
 
     def __str__(self):
         return '%i %s'%(self._nbins,self._edges)

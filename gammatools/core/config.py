@@ -94,14 +94,14 @@ def create_options_dict(o):
 
 class Configurable(object):
 
-    def __init__(self,config=None,register_defaults=True,**kwargs):
+    def __init__(self,config=None,opts=None,register_defaults=True,**kwargs):
         
         self._config = {}
         if register_defaults:
             self._default_config = self.create_default_config()
             self._config = self.create_config(self._default_config)
 
-        self.configure(config,**kwargs)
+        self.configure(config,opts,**kwargs)
 
     @property
     def config(self):
