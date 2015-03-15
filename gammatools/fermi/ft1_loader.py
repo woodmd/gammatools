@@ -30,21 +30,22 @@ class FT1Loader(Configurable):
         }
     
     def __init__(self,config,opts=None,**kwargs):
-        super(FT1Loader,self).__init__()
+        super(FT1Loader,self).__init__(config,opts,**kwargs)
 
-        self.configure(config,opts=opts,**kwargs)
-
+        self._phist = None
+        
         if self.config['ft2file'] is not None:
             self.setFT2File(self.config['ft2file'])
         
         if self.config['src_list'] is not None:
             self.loadsrclist(self.config['src_list'])
-
-        self._phist = None
+            
         self._photon_data = PhotonData()
 
     def setFT2File(self,ft2file):
 
+        print 'Loading ', ft2file
+        
         import pointlike
         if ft2file is None:
             return        
@@ -63,7 +64,12 @@ class FT1Loader(Configurable):
             table = evhdu.data[0:self.config['max_events']]
         else:
             table = evhdu.data
-        
+
+
+        table = table[:1000]
+            
+        print 'Applying zenith and energy cut'
+            
         msk = table.field('ZENITH_ANGLE')<self.config['zmax']
 
         if not self.config['event_class_id'] is None:
@@ -103,9 +109,9 @@ class FT1Loader(Configurable):
 
             table = table[msk]
             
+
             
-        nevent = len(table)
-        
+        nevent = len(table)        
         print 'Loading ', ft1file, ' nevent: ', nevent
 
         pd = self._photon_data
@@ -130,35 +136,40 @@ class FT1Loader(Configurable):
                                    np.radians(vra),
                                    np.radians(vdec))
 
+            print 'Applying distance max'
             msk = dth < np.radians(self.config['max_dist'])
             table_src = table_src[msk]
+
+
+            print 'Masking vectors'
             vra = vra[msk]
             vdec = vdec[msk]
             vptz_ra = vptz_ra[msk]
             vptz_dec = vptz_dec[msk]
             
-            
+            print 'Creating veq, eptz'
             veq = Vector3D.createLatLon(np.radians(vdec),
                                         np.radians(vra))
 
             eptz = Vector3D.createLatLon(np.radians(vptz_dec),
                                          np.radians(vptz_ra))
-            
 
+            theta3 = vsrc.separation(eptz)
+            
+            print 'Getting projected direction'
             vp = veq.project2d(vsrc)
             vx = np.degrees(vp.theta()*np.sin(vp.phi()))
             vy = -np.degrees(vp.theta()*np.cos(vp.phi()))            
-
             vptz = eptz.project2d(vsrc)
-
-#            print vptz.phi()
 
             vp2 = copy.deepcopy(vp)
             vp2.rotatez(-vptz.phi())
 
+            print 'Getting projected direction2'
             vx2 = np.degrees(vp2.theta()*np.sin(vp2.phi()))
             vy2 = -np.degrees(vp2.theta()*np.cos(vp2.phi()))  
 
+            
 #            import matplotlib.pyplot as plt
 
 #            print vp.theta()[:10]
@@ -188,7 +199,7 @@ class FT1Loader(Configurable):
 
             src_phase = np.zeros(len(table_src))
             if 'PULSE_PHASE' in evhdu.columns.names:
-                src_phase = list(table_src.field('PULSE_PHASE'))
+                src_phase = table_src.field('PULSE_PHASE')
 
             psf_core = np.zeros(len(table_src))
             if 'CTBCORE' in evhdu.columns.names:
@@ -199,48 +210,47 @@ class FT1Loader(Configurable):
                 event_type = bitarray_to_int(table_src.field('EVENT_TYPE'),True)
             
             event_class = bitarray_to_int(table_src.field('EVENT_CLASS'),True)
-                
+
+            print 'Filling columns'
             pd.append('psfcore',psf_core)
-            pd.append('time',list(table_src.field('TIME')))
-            pd.append('ra',list(table_src.field('RA')))
-            pd.append('dec',list(table_src.field('DEC')))
-            pd.append('delta_ra',list(vx))
-            pd.append('delta_dec',list(vy))
-            pd.append('delta_phi',list(vx2))
-            pd.append('delta_theta',list(vy2))            
-            pd.append('energy',list(np.log10(table_src.field('ENERGY'))))
-            pd.append('dtheta',list(dth[msk]))
-            pd.append('event_class',list(event_class))
-            pd.append('event_type',list(event_type))
+            pd.append('time',table_src.field('TIME'))
+            pd.append('ra',table_src.field('RA'))
+            pd.append('dec',table_src.field('DEC'))
+            pd.append('delta_ra',vx)
+            pd.append('delta_dec',vy)
+            pd.append('delta_phi',vx2)
+            pd.append('delta_theta',vy2)            
+            pd.append('energy',np.log10(table_src.field('ENERGY')))
+            pd.append('dtheta',dth[msk])
+            pd.append('event_class',event_class)
+            pd.append('event_type',event_type)
             pd.append('conversion_type',
-                      list(table_src.field('CONVERSION_TYPE').astype('int')))
-            pd.append('src_index',list(src_index))            
-            pd.append('phase',list(src_phase))
+                      table_src.field('CONVERSION_TYPE').astype('int'))
+            pd.append('src_index',src_index) 
+            pd.append('phase',src_phase)
 
-            cthv = []
+            costheta = np.cos(np.radians(table_src.field('THETA')))
             
-            for k in range(len(table_src)):
+            print 'Filling cos(theta)'
 
-#                event = table_src[k]
-#                ra = float(event.field('RA'))
-#                dec = float(event.field('DEC'))
-#                sd = skymaps.SkyDir(ra,dec)  
-#                event = table_src[k]
-#                theta = float(event.field('THETA'))*deg2rad
-#                time = event.field('TIME')
+            if self._phist is None:
+                pd.append('cth',np.cos(np.radians(table_src.field('THETA'))))
+            else:
 
-                if self._phist is not None: 
-                    import skymaps
+                import skymaps
+                cthv = []            
+                for k in range(len(table_src)):
                     sd = skymaps.SkyDir(src_ra,src_dec)
                     pi = self._phist(table_src.field('TIME')[k])            
-                    cth = np.cos(pi.zAxis().difference(src))
+                    cth = np.cos(pi.zAxis().difference(sd))
+
+                    print k, pd['energy'][k], cth, np.cos(theta3[k]), costheta[k]
+                    
                     cthv.append(cth)
-                else:
-                    cthv.append(np.cos(np.radians(table_src.field('THETA'))))
 
-            pd.append('cth',cthv)
+                pd.append('cth',cthv)
 
-
+        print 'Finished'
 #        print 'Loaded ', len(self.dtheta), ' events'
                     
         hdulist.close()
@@ -271,7 +281,6 @@ class FT1Loader(Configurable):
             ra = src['RAJ2000']
             dec = src['DEJ2000']
 #            self._photon_data._srcs.append(src)
-#            self.src_skydirs.append(sd)
             self.src_names.append(name)
             self.src_ra_deg.append(ra)
             self.src_dec_deg.append(dec)
