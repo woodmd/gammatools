@@ -241,7 +241,9 @@ class HistogramND(object):
 
         return h
 
-    
+    def set_label(self,label):
+        self._style['label'] = label
+
     def inverse(self):
         c = 1./self._counts
         var = c**2*self._var/self._counts**2
@@ -951,7 +953,7 @@ class Histogram(HistogramND):
         return h
     
     @staticmethod
-    def createHistModel(xedge,ncount,min_count=0):
+    def createFromCDF(xedge,ncount,min_count=0):
 
         if np.sum(ncount) == 0: return Histogram(xedge)
 

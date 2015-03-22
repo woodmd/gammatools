@@ -93,7 +93,15 @@ class PSFModel(object):
         return np.array(y_thsq)
 
     def quantile(self,emin,emax,cthmin,cthmax,frac=0.68,xmax=None):
-        
+
+        radii, cdf = self.cdf(emin,emax,cthmin,cthmax)
+
+        indx = bisect.bisect(cdf, frac) - 1
+        return ((frac - cdf[indx])/(cdf[indx+1] - cdf[indx])
+                *(radii[indx+1] - radii[indx]) + radii[indx])
+
+
+    def cdf(self,emin,emax,cthmin,cthmax,xmax=None):
         radii = np.logspace(-3.0,np.log10(self._dtheta_max_deg),300)
         radii = np.concatenate(([0],radii))
 
@@ -116,10 +124,8 @@ class PSFModel(object):
 
         cdf /= stot
 
-        indx = bisect.bisect(cdf, frac) - 1
-        return ((frac - cdf[indx])/(cdf[indx+1] - cdf[indx])
-                *(radii[indx+1] - radii[indx]) + radii[indx])
-
+        return radii, cdf
+        
 
     def psf(self,emin,emax,cthmin,cthmax):
         """Return energy- and livetime-weighted PSF density vector as
@@ -198,16 +204,9 @@ class PSFModelLT(PSFModel):
 
         super(PSFModelLT,self).__init__(model=spectrum,sp_param=spectrum_pars)
 
-        self._src_type = src_type
         self._nbin_dtheta = nbin
         self._irf = irf
         self._edisp_table = edisp_table
-
-        self._lonlat = (0, 0)
-        if src_type != 'iso' and src_type != 'isodec':
-            cat = Catalog.get()
-            src = cat.get_source_by_name(src_type)
-            self._lonlat = (src['RAJ2000'], src['DEJ2000'])
         
         loge_step = 1./float(ebins_per_decade)
         emin = 1.0+loge_step/2.
@@ -229,7 +228,7 @@ class PSFModelLT(PSFModel):
         self._cth_axis = Axis.create(0.2,1.0,40)
         self._tau = Histogram(self._cth_axis)
         
-        self.fillLivetime(ltcube)
+        self.fillLivetime(ltcube,src_type)
         self.buildModel()
 
     def buildModel(self):
@@ -290,13 +289,13 @@ class PSFModelLT(PSFModel):
             
         return
 
-    def fillLivetime(self,ltc):
+    def fillLivetime(self,ltc,src_type):
         
         self._tau = Histogram(self._cth_axis)
             
-        if self._src_type == 'iso':
+        if src_type == 'iso':
             self._tau += self._cth_axis.width
-        elif self._src_type == 'isodec':
+        elif src_type == 'isodec':
             sinlat = np.linspace(-1,1,48)
 
             m = ltc._ltmap[:,i]
@@ -308,9 +307,21 @@ class PSFModelLT(PSFModel):
                 ipix = healpy.ang2pix(64,th,0,nest=True)
                 self._tau[i] += m[ipix]                                       
         else:
-            self._tau = ltc.get_src_lthist(self._lonlat[0],
-                                           self._lonlat[1],
-                                           cth_axis=self._cth_axis)
+
+            if not isinstance(src_type,list):
+                src_type = [src_type]
+
+            for s in src_type:                
+                cat = Catalog.get()
+                src = cat.get_source_by_name(s)
+                lonlat = (src['RAJ2000'], src['DEJ2000'])
+
+                self._tau += ltc.get_src_lthist(lonlat[0],
+                                                lonlat[1],
+                                                cth_axis=self._cth_axis)
+        self._tau.normalize().plot()
+
+
 
 if __name__ == '__main__':
 

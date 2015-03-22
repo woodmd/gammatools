@@ -18,6 +18,10 @@ from collections import OrderedDict
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import brentq
 
+def mkdir(dir):
+    if not os.path.exists(dir):  os.makedirs(dir)
+    return dir
+
 def prettify_xml(elem):
     """Return a pretty-printed XML string for the Element.
     """

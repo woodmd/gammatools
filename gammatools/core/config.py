@@ -254,15 +254,13 @@ class Configurable(object):
         self._config[key] = value
 
     def parse_opts(self,opts):
-
-        import pprint
-        pprint.pprint(opts.__dict__)
         
         for k,v in opts.__dict__.items():
 
             if v is None: continue
             if not k in self._default_config: continue
-                
+            if isinstance(v,list) and len(v) == 0: continue
+
             default_config = self._default_config[k]
             config = self._config[k]
 
