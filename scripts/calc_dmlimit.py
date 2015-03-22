@@ -14,7 +14,7 @@ from gammatools.dm.irf_model import *
 from gammatools.dm.dmmodel import *
 from scipy.interpolate import UnivariateSpline
 from gammatools.dm.halo_model import *
-from gammatools.core.stats import limit_pval_to_sigma
+from gammatools.core.stats import pval_to_sigma
 
 import argparse
 
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     parser.add_argument('--median', default=False, action='store_true',
                       help = '')
 
-    parser.add_argument('--redge', default=0.0, type=float,
+    parser.add_argument('--redge', default='0.0/1.0', 
                       help = '')
 
     parser.add_argument('--alpha', default=0.2, type=float,
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if not args.ulthresh is None:
-        sthresh = limit_pval_to_sigma(1.0-args.ulthresh)
+        sthresh = pval_to_sigma(1.0-args.ulthresh)
     else:
         sthresh = args.sthresh
 
@@ -118,33 +118,25 @@ if __name__ == "__main__":
     else:
         srcs.append(hm)
             
-
-    o = { 'ul' : np.zeros(shape=(len(srcs),len(mass))), 
-          'mass' : mass }
-
-    jval = []
-    rs = []
-
-    for i, s in enumerate(srcs):
-
-        dp = s._dp
-
-#        jval = dp.jval()/(s['dist']*Units.kpc)**2
-#        print dp._rs/Units.kpc, dp._rhos/Units.gev_cm3, jval/Units.gev2_cm5
-#        sys.exit(0)
-
-        jval.append(dp.jval()/(s.dist*Units.kpc)**2)
-        rs.append(dp.rs)
-
-    print np.median(np.array(jval))/Units.gev2_cm5
-    print np.median(np.array(rs))/Units.kpc
-
+    o = { 'sigmav_ul' : np.zeros(shape=(len(srcs),len(mass))), 
+          'mass_gev' : np.power(10,mass),
+          'srcs' : srcs,
+          'src_results' : [],
+          'args' : args }
 
     for i, s in enumerate(srcs):
 
         src_model._hm = ConvolvedHaloModel(hm,irf)
-        o['ul'][i] = dm.limit(src_model,np.power(10,mass)*Units.gev,
-                              livetime,sthresh)
+
+        results = []
+
+        for j, m in enumerate(mass):
+            limit_data = dm.limit(src_model,np.power(10,m)*Units.gev,
+                                  livetime,sthresh)
+            o['sigmav_ul'][i][j] = limit_data['sigmav_ul']
+            results.append(limit_data)
+
+        o['src_results'].append(results)
 
         
         
