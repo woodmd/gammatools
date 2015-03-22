@@ -758,30 +758,24 @@ class Axis(object):
     @staticmethod
     def createFromDict(d):
 
-        c = copy.deepcopy(d)
-
-        if not 'label' in c: c['label'] = None
+        kw = {'name' : None, 'label' : None}
+        kw = merge_dict(kw,d)
         
-        if 'edges' in c: return Axis(c['edges'],label=c['label'])
-        elif 'lo' in c: return Axis.create(c['lo'],c['hi'],c['nbin'],
-                                           label=c['label'])
+        if 'edges' in d: return Axis(d['edges'],**kw)
+        elif 'lo' in d: return Axis.create(d['lo'],d['hi'],d['nbin'],**kw)
 
         
     @staticmethod
-    def create(lo,hi,nbin,label=None):
+    def create(lo,hi,nbin,**kwargs):
         """Create an axis object given lower and upper bounds for the
         coordinate and a number of bins."""
-        return Axis(np.linspace(lo,hi,nbin+1),label=label)
+        return Axis(np.linspace(lo,hi,nbin+1),**kwargs)
 
     @staticmethod
-    def createFromArray(x,label=None):
+    def createFromArray(x,**kwargs):
         if len(x) == 1: delta = 0.5
         else: delta = x[1]-x[0]
-        return Axis.create(x[0]-0.5*delta,x[-1]+0.5*delta,len(x),label=label)
-
-    @staticmethod
-    def createFromDict(d):
-        return Axis(d['edges'],name=d['name'],label=d['label'])
+        return Axis.create(x[0]-0.5*delta,x[-1]+0.5*delta,len(x),**kwargs)
 
     def slice(self,lobin,hibin):
         if hibin is None: hibin = self._nbins
