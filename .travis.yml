@@ -25,6 +25,7 @@ install:
   # Coverage packages are on my binstar channel
   - conda install --yes -c dan_blanchard python-coveralls
   - pip install coveralls
+  - pip install ez_setup
   - python setup.py install
  
 # Run test
