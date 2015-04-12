@@ -162,11 +162,11 @@ class Configurable(object):
         return o
 
     @classmethod
-    def add_arguments(cls,parser,config=None,skip=None):
+    def add_arguments(cls,parser,config=None,skip=None,prefix=None):
         
         if config is None:
             config = cls.create_default_config()
-            
+
         groups = {}
 #        for k, v in config.items():
 #            if v.group is not None and not v.group in groups:
@@ -176,17 +176,24 @@ class Configurable(object):
             
             if skip is not None and v.name in skip: continue
 
-            if isinstance(v,dict): continue
+            if isinstance(v,dict):
+                Configurable.add_arguments(parser,config=v,prefix=k)
+                continue
 
             if v.group is not None and not v.group in groups:
                 groups[v.group] = parser.add_argument_group(v.group)
                 group = groups[v.group]
             else:
                 group=parser
-            
 
+
+            if prefix:
+                argname = prefix + '.' + v.argname
+            else:
+                argname = v.argname
+                
             if v.type == bool:
-                group.add_argument('--' + v.argname,default=v.value,
+                group.add_argument('--' + argname,default=v.value,
                                    action='store_true',
                                    help=v.docstring + ' [default: %s]'%v.value)
             else:
@@ -202,7 +209,7 @@ class Configurable(object):
                     value = v.value
                     opt_type = v.type
                     
-                group.add_argument('--' + v.argname,default=value,
+                group.add_argument('--' + argname,default=value,
                                     type=opt_type,
                                     help=v.docstring + ' [default: %s]'%v.value)
         
@@ -255,25 +262,33 @@ class Configurable(object):
 
     def parse_opts(self,opts):
 
-        import pprint
-        pprint.pprint(opts.__dict__)
         
         for k,v in opts.__dict__.items():
 
+            argname = k.split('.')
             if v is None: continue
-            if not k in self._default_config: continue
+
+            if len(argname) == 2:
+                default_config = self._default_config[argname[0]][argname[1]]
+                config = self._config[argname[0]][argname[1]]
+            else:
                 
-            default_config = self._default_config[k]
-            config = self._config[k]
+                if not k in self._default_config: continue                
+                default_config = self._default_config[k]
+                config = self._config[k]
 
             if default_config.type == list and v is not None:
                 value = v.split(',')
                 value = map(default_config.list_type,value)
             else:
                 value = v
-                
-            self._config[k] = value
 
+                
+            if len(argname) == 1:
+                self._config[k] = value
+            else:
+                self._config[argname[0]][argname[1]] = value
+                
         
     def configure(self,config=None,opts=None,**kwargs):
         """Update the configuration of this object with the contents
