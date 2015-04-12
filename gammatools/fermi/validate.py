@@ -7,6 +7,7 @@ os.environ['CUSTOM_IRF_NAMES'] = 'P7SOURCE_V6,P7SOURCE_V6MC,P7SOURCE_V9,P7CLEAN_
 import sys
 import copy
 import re
+import glob
 import pickle
 import argparse
 import yaml
@@ -42,33 +43,53 @@ vela_phase_selection = {'on_phase' : '0.0/0.15,0.6/0.7',
 
 class PSFScalingFunction(object):
 
-    def __init__(self,c0,c1,beta,thmax=None):
+    def __init__(self,c0,c1,beta,thmax=None,thmin=None,scale=1.0):
         self._c0 = c0
         self._c1 = c1
         self._beta = beta
         self._thmax = thmax
+        self._thmin = thmin
+        self._scale = scale
         
     def __call__(self,x):
 
-         v = np.sqrt((self._c0*np.power(np.power(10,x-2),self._beta))**2 +
-                     self._c1**2)
+        x = np.array(x,ndmin=1)
 
-         if self._thmax is not None:
-             v[v>self._thmax] = self._thmax
+        v = self._scale*np.sqrt((self._c0*np.power(np.power(10,x-2),self._beta))**2 +
+                                self._c1**2)
 
-         return v
+        if self._thmax is not None:
+            v[v>self._thmax] = self._thmax
 
+        if self._thmin is not None:
+            v[v<self._thmin] = self._thmin
 
+        return v
 
-psf_scaling_fn = { 'front' : PSFScalingFunction(30.0,1.0,-0.8),
-                   'back' : PSFScalingFunction(35.0,1.5,-0.8),
-                   'p8front' : PSFScalingFunction(9.873*3.0,0.295*3.0,-0.8),
-                   'p8back' : PSFScalingFunction(16.556*3.0,0.609*3.0,-0.8),
-                   'p8psf0' : PSFScalingFunction(18.487*3.0,0.820*3.0,-0.8),
-                   'p8psf1' : PSFScalingFunction(12.637*3.0,0.269*3.0,-0.8),
-                   'p8psf2' : PSFScalingFunction(9.191*3.0,0.139*3.0,-0.8),
-                   'p8psf3' : PSFScalingFunction(6.185*3.0,0.078*3.0,-0.8) }
+psf_scaling_params = {
+    'front' : (30.0,1.0,-0.8),
+    'back' : (35.0,1.5,-0.8),
+    'FRONT' : (9.873,0.295,-0.8),
+    'BACK' : (16.556,0.609,-0.8),
+    'PSF0' : (18.487,0.820,-0.8),
+    'PSF1' : (12.637,0.269,-0.8),
+    'PSF2' : (9.191,0.139,-0.8),
+    'PSF3' : (6.185,0.078,-0.8),
+    'EDISP0' : (16.556,0.609,-0.8),
+    'EDISP1' : (16.556,0.609,-0.8),
+    'EDISP2' : (16.556,0.609,-0.8),
+    'EDISP3' : (16.556,0.609,-0.8),
+}
 
+psf_scaling_fn = { 
+    'front' : PSFScalingFunction(30.0,1.0,-0.8),
+    'back' : PSFScalingFunction(35.0,1.5,-0.8),
+    'FRONT' : PSFScalingFunction(9.873,0.295,-0.8),
+    'BACK' : PSFScalingFunction(16.556,0.609,-0.8),
+    'PSF0' : PSFScalingFunction(18.487,0.820,-0.8),
+    'PSF1' : PSFScalingFunction(12.637,0.269,-0.8),
+    'PSF2' : PSFScalingFunction(9.191,0.139,-0.8),
+    'PSF3' : PSFScalingFunction(6.185,0.078,-0.8) }
 
 pass8_type_map = {
     0 : 'FRONT',
@@ -94,6 +115,9 @@ class AeffData(Data):
         self.type_name = kwargs.get('type_name',None)
         self.class_id = class_id
         self.type_id = kwargs.get('type_id',[])
+        self.fn = kwargs.get('fn',None)
+
+        self.alpha_hist = Histogram(egy_axis)
 
         # Excess (S - a*B)
         self.sig_hist = Histogram(egy_axis)
@@ -119,80 +143,77 @@ class AeffData(Data):
 class PSFData(Data):
 
     
-    def __init__(self,egy_axis,cth_bin_edge,dtype):
+    def __init__(self,egy_axis,cth_axis,
+                 class_name,class_id,**kwargs):
 
-        self.dtype = dtype
+        self.class_name = class_name
+        self.type_name = kwargs.get('type_name',None)
+        self.class_id = class_id
+        self.type_id = kwargs.get('type_id',[])
+        self.fn = kwargs.get('fn',None)
+
         self.quantiles = [0.34,0.68,0.90,0.95]
         self.quantile_labels = ['r%2.f'%(q*100) for q in self.quantiles]
-        self.egy_axis = Axis(egy_axis.edges)
-        self.cth_axis = Axis(cth_axis.edges)
+        self.egy_axis = egy_axis
+        self.cth_axis = cth_axis
+        self.dtheta_axis = Axis.create(0.0,4.0,160)
+        self.domega = (self.dtheta_axis.edges[1:]**2-
+                       self.dtheta_axis.edges[:-1]**2)*np.pi
 
-        self.chi2 = Histogram2D(egy_axis.edges,cth_axis.edges)
-        self.rchi2 = Histogram2D(egy_axis.edges,cth_axis.edges)
-        self.ndf = Histogram2D(egy_axis.edges,cth_axis.edges)
-        self.excess = Histogram2D(egy_axis.edges,cth_axis.edges)
-        self.bkg = Histogram2D(egy_axis.edges,cth_axis.edges)
-        self.bkg_density = Histogram2D(egy_axis.edges,cth_axis.edges)
+        self.sd_hist = Histogram(egy_axis)
+        self.alpha_hist = Histogram(egy_axis)
+        self.chi2 = Histogram(egy_axis)
+        self.rchi2 = Histogram(egy_axis)
+        self.ndf = Histogram(egy_axis)
+        self.excess = Histogram(egy_axis)
+        self.bkg = Histogram(egy_axis)
+        self.bkg_density = Histogram(egy_axis)
 
         hist_shape = (self.egy_axis.nbins,self.cth_axis.nbins)
 
-        self.sig_density_hist = np.empty(shape=hist_shape, dtype=object)
-        self.tot_density_hist = np.empty(shape=hist_shape, dtype=object)
-        self.bkg_density_hist = np.empty(shape=hist_shape, dtype=object)
-        self.sig_hist = np.empty(shape=hist_shape, dtype=object)
-        self.off_hist = np.empty(shape=hist_shape, dtype=object)
-        self.tot_hist = np.empty(shape=hist_shape, dtype=object)
-        self.bkg_hist = np.empty(shape=hist_shape, dtype=object)
-        self.sky_image = np.empty(shape=hist_shape, dtype=object)
-        self.sky_image_off = np.empty(shape=hist_shape, dtype=object)
-        self.lat_image = np.empty(shape=hist_shape, dtype=object)
-        self.lat_image_off = np.empty(shape=hist_shape, dtype=object)
+        self.sig_density_hist = Histogram2D(egy_axis,self.dtheta_axis)
+        self.on_density_hist = Histogram2D(egy_axis,self.dtheta_axis)
+        self.bkg_density_hist = Histogram2D(egy_axis,self.dtheta_axis)
+        self.sig_hist = Histogram2D(egy_axis,self.dtheta_axis)
+        self.off_hist = Histogram2D(egy_axis,self.dtheta_axis)
+        self.on_hist = Histogram2D(egy_axis,self.dtheta_axis)
+        self.bkg_hist = Histogram2D(egy_axis,self.dtheta_axis)
+#        self.sky_image = 
+#        self.sky_image_off = 
+#        self.lat_image = np.empty(shape=hist_shape, dtype=object)
+#        self.lat_image_off = np.empty(shape=hist_shape, dtype=object)
+
+        self.irf_sig_hist = Histogram2D(egy_axis,self.dtheta_axis)
 
         self.qdata = []
+        self.qdata_cth = []
+        self.irf_qdata = []
+        self.irf_qdata_cth = []
         for i in range(len(self.quantiles)):
-            self.qdata.append(Histogram2D(egy_axis.edges,cth_axis.edges))
+            self.qdata.append(Histogram(egy_axis))
+            self.qdata_cth.append(Histogram2D(egy_axis,cth_axis))
+            self.irf_qdata.append(Histogram(egy_axis))
+            self.irf_qdata_cth.append(Histogram2D(egy_axis,cth_axis))
 
-    def init_hist(self,fn,theta_max):
+        self.sd_hist._counts[:] = self.fn(self.sd_hist.axis(0).center)
 
-        for i in range(self.egy_nbin):
-            for j in range(self.cth_nbin):
+#    def init_hist(self,fn,theta_max):
 
-                ecenter = self.egy_axis.center[i]
-                theta_max = min(theta_max,fn(ecenter))
-                theta_edges = np.linspace(0,theta_max,100)
+#        for i in range(self.egy_nbin):
+#            for j in range(self.cth_nbin):
 
-                h = Histogram(theta_edges)
-                self.sig_density_hist[i,j] = copy.deepcopy(h)
-                self.tot_density_hist[i,j] = copy.deepcopy(h)
-                self.bkg_density_hist[i,j] = copy.deepcopy(h)
-                self.sig_hist[i,j] = copy.deepcopy(h)
-                self.tot_hist[i,j] = copy.deepcopy(h)
-                self.bkg_hist[i,j] = copy.deepcopy(h)
-                self.off_hist[i,j] = copy.deepcopy(h)
+#                ecenter = self.egy_axis.center[i]
+#                theta_max = min(theta_max,fn(ecenter))
+#                theta_edges = np.linspace(0,theta_max,100)
 
-
-    def print_quantiles(self,prefix):
-
-        filename = prefix + '.txt'
-        f = open(filename,'w')
-
-        for i, ql in enumerate(self.quantile_labels):
-
-            q = self.qdata[i]
-
-            for icth in range(self.cth_nbin):
-                for iegy in range(self.egy_nbin):
-
-                    line = '%5.3f '%(self.quantiles[i])
-                    line += '%5.2f %5.2f '%(self.cth_range[icth][0],
-                                           self.cth_range[icth][1])
-                    line += '%5.2f %5.2f '%(self.egy_range[iegy][0],
-                                            self.egy_range[iegy][1])
-                    line += '%8.4f %8.4f '%(q.mean[iegy,icth],
-                                            q.err[iegy,icth])
-
-                    f.write(line + '\n')
-
+#                h = Histogram(theta_edges)
+#                self.sig_density_hist[i,j] = copy.deepcopy(h)
+#                self.tot_density_hist[i,j] = copy.deepcopy(h)
+#                self.bkg_density_hist[i,j] = copy.deepcopy(h)
+#                self.sig_hist[i,j] = copy.deepcopy(h)
+#                self.tot_hist[i,j] = copy.deepcopy(h)
+#                self.bkg_hist[i,j] = copy.deepcopy(h)
+#                self.off_hist[i,j] = copy.deepcopy(h)
 
 #        parser.add_argument('--output_prefix', default=None,
 #                            help='Set the string prefix that will be appended '
@@ -227,6 +248,11 @@ class IRFValidate(Configurable):
         'phase_selection' : (None),
         'on_phase'        : (None),
         'off_phase'       : (None),
+        'refclass'        : (None,'',''),
+        'event_class_selections' : (None,'',''),
+        'event_type_selections'  : (None,'',''),
+        'event_class_irfs'       : (None,'',''),
+        'noplots'                : (False,'','')
         }
     
     def __init__(self, config, opts,**kwargs):
@@ -235,10 +261,6 @@ class IRFValidate(Configurable):
 
         self._ft = FigTool(opts=opts)
         cfg = self._config
-
-        import pprint
-
-        pprint.pprint(cfg)
 
         self.data_type = 'agn'
         if cfg['phase_selection'] == 'vela':
@@ -255,20 +277,20 @@ class IRFValidate(Configurable):
             self.off_phases = self.phases[1]
             self.alpha = self.phases[2]
 
+        if self.config['output_dir'] is not None:
+            mkdir(self.config['output_dir'])
 
     def load(self):
         """Load data from FITS."""
         
         evfile = []
-
         for f in self.config['evfile']:
 
             if os.path.splitext(f)[1] == '.txt':
                 evfile += list(np.genfromtxt(f,unpack=True,dtype=None))
             else:
-                evfile += [f]
+                evfile += glob.glob(f)
 
-        
         for f in evfile: #self.config['evfile']:
             print 'Loading ', f
             basename = os.path.splitext(f)[0] 
@@ -296,17 +318,16 @@ class IRFValidate(Configurable):
 
 class AeffValidate(IRFValidate):
 
-    default_config = {
-        'refclass': (None,'',''),
-        'event_class_selections' : (None,'',''),
-        'event_type_selections' : (None,'',''),
-        'event_class_irfs' : (None,'','')
-        }
+    default_config = { }
 
     def __init__(self, config, opts,**kwargs):
         super(AeffValidate,self).__init__(config,opts,**kwargs)
         cfg = self.config
         
+        import pprint
+        pprint.pprint(cfg)
+        pprint.pprint(config)
+
         if cfg['egy_bin_edge'] is not None:
             self.egy_axis = Axis(cfg['egy_bin_edge'])
         elif cfg['egy_bin'] is not None:
@@ -320,15 +341,22 @@ class AeffValidate(IRFValidate):
         self._ltc = LTCube.create(self.config['ltfile'])
 
         self._class_data = {}
-        self._class_irfs = {}
         for c, cid in self.config['event_class_selections'].items():
-            self._class_data[c] = AeffData(self.egy_axis,self.cth_axis,
-                                           class_name=c,class_id=cid)
+
+            fn = PSFScalingFunction(*psf_scaling_params['BACK'],
+                                     scale=1.0,thmax=30.0,thmin=1.0)
+
+            self._class_data[c + '_ALL'] = AeffData(self.egy_axis,self.cth_axis,
+                                           class_name=c,class_id=cid,fn=fn)
 
             for t,tid in self.config['event_type_selections'].items():
+
+                fn = PSFScalingFunction(*psf_scaling_params[t],
+                                         scale=1.0,thmax=30.0,thmin=1.0)
+
                 self._class_data[c + '_' + t] = AeffData(self.egy_axis,self.cth_axis,
                                                          class_name=c,class_id=cid,
-                                                         type_name=t,type_id=tid)
+                                                         type_name=t,type_id=tid,fn=fn)
 
         self.build_models()
 
@@ -336,7 +364,6 @@ class AeffValidate(IRFValidate):
 
         cd = self._class_data
 
-#        for c in self.config['event_class_irfs']:
         for k,v in self._class_data.items():
             
             class_name = '%s_%s_%s'%(self.config['event_class_irfs']['release'],
@@ -355,15 +382,37 @@ class AeffValidate(IRFValidate):
                                      irf_dir=self.config['irfmanager']['irf_dir'])
 
             exp = ExposureCalc(irfm,self._ltc)
+
+            cth_axis = Axis.create(0.2,1.0,80)
+
             exph = exp.getExpByName(self.config['ft1loader']['src_list'],
-                                    self.egy_axis)
+                                    self.egy_axis,cth_axis)
 
             m = PSFModelLT(irfm,
-                           src_type='iso',#self.config['src'],
+                           src_type=self.config['ft1loader']['src_list'],
                            ltcube=self._ltc)
 #                           spectrum=sp,spectrum_pars=sp_pars)
 
             cd[k].exp_hist += exph
+
+            psf_corr = np.zeros(self.egy_axis.nbins)
+
+            for i in range(self.egy_axis.nbins):
+                r, cdf = m.cdf(10**self.egy_axis.edges[i],
+                               10**self.egy_axis.edges[i+1],0.2,1.0)
+
+                s = cd[k].fn(self.egy_axis.center[i])
+#                print i, self.egy_axis.center[i], interpolate(r,cdf,0.1), interpolate(r,cdf,1.0), interpolate(r,cdf,s)
+#                plt.figure()
+#                plt.plot(r,cdf)
+#                plt.axvline(0.1)
+#                plt.axhline(interpolate(r,cdf,0.1))
+#                plt.gca().set_xscale('log')
+#                plt.show()
+
+                psf_corr[i] = interpolate(r,cdf,s)
+
+            cd[k].exp_hist *= psf_corr
 
         # Renormalize
         exp_hist0 = self._class_data[self.config['refclass']].exp_hist
@@ -387,7 +436,14 @@ class AeffValidate(IRFValidate):
             evclass = list_to_bitfield(v.class_id)
             evtype = list_to_bitfield(v.type_id)
 
-            fn = psf_scaling_fn['back'] 
+            cd[k].alpha_hist._counts[:] = self.alpha
+
+            fn = cd[k].fn
+
+            msk = PhotonData.get_mask(data,
+                                      {'cth': self.cth_axis.lims()},
+                                      evclass=evclass,evtype=evtype,
+                                      theta_fn=[fn])
 
             msk_on = PhotonData.get_mask(data,
                                          {'cth': self.cth_axis.lims()},
@@ -404,12 +460,22 @@ class AeffValidate(IRFValidate):
             cd[k].on_hist.fill(data['energy'][msk_on])
             cd[k].off_hist.fill(data['energy'][msk_off])
 
-            plt.figure()
+#            emsk = (data['energy'] >3.0)&(data['energy']<3.5)
+#            h0 = Histogram(Axis.create(0,1,40))
+#            h1 = Histogram(Axis.create(0,1,40))
+#            h2 = Histogram(Axis.create(0,1,40))
+#            h0.fill(data['phase'][msk_on&emsk])
+#            h1.fill(data['phase'][msk_off&emsk])
+#            h2.fill(data['phase'][msk&emsk])
+#            print k
+#            plt.figure()
 
-            plt.scatter(data['energy'][msk_on],data['dtheta'][msk_on])
+#            h0.plot()
+#            h1 *= self.alpha
+#            h1.plot()
+#            h2.plot()
 
-            plt.show()
-
+#            plt.show()
 
     def fill_agn(self,data):
 
@@ -418,21 +484,32 @@ class AeffValidate(IRFValidate):
         # Loop over classes
         for k,v in self._class_data.items():
 
-            domega_on = 1.0**2*np.pi
-            domega_off = (3.5**2-2.5**2)*np.pi
+            fn = cd[k].fn
+
+            theta0 = fn(cd[k].alpha_hist.axis(0).center)
+
+            print theta0
+
+            cd[k].alpha_hist._counts[:] = theta0**2/(3.5**2-2.5**2)
+
+#            domega_on = 1.0**2*np.pi
+#            domega_off = (3.5**2-2.5**2)*np.pi
             
             evclass = list_to_bitfield(v.class_id)
             evtype = list_to_bitfield(v.type_id)
 
             msk_on = PhotonData.get_mask(data,
-                                         {'cth': self.cth_axis.lims(),
-                                          'dtheta' : [0.0,1.0]},
+                                         {'cth': self.cth_axis.lims() },
                                          evclass=evclass,evtype=evtype)
 
             msk_off = PhotonData.get_mask(data,
                                           {'cth': self.cth_axis.lims(),
                                            'dtheta' : [2.5,3.5]},
                                           evclass=evclass,evtype=evtype)
+
+            ebin = self.egy_axis.valToBinBounded(data['energy'])
+            bin_energy = self.egy_axis.center[ebin]
+            msk_on &= data['dtheta'] < fn(bin_energy)
 
             
             cd[k].on_hist.fill(data['energy'][msk_on])
@@ -442,14 +519,21 @@ class AeffValidate(IRFValidate):
 
         cd = self._class_data
 
-        domega_on = 1.0**2*np.pi
-        domega_off = (3.5**2-2.5**2)*np.pi
-        alpha = domega_on/domega_off
-        
+#        domega_on = 1.0**2*np.pi
+#        domega_off = (3.5**2-2.5**2)*np.pi
+#        alpha = domega_on/domega_off
+       
         # Loop over classes
         for k,v in self._class_data.items():
-            cd[k].sig_hist += cd[k].on_hist - cd[k].off_hist*alpha
-            cd[k].bkg_hist += cd[k].off_hist*alpha
+            alpha = cd[k].alpha_hist.counts
+            cd[k].sig_hist += cd[k].on_hist.counts - cd[k].off_hist.counts*alpha
+            cd[k].bkg_hist += cd[k].off_hist.counts*alpha
+
+#            plt.figure()
+#            cd[k].on_hist.plot()
+#            cd[k].off_hist.plot()
+#            cd[k].bkg_hist.plot()
+#            plt.show()
 
         ns0 = cd[self.config['refclass']].on_hist.counts
         nb0 = cd[self.config['refclass']].off_hist.counts
@@ -469,12 +553,19 @@ class AeffValidate(IRFValidate):
     def plot(self):
 
         for k,v in self._class_data.items():
-            fig = self._ft.create(k,figstyle='residual2',
-                                  norm_interpolation='lin',
-                                  legend_loc='upper right',
-                                  ylim_ratio=[-0.5,0.5])
 
-            fig[0].add_hist(v.irf_eff_hist,label='data',hist_style='line')
+            figname = self.config['output_prefix'] + '_' + k
+            figname = os.path.join(self.config['output_dir'],figname)
+
+            fig = self._ft.create(figname,figstyle='residual2',
+                                  norm_interpolation='lin',
+                                  legend_loc='best',
+                                  ylim=[0.0,1.1],
+                                  ylim_ratio=[-0.2,0.2])
+
+            fig[0].ax().set_title(k)
+
+            fig[0].add_hist(v.irf_eff_hist,label='model',hist_style='line')
             fig[0].add_hist(v.eff_hist,label='data')
             fig.plot()
 
@@ -487,7 +578,7 @@ class AeffValidate(IRFValidate):
             
     def save(self):
 
-        outfile = self.config['output_prefix'] + 'aeffdata.P'
+        outfile = self.config['output_prefix'] + '_aeffdata.P'
 
         if self.config['output_dir']:
             outfile = os.path.join(self.config['output_dir'],
@@ -499,7 +590,7 @@ class AeffValidate(IRFValidate):
         for k,v in self._class_data.items():
             o[k] = self._class_data[k].to_dict()
 
-        outfile = self.config['output_prefix'] + 'aeffdata.yaml'
+        outfile = self.config['output_prefix'] + '_aeffdata.yaml'
 
         if self.config['output_dir']:
             outfile = os.path.join(self.config['output_dir'],
@@ -524,8 +615,8 @@ class PSFValidate(IRFValidate):
         'spectrum'        : (None),
         'spectrum_pars'   : (None), 
         'theta_max'       : (30.0),
-        'psf_scaling_fn'  :
-            (None,'Set the scaling function to use for determining the edge of the ROI at each energy.'),
+#        'psf_scaling_fn'  :
+#            (None,'Set the scaling function to use for determining the edge of the ROI at each energy.'),
         'irf'             : (None,'Set the names of one or more IRF models.','',list),
         'irf_labels'      : (None,'IRF Labels.'),
         'make_sky_image'  : (False,'Plot distribution of photons on the sky.'),
@@ -543,12 +634,12 @@ class PSFValidate(IRFValidate):
         if cfg['egy_bin_edge'] is not None:
             self.egy_axis = Axis(cfg['egy_bin_edge'])
         elif cfg['egy_bin'] is not None:
-            self.egy_axis = Axis.create(cfg['egy_bin'])
+            self.egy_axis = Axis.create(*cfg['egy_bin'])
         
         if cfg['cth_bin_edge'] is not None:
             self.cth_axis = Axis(cfg['cth_bin_edge'])
         elif cfg['cth_bin'] is not None:
-            self.cth_axis = Axis.create(cfg['cth_bin'])
+            self.cth_axis = Axis.create(*cfg['cth_bin'])
         
         if cfg['output_prefix'] is None:
 #            prefix = os.path.splitext(opts.files[0])[0]
@@ -578,96 +669,153 @@ class PSFValidate(IRFValidate):
             self.output_dir = cfg['output_dir']
 
 
-        if opts.irf_labels is not None:
-            self.model_labels = opts.irf_labels.split(',')
-        else:
-            self.model_labels = self.models
+#        if opts.irf_labels is not None:
+#            self.model_labels = opts.irf_labels.split(',')
+#        else:
+#            self.model_labels = self.models
 
         self.conversion_type = cfg['conversion_type']
         
 #        self.quantiles = [float(t) for t in opts.quantiles.split(',')]
 #        self.quantile_labels = ['r%2.f' % (q * 100) for q in self.quantiles]
 
-        self.psf_data = PSFData(self.egy_axis,self.cth_axis,
-                                'data')
+        self._ltc = LTCube.create(self.config['ltfile'])
 
-        if cfg['psf_scaling_fn']:
-            self.thetamax_fn = psf_scaling_fn[cfg['psf_scaling_fn']]
-        elif cfg['conversion_type'] == 'back' or cfg['conversion_type'] is None:
-            self.thetamax_fn = psf_scaling_fn['back']
-        else:
-            self.thetamax_fn = psf_scaling_fn['front']
+        self._class_data = {}
+        for c, cid in self.config['event_class_selections'].items():
+
+            fn = PSFScalingFunction(*psf_scaling_params['BACK'],thmax=30.0/4.,
+                                     thmin=0.5)
+            self._class_data[c + '_ALL'] = PSFData(self.egy_axis,self.cth_axis,
+                                                   class_name=c,class_id=cid,fn=fn)
+
             
-        self.psf_data.init_hist(self.thetamax_fn, self.config['theta_max'])
+
+            for t,tid in self.config['event_type_selections'].items():
+
+                fn = PSFScalingFunction(*psf_scaling_params[t],thmax=30.0/4.,
+                                         thmin=0.5)
+
+                self._class_data[c + '_' + t] = PSFData(self.egy_axis,self.cth_axis,
+                                                        class_name=c,class_id=cid,
+                                                        type_name=t,type_id=tid,fn=fn)
+        
         self.build_models()
 
     def build_models(self):
 
-        self.psf_models = {}
+        cd = self._class_data
 
-        for imodel, ml in enumerate(self.models):
+        for k,v in self._class_data.items():
             
-            irfm = IRFManager.create(self.models[imodel], True,
-                                     irf_dir=self.config['irf_dir'])
+            class_name = '%s_%s_%s'%(self.config['event_class_irfs']['release'],
+                                     v.class_name,
+                                     self.config['event_class_irfs']['version'])
 
+            
+            type_names = []
+            for t in v.type_id:
+                type_names.append(pass8_type_map[t])
+            
 
-            sp = self.config['spectrum']
-            sp_pars = string_to_array(self.config['spectrum_pars'])
-                
+            print 'Creating IRF ', class_name, type_names
+
+            irfm = IRFManager.create(class_name, type_names,True,
+                                     irf_dir=self.config['irfmanager']['irf_dir'])
+
+            exp = ExposureCalc(irfm,self._ltc)
+
+            cth_axis = Axis.create(0.2,1.0,80)
+
+            exph = exp.getExpByName(self.config['ft1loader']['src_list'],
+                                    self.egy_axis,cth_axis)
+
             m = PSFModelLT(irfm,
-                           src_type=self.config['src'],
-                           ltfile=self.config['ltfile'],
-                           spectrum=sp,spectrum_pars=sp_pars)
+                           src_type=self.config['ft1loader']['src_list'],
+                           ltcube=self._ltc)
+
+            cd[k].irf_sig_hist.set_label('test')
+
+            for i in range(self.egy_axis.nbins):
+
+                edges = cd[k].on_hist.axis(1).edges*cd[k].sd_hist.counts[i]
+                emin = self.egy_axis.edges[i]
+                emax = self.egy_axis.edges[i+1]
+                cth_range = self.cth_axis.lims()
+                hm = m.histogram(10**emin, 10**emax,cth_range[0],cth_range[1],
+                                 edges).normalize()
+
+                cd[k].irf_sig_hist._counts[i] = hm.counts
+                
+                for j, q in enumerate(cd[k].quantiles):
+                    ql = cd[k].quantile_labels[j]
+                    qm = m.quantile(10**emin, 10**emax, cth_range[0],cth_range[1], q)
+                    cd[k].irf_qdata[j].set(i, qm)
+                    print ql, qm
+                
+#            sp = self.config['spectrum']
+#            sp_pars = string_to_array(self.config['spectrum_pars'])
                 #                m.set_spectrum('powerlaw_exp',(1.607,3508.6))
                 #                m.set_spectrum('powerlaw',(2.0))
-                
-            self.psf_models[ml] = m
-
-        self.irf_data = {}
-        for ml in self.models:
-            self.irf_data[ml] = PSFData(self.egy_bin_edge,
-                                        self.cth_bin_edge,
-                                        'model')
-
 
     def fill(self,data):
 
-         for iegy in range(self.psf_data.egy_axis.nbins):
-            for icth in range(self.psf_data.cth_axis.nbins):
-                if self.data_type == 'pulsar':
-                    self.fill_pulsar(data, iegy, icth)
-                else:
-                    self.fill_agn(data, iegy, icth)
+        if self.data_type == 'pulsar':
+            self.fill_pulsar(data)
+        else:
+            self.fill_agn(data)
             
     def run(self):
 
         self.load()
+        self.compute_quantiles()
+        if not self.config['noplots']: self.plot()
+        self.save()
             
-        for iegy in range(self.psf_data.egy_axis.nbins):
-            for icth in range(self.psf_data.cth_axis.nbins):
-                self.fill_models(iegy,icth)
+    def save(self):
 
-        for iegy in range(self.psf_data.egy_axis.nbins):
-            for icth in range(self.psf_data.cth_axis.nbins):
-                if self.data_type == 'pulsar':
-                    self.fit_pulsar(iegy, icth)
-                else:
-                    self.fit_agn(iegy, icth)
-
-        outfile = self.output_prefix + 'psfdata.P'
-
+        outfile = self.config['output_prefix'] + '_psfdata.P'
         if self.config['output_dir']:
             outfile = os.path.join(self.config['output_dir'],
                                    os.path.basename(outfile))
-        
-        self.psf_data.save(outfile,compress=True)
-
-        for ml in self.models:
-            fname = self.output_prefix + 'psfdata_' + ml
-            self.irf_data[ml].save(fname + '.P')
+            
+        save_object(self._class_data,outfile,compress=True)
 
     def plot(self):
-        return
+        
+        cd = self._class_data
+
+        for k,v in self._class_data.items():
+
+            for i in range(cd[k].on_hist.axis(0).nbins):
+
+                on_hist = cd[k].on_hist.slice(0,i)
+                bkg_hist = cd[k].bkg_hist.slice(0,i)
+                irf_hist = cd[k].irf_sig_hist.slice(0,i)
+
+                on_hist._axes[0] = Axis(cd[k].dtheta_axis.edges * cd[k].sd_hist.counts[i])
+                bkg_hist._axes[0] = Axis(cd[k].dtheta_axis.edges * cd[k].sd_hist.counts[i])
+                irf_hist._axes[0] = Axis(cd[k].dtheta_axis.edges * cd[k].sd_hist.counts[i])
+
+                erange = cd[k].on_hist.axis(0).edges[i:i+2]
+                cthrange = cd[k].cth_axis.lims()
+
+                fig_label = self.config['output_prefix'] + '_%s_psfcum_'%k
+                fig_label += '%04.0f_%04.0f_%03.f%03.f' % (erange[0] * 100,
+                                                           erange[1] * 100,
+                                                           cthrange[0] * 100,
+                                                           cthrange[1] * 100)
+
+                fig_title = 'E = [%.3f, %.3f] '%(erange[0],erange[1])
+                fig_title += 'Cos$\\theta$ = [%.3f, %.3f]'%(cthrange[0],cthrange[1])
+
+                if self.config['output_dir']:
+                    fig_label = os.path.join(self.config['output_dir'],
+                                            os.path.basename(fig_label))
+
+                self.plot_psf_cumulative(on_hist,bkg_hist, [irf_hist], fig_label,fig_title,
+                                         None,None)
+
 
     def get_counts(self, data, theta_edges, mask):
 
@@ -780,40 +928,40 @@ class PSFValidate(IRFValidate):
         print 'Printing ', pngfile
         plt.savefig(pngfile)
 
-    def plot_psf_cumulative(self, hsignal, hbkg, hmodel, label,title,
-                              theta_max=None, text=None):
+    def plot_psf_cumulative(self, hon, hbkg, hmodel, label,title,
+                            theta_max=None, text=None):
 
-        hexcess = hsignal - hbkg
-
-
+        hsig = hon - hbkg
         fig = self._ft.create(label,figstyle='twopane',xscale='sqrt',
-                              title=title)
+                              title=title,legend_loc='best')
 
-        fig[0].add_hist(hsignal,label='Data',linestyle='None')
+        
+
+        fig[0].add_hist(hon,label='Data',linestyle='None')
         fig[0].add_hist(hbkg,hist_style='line',
                         label='Bkg',marker='None',linestyle='--',
                         color='k')
 
-        for i, h in enumerate(hmodel):
+        for i, hm in enumerate(hmodel):
+
+            h = hm*np.sum(hsig.counts)+hbkg
             fig[0].add_hist(h,hist_style='line',
-                            linestyle='-',
-                            label=self.model_labels[i],
-                            color=self.irf_colors[i],
+                            linestyle='-',label='model',
+#                            label=self.model_labels[i],
+#                            color=self.irf_colors[i],
                             linewidth=1.5)
 
-        hexcess_cum = hexcess.normalize()
-        hexcess_cum = hexcess_cum.cumulative()
+        hsig_cum = hsig.normalize()
+        hsig_cum = hsig_cum.cumulative()
 
-        fig[1].add_hist(hexcess_cum,marker='None',linestyle='None',label='Data')
+        fig[1].add_hist(hsig_cum,marker='None',linestyle='None',label='Data')
 
-        for i, h in enumerate(hmodel):
-            t = h - hbkg
-            t = t.normalize()
-            t = t.cumulative()
-            fig[1].add_hist(t,hist_style='line', 
+        for i, hm in enumerate(hmodel):
+            h = hm.cumulative()
+            fig[1].add_hist(h,hist_style='line', 
                             linestyle='-',
-                            label=self.model_labels[i],
-                            color=self.irf_colors[i],
+#                            label=self.model_labels[i],
+#                            color=self.irf_colors[i],
                             linewidth=1.5)
 
         fig[0].set_style('ylabel','Counts')
@@ -843,61 +991,63 @@ class PSFValidate(IRFValidate):
 #                         transform=axes[0].transAxes, fontsize=10)
 
 
-    def fill_agn(self,data,iegy,icth):
+    def fill_agn(self,data):
 
-        qdata = self.psf_data
-
-        egy_range = self.psf_data.egy_axis.edges[iegy:iegy+2]
-        cth_range = self.psf_data.cth_axis.edges[icth:icth+2]
-        ecenter = self.psf_data.egy_axis.center[iegy]
-        emin = 10 ** egy_range[0]
-        emax = 10 ** egy_range[1]
-        theta_edges = self.psf_data.sig_hist[iegy, icth].axis().edges
-
-        theta_max=theta_edges[-1]
-
-#        theta_max = min(3.0, self.thetamax_fn(ecenter))
-#        theta_edges = np.linspace(0, 3.0, int(3.0 / (theta_max / 100.)))
-
-        mask = PhotonData.get_mask(data, {'energy': egy_range,
-                                          'cth': cth_range},
-                                   conversion_type=self.conversion_type)
-
-        hcounts = data.hist('dtheta', mask=mask, edges=theta_edges)
-
-        domega = (theta_max ** 2) * np.pi
-        bkg_edge = [min(2.5, theta_max), 3.5]
-
-        bkg_domega = (bkg_edge[1] ** 2 - bkg_edge[0] ** 2) * np.pi
-        bkg_counts = self.get_counts(data, bkg_edge, mask)
-        bkg_density = bkg_counts / bkg_domega
-
-        qdata.bkg.fill(self.psf_data.egy_axis.center[iegy],
-                       self.psf_data.cth_axis.center[icth],
-                       bkg_counts)
-        qdata.bkg_density.set(iegy,icth,
-                              qdata.bkg.counts[iegy,icth]/bkg_domega,
-                              qdata.bkg.counts[iegy,icth]/bkg_domega**2)
-
-        hbkg = Histogram(hcounts.axis(0),
-                         counts=(hcounts.axis(0).edges[1:]**2 - 
-                                 hcounts.axis(0).edges[:-1]**2)*np.pi*bkg_density,
-                         var=0)
-
-        hexcess = hcounts - hbkg
+        cd = self._class_data
         
-#        htotal_density = hcounts.scale_density(lambda x: x * x * np.pi)
-#        hbkg_density = copy.deepcopy(hcounts)
-#        hbkg_density._counts[:] = bkg_density
-#        hbkg_density._var[:] = 0
+        for k,v in self._class_data.items():
 
-        # Fill histograms for later plotting
-        
-        qdata.sig_hist[iegy, icth] += hexcess
-        qdata.tot_hist[iegy, icth] += hcounts
-        qdata.off_hist[iegy, icth] += hbkg
-        qdata.bkg_hist[iegy, icth] += hbkg
-        qdata.excess.set(iegy, icth, *qdata.sig_hist[iegy, icth].sum())
+            evclass = list_to_bitfield(v.class_id)
+            evtype = list_to_bitfield(v.type_id)
+            cd[k].alpha_hist._counts[:] = 1.0
+
+#           theta_edges = self.psf_data.sig_hist[iegy, icth].axis().edges
+#           theta_max=theta_edges[-1]
+
+#           theta_max = min(3.0, self.thetamax_fn(ecenter))
+#           theta_edges = np.linspace(0, 3.0, int(3.0 / (theta_max / 100.)))
+
+
+            fn = copy.deepcopy(cd[k].fn)
+
+#            fn._thmax=3.5
+#            fnhi._thmax=3.0
+#            fnlo._thmin=2.5
+#            fnhi._thmin=2.5
+            
+            bkg_edge = [2.5, 3.5]
+            bkg_domega = (bkg_edge[1] ** 2 - bkg_edge[0] ** 2) * np.pi
+
+            msk_on = PhotonData.get_mask(data, {'cth': self.cth_axis.lims()},
+                                         evclass=evclass,evtype=evtype,
+                                         conversion_type=self.conversion_type)
+
+            msk_off = PhotonData.get_mask(data, {'dtheta' : bkg_edge,
+                                                 'cth': self.cth_axis.lims()},
+                                          evclass=evclass,evtype=evtype,
+                                          conversion_type=self.conversion_type)
+
+#           hcounts = data.hist('dtheta', mask=mask, edges=theta_edges)
+#           domega = (theta_max ** 2) * np.pi
+
+            cd[k].bkg.fill(data['energy'][msk_off])
+            bkg_counts = cd[k].bkg.counts
+
+            ebin = self.egy_axis.valToBinBounded(data['energy'])
+            bin_energy = self.egy_axis.center[ebin]
+            sd = data['dtheta']/cd[k].fn(bin_energy)
+
+            cd[k].off_hist._counts[:,:] = (bkg_counts[:,np.newaxis]*
+                                           cd[k].sd_hist.counts[:,np.newaxis]**2*
+                                           cd[k].domega[np.newaxis,:]/bkg_domega)
+
+            cd[k].on_hist.fill(data['energy'][msk_on],sd[msk_on])
+                                      
+#           bkg_counts = self.get_counts(data, bkg_edge, mask)
+#           bkg_density = bkg_counts / bkg_domega
+
+
+        return
         
         qdata.tot_density_hist[iegy, icth] = \
             qdata.sig_hist[iegy, icth].scale_density(lambda x: x**2*np.pi)
@@ -918,9 +1068,7 @@ class PSFValidate(IRFValidate):
                                             data['delta_theta'][mask])
 
 
-
-
-    def fit_agn(self, iegy, icth):
+    def fit_agn(self):
 
         models = self.psf_models
         irf_data = self.irf_data
@@ -1082,37 +1230,107 @@ class PSFValidate(IRFValidate):
             fig.savefig(fig_label + '.png')
 
 
-    def fill_pulsar(self, data, iegy, icth):
+    def compute_quantiles(self):
 
-        qdata = self.psf_data
+        cd = self._class_data
 
-        egy_range = qdata.egy_axis.edges[iegy:iegy+2]
-        cth_range = qdata.cth_axis.edges[icth:icth+2]
-        ecenter = qdata.egy_axis.center[iegy]
-        emin = 10 ** egy_range[0]
-        emax = 10 ** egy_range[1]
-        theta_edges = qdata.sig_hist[iegy, icth].axis().edges
+        for k,v in self._class_data.items():
+            alpha = cd[k].alpha_hist.counts
 
-        theta_max = theta_edges[-1]
 
-        mask = PhotonData.get_mask(data, {'energy': egy_range,
-                                          'cth': cth_range},
-                                   conversion_type=self.conversion_type)
 
-        on_mask = PhotonData.get_mask(data, {'energy': egy_range,
-                                             'cth': cth_range},
-                                      conversion_type=self.conversion_type,
-                                      phases=self.on_phases)
+            cd[k].sig_hist += cd[k].on_hist
+            cd[k].sig_hist -= cd[k].off_hist.counts*alpha[:,np.newaxis]
+            cd[k].bkg_hist += cd[k].off_hist.counts*alpha[:,np.newaxis]
+            
+            qdata = cd[k].qdata
 
-        off_mask = PhotonData.get_mask(data, {'energy': egy_range,
-                                             'cth': cth_range},
-                                      conversion_type=self.conversion_type,
-                                      phases=self.off_phases)
+            # Loop on Energy
+            for i in range(cd[k].on_hist.axis(0).nbins):
 
-        (hon, hoff, hoffs) = getOnOffHist(data, 'dtheta', phases=self.phases,
-                                          edges=theta_edges, mask=mask)
+                sd = cd[k].sd_hist.counts[i]                
+                on_hist = cd[k].on_hist.slice(0,i)
+                off_hist = cd[k].off_hist.slice(0,i)
+                sig_hist = cd[k].sig_hist.slice(0,i)
 
+                on_hist._axes[0] = Axis(on_hist._axes[0].edges*sd)
+                off_hist._axes[0] = Axis(off_hist._axes[0].edges*sd)
+                sig_hist._axes[0] = Axis(sig_hist._axes[0].edges*sd)
+
+#                alpha_hist = cd[k].alpha_hist.slice(0,i)
+                
+                if self.data_type == 'pulsar':
+                    hq = HistQuantileOnOff(on_hist, off_hist, alpha[i])
+                else:
+                    bkg_counts = cd[k].bkg.counts[i]
+                    bkg_domega = (3.5**2-2.5**2)*np.pi
+
+                    hq = HistQuantileBkgFn(on_hist, 
+                                           lambda x: x**2 * np.pi / bkg_domega,
+                                           bkg_counts)
+
+                print '-'*80
+
+#                print bkg_counts, sig_hist.sum()
+
+                for j, q in enumerate(cd[k].quantiles):
+            
+                    ql = cd[k].quantile_labels[j]
+                    qmean = hq.quantile(fraction=q)
+                    qdist_mean, qdist_err = hq.bootstrap(q, niter=200)
+                    qdata[j].set(i, qmean, qdist_err ** 2)
+                    print ql, ' %10.4f +/- %10.4f' % (qmean, qdist_err)
+
+#    def compute_quantiles_bin(self,on_hist,off_hist,alpha_hist):
         
+        
+        
+
+
+    def fill_pulsar(self, data):
+
+        cd = self._class_data
+        
+        for k,v in self._class_data.items():
+
+            evclass = list_to_bitfield(v.class_id)
+            evtype = list_to_bitfield(v.type_id)
+            cd[k].alpha_hist._counts[:] = self.alpha
+
+            mask = PhotonData.get_mask(data, {'cth': self.cth_axis.lims()},
+                                       evclass=evclass,evtype=evtype,
+                                       conversion_type=self.conversion_type)
+
+            msk_on = PhotonData.get_mask(data, {'cth': self.cth_axis.lims()},
+                                          conversion_type=self.conversion_type,
+                                          evclass=evclass,evtype=evtype,
+                                          phases=self.on_phases)
+
+            msk_off = PhotonData.get_mask(data, {'cth': self.cth_axis.lims()},
+                                           conversion_type=self.conversion_type,
+                                           evclass=evclass,evtype=evtype,
+                                           phases=self.off_phases)
+            
+            ebin = self.egy_axis.valToBinBounded(data['energy'])
+            bin_energy = self.egy_axis.center[ebin]
+            sd = data['dtheta']/cd[k].fn(bin_energy)
+            cd[k].on_hist.fill(data['energy'][msk_on],sd[msk_on])
+            cd[k].off_hist.fill(data['energy'][msk_off],sd[msk_off])
+            
+
+#            plt.figure()
+#            cd[k].on_hist.slice(0,4).plot()
+#            cd[k].off_hist.slice(0,4).plot()
+#            plt.show()
+
+
+#            (hon, hoff, hoffs) = getOnOffHist(data, 'dtheta', phases=self.phases,
+#                                              edges=theta_edges, mask=mask)
+
+            
+
+
+        return
         hexcess = copy.deepcopy(hon)
         hexcess -= hoffs
 
@@ -1126,18 +1344,8 @@ class PSFValidate(IRFValidate):
         on_sum = np.sum(hon._counts)
         off_sum = np.sum(hoff._counts)
 
-        # Fill histograms for later plotting
-        qdata.tot_density_hist[iegy, icth] += htotal_density
-        qdata.bkg_density_hist[iegy, icth] += hoffs_density
-        qdata.sig_hist[iegy, icth] += hexcess
-        qdata.tot_hist[iegy, icth] += hon
-        qdata.off_hist[iegy, icth] += hoff
-        qdata.bkg_hist[iegy, icth] += hoffs
-        qdata.excess.set(iegy, icth, np.sum(qdata.sig_hist[iegy, icth]._counts))
-
         
         src = data._srcs[0]
-
         xedge = np.linspace(-theta_max, theta_max, 301)
 
         if qdata.sky_image[iegy,icth] is None:
@@ -1171,65 +1379,6 @@ class PSFValidate(IRFValidate):
 #        if len(data['ra'][on_mask]) > 0:
 #            im.fill(data['ra'][on_mask], data['dec'][on_mask])
 
-
-    def fill_models(self, iegy, icth):
-        """Fill IRF model distributions."""
-
-        models = self.psf_models
-        irf_data = self.irf_data
-        psf_data = self.psf_data
-
-        egy_range = psf_data.egy_axis.edges[iegy:iegy+2]
-        cth_range = psf_data.cth_axis.edges[icth:icth+2]
-        ecenter = psf_data.egy_axis.center[iegy]
-        emin = 10 ** psf_data.egy_axis.edges[iegy]
-        emax = 10 ** psf_data.egy_axis.edges[iegy+1]
-
-        bkg_hist = psf_data.bkg_hist[iegy, icth]
-        sig_hist = psf_data.sig_hist[iegy, icth]
-        on_hist = psf_data.tot_hist[iegy, icth]
-        off_hist = psf_data.off_hist[iegy, icth]
-        excess_sum = psf_data.excess._counts[iegy, icth]
-
-        for i, ml in enumerate(self.model_labels):
-            m = models[ml]
-
-            print 'Fitting model ', ml
-            hmodel_sig = m.histogram(emin, emax,cth_range[0],cth_range[1],
-                                     on_hist.axis().edges).normalize()
-            model_norm = excess_sum
-            hmodel_sig *= model_norm
-
-            irf_data[ml].excess.set(iegy, icth, sig_hist.sum()[0])
-            irf_data[ml].ndf.set(iegy, icth, float(sig_hist.axis().nbins))
-
-            hmd = hmodel_sig.scale_density(lambda x: x * x * np.pi)
-            hmd += psf_data.bkg_density_hist[iegy, icth]
-
-            irf_data[ml].tot_density_hist[iegy, icth] = hmd
-            irf_data[ml].bkg_density_hist[iegy, icth] = \
-                copy.deepcopy(psf_data.bkg_density_hist[iegy, icth])
-            irf_data[ml].sig_hist[iegy, icth] = hmodel_sig
-            irf_data[ml].bkg_hist[iegy, icth] = copy.deepcopy(bkg_hist)
-            irf_data[ml].tot_hist[iegy, icth] = hmodel_sig + bkg_hist
-
-            for j, q in enumerate(psf_data.quantiles):
-                ql = psf_data.quantile_labels[j]
-                qm = m.quantile(emin, emax, cth_range[0],cth_range[1], q)
-                self.irf_data[ml].qdata[j].set(iegy, icth, qm)
-                print ml, ql, qm
-
-#            ndf = hexcess.nbins
-
-#            qmodel[ml].excess.set(iegy, icth, hexcess.sum()[0])
-#            qmodel[ml].ndf.set(iegy, icth, hexcess.nbins)
-#            qmodel[ml].chi2.set(iegy,icth,hexcess.chi2(hmodel))
-#            qmodel[ml].rchi2.set(iegy,icth,
-#            qmodel[ml].chi2[iegy,icth]/hexcess.nbins)
-#           print ml, ' chi2/ndf: %f/%d rchi2: %f'%(qmodel[ml].chi2[iegy,icth],
-#                                                   ndf,
-#                                                   qmodel[ml].rchi2[iegy,icth])
-
     def fit_pulsar(self, iegy, icth):
         
         models = self.psf_models
@@ -1259,8 +1408,6 @@ class PSFValidate(IRFValidate):
 
         print 'Computing Quantiles'
         hq = HistQuantileOnOff(on_hist, off_hist, self.alpha)
-
-
         
         if excess_sum > 25:
 
@@ -1518,8 +1665,8 @@ class PSFValidate(IRFValidate):
 
         fig.plot()
         
-    def compute_quantiles(self, hq, qdata, iegy, icth,
-                          theta_max=None):
+    def compute_quantiles_bin(self, hq, qdata, iegy, icth,
+                              theta_max=None):
 
         emin = 10 ** qdata.egy_axis.edges[iegy]
         emax = 10 ** qdata.egy_axis.edges[iegy+1]

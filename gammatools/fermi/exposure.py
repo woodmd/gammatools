@@ -64,7 +64,7 @@ class LTCube(object):
         self._domega = (self._cth_axis.edges[1:]-self._cth_axis.edges[:-1])*2*np.pi
             
     def get_src_lthist(self,ra,dec,cth_axis=None):
-        
+
         if cth_axis is None:
             cth_axis = copy.deepcopy(self._cth_axis)
             new_axis = False
@@ -74,8 +74,11 @@ class LTCube(object):
                                        cth_axis.nbins*4)
             new_axis = True
 
+        
+
         ipix = healpy.ang2pix(64,np.pi/2. - np.radians(dec),
                               np.radians(ra),nest=True)
+
 
         if new_axis:
             lt = interpolate(self._cth_axis.center,
@@ -195,10 +198,7 @@ class ExposureCalc(object):
 
     def getExpByName(self,src_names,egy_axis,cth_axis=None):
 
-        print 'cth_axis ', cth_axis
-
         exph = None
-
         cat = Catalog.get()
         for s in src_names:
             src = cat.get_source_by_name(s) 
@@ -224,7 +224,11 @@ class ExposureCalc(object):
 
         exph = Histogram(egy_axis)
         lthist = self._ltc.get_src_lthist(ra,dec,cth_axis)
+
+#        lthist = Histogram(cth_axis,counts=1,var=0)
+
         exph._counts = np.sum(aeff*lthist.counts[np.newaxis,:],axis=1)
+ #       exph._counts = np.sum(aeff,axis=1)
         return exph
 
     @staticmethod

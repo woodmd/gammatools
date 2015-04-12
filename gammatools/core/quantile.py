@@ -8,6 +8,7 @@ from scipy.interpolate import UnivariateSpline
 import scipy.optimize as opt
 import matplotlib.pyplot as plt
 from gammatools.core.histogram import Histogram
+from gammatools.core.util import percentile
 from scipy.stats import norm
 
 class HistBootstrap(object):
@@ -78,41 +79,58 @@ class HistQuantileBkgFn(object):
         if ncounts is None: ncounts = self._ncounts
         if xedge is None: xedge = self._xedge
         
+#        print 'nbkg ', nbkg
+#        print 'sum(counts) ', np.sum(ncounts)
+
         ncounts_cum = np.cumsum(ncounts)
         nbkg_cum = self._bkg_fn(xedge)*nbkg
 
         nex_cum = copy.copy(ncounts_cum)
         nex_cum -= nbkg_cum
-        nex_tot = nex_cum[-1]
+        cdf = nex_cum/float(nex_cum[-1])
+        x = percentile(xedge,cdf,fraction)
 
-        fn_nexcdf = UnivariateSpline(xedge,nex_cum,s=0,k=1)
-        
-        # Find the first instance of crossing 1
+#        plt.figure()
+#        plt.plot(xedge,ncounts)
+#        plt.plot(xedge,self._bkg_fn(xedge)*nbkg)
 
-        r = (nex_cum-nex_tot)        
-        idx = np.where(r>=0)[0][0]
-        xmax = xedge[idx]
+#        plt.figure()
+#        plt.plot(xedge,ncounts_cum)
+#        plt.plot(xedge,nbkg_cum)
         
-        q = opt.brentq(lambda t: fn_nexcdf(t)-nex_tot*fraction,xedge[0],xmax)
+#        plt.figure()
 
-        return q
-        
+#        plt.plot(xedge,cdf)
+#        plt.axhline(fraction)
+#        plt.axvline(x)
+#        plt.gca().grid(True)
+#        plt.show()
+
+        return x        
         
     def bootstrap(self,fraction=0.68,niter=100,xmax=None):
 
-        nedge = len(self._ncounts[self._xedge<=xmax])
+        if xmax is None:
+            nedge = len(self._xedge)
+        else:
+            nedge = len(self._ncounts[self._xedge<=xmax])
+
         xedge = self._xedge[:nedge]
-        
-        h = Histogram.createHistModel(xedge,self._ncounts[1:nedge])
-        nbkg = np.random.poisson(self._nbkg,niter)
+
+        h = Histogram.createFromCDF(xedge,self._ncounts[1:nedge])
+        nbkg = np.random.poisson(self._nbkg,niter).astype(float)
+
         ncounts = np.random.poisson(np.concatenate(([0],h.counts)),
                                     (niter,nedge))
         
+
         xq = []
 
         for i in range(niter):
-            xq.append(self._quantile(nbkg[i],self._xedge[:nedge],
-                                     ncounts[i],fraction))
+
+            x = self._quantile(nbkg[i],self._xedge[:nedge],
+                                     ncounts[i],fraction)
+            xq.append(x)
 
         xq_mean = np.mean(np.array(xq))
         xq_rms = np.std(np.array(xq))
@@ -161,7 +179,7 @@ class HistQuantileOnOff(object):
     """
     def __init__(self,hon,hoff,alpha):
 
-        self._axis = hon.axis()
+        self._axis = copy.deepcopy(hon.axis())
         self._alpha = alpha
         self._non = np.concatenate(([0],hon.counts))
         self._noff = np.concatenate(([0],hoff.counts))
@@ -172,11 +190,11 @@ class HistQuantileOnOff(object):
         return self.binomial(self._non,self._noff,fraction)
 
 
-    def bootstrap(self,fraction=0.68,niter=1000,xmax=None):
+    def bootstrap(self,fraction=0.68,niter=100,xmax=None):
 
         nedge = len(self._non)
-        hon = Histogram.createHistModel(self._axis.edges,self._non[1:])
-        hoff = Histogram.createHistModel(self._axis.edges,self._noff[1:])
+        hon = Histogram.createFromCDF(self._axis.edges,self._non[1:])
+        hoff = Histogram.createFromCDF(self._axis.edges,self._noff[1:])
 
         non = np.random.poisson(np.concatenate(([0],hon.counts)),
                                 (niter,nedge))
@@ -186,10 +204,7 @@ class HistQuantileOnOff(object):
         xq = []
 
         for i in range(niter):
-
             xq.append(self._quantile(non[i],noff[i],fraction))
-
-            
 
         xq_mean = np.mean(np.array(xq))
         xq_rms = np.std(np.array(xq))
@@ -212,11 +227,13 @@ class HistQuantileOnOff(object):
         non_tot = non_cum[-1]
         noff_tot = noff_cum[-1]
         nex_tot = non_tot-self._alpha*noff_tot
-        
-        fn_nexcdf = UnivariateSpline(self._axis.edges,nex_cum,s=0,k=1)
+        cdf = nex_cum/nex_tot
 
-        return opt.brentq(lambda t: fn_nexcdf(t)-nex_tot*fraction,
-                          self._axis.edges[0],self._axis.edges[-1])
+        x = percentile(self._axis.edges,cdf,fraction)
+        return x  
+#        fn_nexcdf = UnivariateSpline(self._axis.edges,nex_cum,s=0,k=1)
+#        return opt.brentq(lambda t: fn_nexcdf(t)-nex_tot*fraction,
+#                          self._axis.edges[0],self._axis.edges[-1])
 
     def binomial(self,non,noff,fraction=0.68):
 

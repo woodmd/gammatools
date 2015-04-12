@@ -65,11 +65,6 @@ class FT1Loader(Configurable):
         else:
             table = evhdu.data
 
-
-        table = table[:1000]
-            
-        print 'Applying zenith and energy cut'
-            
         msk = table.field('ZENITH_ANGLE')<self.config['zmax']
 
         if not self.config['event_class_id'] is None:
@@ -140,21 +135,19 @@ class FT1Loader(Configurable):
             msk = dth < np.radians(self.config['max_dist'])
             table_src = table_src[msk]
 
-
-            print 'Masking vectors'
             vra = vra[msk]
             vdec = vdec[msk]
             vptz_ra = vptz_ra[msk]
             vptz_dec = vptz_dec[msk]
             
-            print 'Creating veq, eptz'
             veq = Vector3D.createLatLon(np.radians(vdec),
                                         np.radians(vra))
 
             eptz = Vector3D.createLatLon(np.radians(vptz_dec),
                                          np.radians(vptz_ra))
 
-            theta3 = vsrc.separation(eptz)
+            # True incidenge angle from source
+            src_theta = vsrc.separation(eptz)
             
             print 'Getting projected direction'
             vp = veq.project2d(vsrc)
@@ -211,7 +204,6 @@ class FT1Loader(Configurable):
             
             event_class = bitarray_to_int(table_src.field('EVENT_CLASS'),True)
 
-            print 'Filling columns'
             pd.append('psfcore',psf_core)
             pd.append('time',table_src.field('TIME'))
             pd.append('ra',table_src.field('RA'))
@@ -229,14 +221,12 @@ class FT1Loader(Configurable):
             pd.append('src_index',src_index) 
             pd.append('phase',src_phase)
 
-            costheta = np.cos(np.radians(table_src.field('THETA')))
-            
-            print 'Filling cos(theta)'
+            pd.append('cth',np.cos(src_theta))
+#            pd.append('cth',np.cos(np.radians(table_src.field('THETA'))))
+#            costheta2 = np.cos(src_theta)
+#            costheta = np.cos(np.radians(table_src.field('THETA')))
 
-            if self._phist is None:
-                pd.append('cth',np.cos(np.radians(table_src.field('THETA'))))
-            else:
-
+            if self._phist is not None:
                 import skymaps
                 cthv = []            
                 for k in range(len(table_src)):

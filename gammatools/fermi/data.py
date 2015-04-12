@@ -36,31 +36,19 @@ class Data(object):
     def save(self,outfile,compress=True):
         save_object(self,outfile)
 
-#        import cPickle as pickle
-#        fp = open(outfile,'w')
-#        pickle.dump(self,fp,protocol = pickle.HIGHEST_PROTOCOL)
-#        fp.close()
-
     def to_dict(self):
         
         o = {}
         for k,v in self.__dict__.items():           
-
-            print k, v
- 
             if isinstance(v,Axis) or isinstance(v,HistogramND):
                 o[k] = v.to_dict()
             else:
                 o[k] = v
-
         return o
 
     @staticmethod
     def load(infile):
         return load_object(infile)
-#        import cPickle as pickle
-#        return pickle.load(open(infile,'rb'))
-
 
 class PhotonData(object):
 
@@ -155,8 +143,10 @@ class PhotonData(object):
 
         if theta_fn is not None:
 
-            if len(theta_fn) == 1:
-                mask &= data['dtheta'] <= theta_fn[0](data['energy'])
+            if not isinstance(theta_fn,list):
+                mask &= (data['dtheta'] <= theta_fn(data['energy']))
+            elif len(theta_fn) == 1:
+                mask &= (data['dtheta'] <= theta_fn[0](data['energy']))
             else:
                 mask &= data['dtheta'] >= theta_fn[0](data['energy'])
                 mask &= data['dtheta'] <= theta_fn[1](data['energy'])
