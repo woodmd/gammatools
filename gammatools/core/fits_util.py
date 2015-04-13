@@ -394,6 +394,20 @@ class HealpixSkyCube(HealpixImage):
 #        return interpolate2d(self._xedge,self._yedge,self._counts,
 #                             *pixcrd)
 
+    def integrate(self,lonrange=None,latrange=None):
+
+        c = self.center()
+        msk = np.empty(len(c[0]),dtype='bool'); msk.fill(True)
+        msk &= (c[2] > latrange[0])&(c[2] < latrange[1])
+        msk = msk.reshape(self._counts.shape)
+
+        c = copy.copy(self._counts); c[~msk] = 0
+        v = copy.copy(self._var); v[~msk] = 0
+        
+        return Histogram(self.axis(0),
+                         counts=np.sum(c,axis=1),
+                         var=np.sum(v,axis=1))     
+        
     def center(self):
         pixcrd = np.array(self.axes()[1].edges[:-1],dtype=int)
         pixang0, pixang1 = hp.pixelfunc.pix2ang(self.nside,pixcrd)
@@ -472,7 +486,6 @@ class HealpixSkyCube(HealpixImage):
         hp_axis = Axis.create(0,image_data.shape[1],image_data.shape[1])
         return HealpixSkyCube([energy_axis,hp_axis],1,image_data)
 
-
     def save(self,fitsfile):
 
         hdu_image = pyfits.PrimaryHDU(self._counts)
@@ -541,7 +554,7 @@ class FITSImage(HistogramND):
 
     def slice(self,sdims,dim_index):
 
-        h = HistogramND.slice(self,sdims,dim_index)
+        h = HistogramND.sliceByValue(self,sdims,dim_index)
         if h.ndim() == 3:
             return SkyCube(self._wcs,h.axes(),h.counts,
                            self._roi_radius_deg,self._roi_msk)
@@ -549,7 +562,26 @@ class FITSImage(HistogramND):
             return SkyImage(self._wcs,h.axes(),h.counts,
                             self._roi_radius_deg,self._roi_msk)
         else:
-            h._axes[0] = Axis(h.axis().pix_to_coord(h.axis().edges()))
+            h._axes[0] = Axis(h.axis().pix_to_coord(h.axis().edges))
+            return h
+        
+    def sliceByValue(self,sdims,dim_coord):
+
+        sdims = np.array(sdims,ndmin=1,copy=True)
+        dim_coord = np.array(dim_coord,ndmin=1,copy=True)
+
+        if 0 in sdims and 1 in sdims:        
+            dim_coord = self._wcs.wcs_world2pix(dim_coord[0],dim_coord[1],0)
+            
+        h = HistogramND.slice(self,sdims,dim_coord)
+        if h.ndim() == 3:
+            return SkyCube(self._wcs,h.axes(),h.counts,
+                           self._roi_radius_deg,self._roi_msk)
+        elif h.ndim() == 2:        
+            return SkyImage(self._wcs,h.axes(),h.counts,
+                            self._roi_radius_deg,self._roi_msk)
+        else:
+            h._axes[0] = Axis(h.axis().pix_to_coord(h.axis().edges))
             return h
 
     def project(self,pdims,bin_range=None,offset_coord=False):

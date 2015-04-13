@@ -514,13 +514,13 @@ class HistogramND(object):
 
         center = []
         for i in range(self._ndim): center.append(self._axes[i].center)
-
+        
         if len(x) == 1:
             xv = x[0]
             shape = x[0].shape[1]
         else:            
             xv, shape = expand_array(*x)
-
+            
         v = interpolatend(center,self._counts,xv)
         return v.reshape(shape)
 
