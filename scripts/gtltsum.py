@@ -41,17 +41,17 @@ else:
     outfile = args.output
 
 
-ltlist = 'ltlist.txt'
-
-fh = open(ltlist,'w')
-
-for f in args.files:
-    fh.write('%s\n'%os.path.abspath(f))
-
-fh.close()
-
-ltlist = os.path.abspath(ltlist)
-
+if len(args.files) > 1:
+    
+    ltlist = 'ltlist.txt'
+    fh = open(ltlist,'w')
+    for f in args.files:
+        fh.write('%s\n'%os.path.abspath(f))
+    fh.close()
+    ltlist = os.path.abspath(ltlist)
+else:
+    ltlist = os.path.abspath(args.files[0])
+    
 gt_task = LTSumTask(outfile,infile1='@' + ltlist)
 
 gt_task.run()

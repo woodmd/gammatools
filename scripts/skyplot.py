@@ -104,7 +104,7 @@ irf = None
 m = None
 
 if irf_version:
-    irf = IRFManager.create(irf_version, True,irf_dir=irf_dir)
+    irf = IRFManager.create(irf_version, load_from_file=True,irf_dir=irf_dir)
     ltfile = '/Users/mdwood/fermi/data/p301/ltcube_5years_zmax100.fits'
     m = PSFModelLT(irf,src_type='iso')
     
