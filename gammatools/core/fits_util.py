@@ -289,7 +289,7 @@ class HealpixSkyImage(HealpixImage):
 
         zscale_power = kwargs.get('zscale_power',2.0)
         zscale = kwargs.get('zscale',None)
-        cbar = kwargs.get('cbar',True)
+        cbar = kwargs.get('cbar',None)
         cbar_label = kwargs.get('cbar_label','')
         title = kwargs.get('title','')
         levels = kwargs.get('levels',None)
@@ -351,29 +351,29 @@ class HealpixSkyImage(HealpixImage):
 
         hp.visufunc.graticule(verbose=False,lw=0.5,color='k')
 
-        if cbar:
+        if cbar is not None:
 
             im = ax.get_images()[0]
-            cb = fig.colorbar(im, orientation='horizontal', 
-                              shrink=.8, pad=0.05,format='%.3g')
+
+            cb_kw = dict(orientation = 'vertical', 
+                         shrink=.6, pad=0.05)
+            cb_kw.update(cbar)
+
+            cb = fig.colorbar(im, **cb_kw)#,format='%.3g')
+
+            cb.set_label(cbar_label)
             #, ticks=[min, max])
-            cb.ax.xaxis.set_label_text(cbar_label)
+#            cb.ax.xaxis.set_label_text(cbar_label)
 
-            if zscale=='pow':
-                gamma = 1./zscale_power
-
-                print vmin, vmed, vmax
-
-                ticks = np.linspace(vmin**gamma,
-                                    vmax**gamma,6)**(1./gamma)
-
-                print ticks
-
-                cb.set_ticks(ticks)
+#            if zscale=='pow':
+#                gamma = 1./zscale_power
+#                ticks = np.linspace(vmin**gamma,
+#                                    vmax**gamma,6)**(1./gamma)
+#                cb.set_ticks(ticks)
 
 #            cb.ax.xaxis.labelpad = -8
             # workaround for issue with viewers, see colorbar docstring
-            cb.solids.set_edgecolor("face")
+#            cb.solids.set_edgecolor("face")
 
     
 class HealpixSkyCube(HealpixImage):
@@ -444,7 +444,7 @@ class HealpixSkyCube(HealpixImage):
 
         hdulist = pyfits.open(fitsfile)        
 
-        hdulist.info()
+#        hdulist.info()
 
         header = hdulist[image_hdu].header
         v = hdulist[image_hdu].data
@@ -468,8 +468,6 @@ class HealpixSkyCube(HealpixImage):
             energy_axis = Axis.createFromArray(np.log10(energies))
         else:
             raise Exception('Unknown HDU name.')
-
-        print image_data.shape
 
         hp_axis = Axis.create(0,image_data.shape[1],image_data.shape[1])
         return HealpixSkyCube([energy_axis,hp_axis],1,image_data)
