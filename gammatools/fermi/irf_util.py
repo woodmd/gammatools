@@ -111,6 +111,7 @@ class IRFManager(object):
     def psf(self,dtheta,egy,cth,**kwargs):
         
         aeff_tot = self.aeff(egy,cth,**kwargs)
+        aeff_tot[aeff_tot<=0] = 1E-8
         
         v = None
         for i, irf in enumerate(self._irfs):
@@ -119,7 +120,7 @@ class IRFManager(object):
             psf = irf.psf(dtheta,egy,cth,**kwargs)*aeff
             if i == 0: v  = psf
             else: v += psf
-
+            
         return v/aeff_tot
 
     def psf_quantile(self,egy,cth,frac=0.68):
@@ -195,10 +196,18 @@ class IRF(object):
         if irf_dir is None: irf_dir = 'custom_irfs'
 
         irf_name = irf_name.replace('::','_')
-        psf_file = os.path.join(irf_dir,'psf_%s.fits'%(irf_name))
-        aeff_file = os.path.join(irf_dir,'aeff_%s.fits'%(irf_name))
-        edisp_file = os.path.join(irf_dir,'edisp_%s.fits'%(irf_name))
 
+        if os.path.isfile(os.path.join(irf_dir,'psf_%s.fits'%(irf_name))):  
+            psf_file = os.path.join(irf_dir,'psf_%s.fits'%(irf_name))
+            aeff_file = os.path.join(irf_dir,'aeff_%s.fits'%(irf_name))
+            edisp_file = os.path.join(irf_dir,'edisp_%s.fits'%(irf_name))
+        else:
+            irf_name = irf_name.replace('FRONT','front')
+            irf_name = irf_name.replace('BACK','back')
+            psf_file = os.path.join(irf_dir,'psf_%s.fits'%(irf_name))
+            aeff_file = os.path.join(irf_dir,'aeff_%s.fits'%(irf_name))
+            edisp_file = os.path.join(irf_dir,'edisp_%s.fits'%(irf_name))
+            
         psf = PSFIRF(psf_file)
         aeff = AeffIRF(aeff_file)
         edisp = EDispIRF(edisp_file)
@@ -637,12 +646,11 @@ class PSFIRF(IRFComponent):
         egy = np.array(egy,ndmin=1)
         cth = np.array(cth,ndmin=1)
 
-
         dtheta[dtheta <= 10**self._theta_axis.lo_edge()] =\
             10**self._theta_axis.lo_edge()
-        
+                
         return self._psf_hist.interpolate(cth,egy,np.log10(dtheta))
-
+        
     def king(self,dtheta,sig,g):
 
         if sig.shape[0] > 1:

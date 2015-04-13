@@ -33,6 +33,7 @@ class FigureSubplot(object):
     style = { 'xlabel' : None,
               'ylabel' : None,
               'zlabel' : None,
+              'fontsize' : None,
               'xlim'   : None,
               'ylim'   : None,
               'ylim_ratio' : None,
@@ -50,6 +51,7 @@ class FigureSubplot(object):
               'hist_style' : None,
               'hist_xerr' : True,
               'legend_loc' : 'upper right',
+              'legend_ncol' : 1,
               'legend_fontsize' : 10,
               'legend'   : True,
               'norm_style' : 'ratio',
@@ -258,7 +260,8 @@ class FigureSubplot(object):
         ax.grid(True)
         if len(labels) > 0 and style['legend']:
             ax.legend(prop={'size' : style['legend_fontsize']},
-                      loc=style['legend_loc'],ncol=1,numpoints=1)
+                      loc=style['legend_loc'],
+                      ncol=style['legend_ncol'],numpoints=1)
 
         if not style['ylabel'] is None:
             ax.set_ylabel(style['ylabel'])
@@ -276,6 +279,9 @@ class FigureSubplot(object):
 
         if xscale == 'log': ax.set_xscale('log')
         elif xscale == 'sqrt': ax.set_xscale('sqrt',exp=2.0)
+
+        if style['fontsize'] is not None:
+            set_font_size(ax,style['fontsize'])
         
         
 class RatioSubplot(FigureSubplot):

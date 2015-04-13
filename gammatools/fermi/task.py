@@ -6,7 +6,6 @@ from tempfile import mkdtemp
 import re
 import glob
 from GtApp import GtApp
-#from uw.like.roi_catalogs import SourceCatalog, Catalog2FGL, Catalog3Y
 #from BinnedAnalysis import BinnedObs,BinnedAnalysis
 #from UnbinnedAnalysis import UnbinnedObs, UnbinnedAnalysis
 #from pyLikelihood import ParameterVector
@@ -32,8 +31,8 @@ class Task(Configurable):
         'overwrite'    : (True,'Overwrite the output file if it exists.'),
         'stage_inputs' : (False,'Copy input files to temporary working directory.') }
     
-    def __init__(self,config=None,**kwargs):       
-        super(Task,self).__init__(config,**kwargs)
+    def __init__(self,config=None,opts=None,**kwargs):       
+        super(Task,self).__init__(config,opts,**kwargs)
 
         self._input_files = []
         self._output_files = []
