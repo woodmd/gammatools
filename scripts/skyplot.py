@@ -112,8 +112,6 @@ im = FITSImage.createFromHDU(hdulist[args.hdu])
 if args.model_file:
     model_hdu = pyfits.open(args.model_file)[0]
     irf_version = get_irf_version(model_hdu.header)
-
-    
     im_mdl = FITSImage.createFromHDU(model_hdu)
 
     m = re.search('(.+)V5_(.+)',irf_version[0])
@@ -135,7 +133,7 @@ if args.model_file:
 #sys.exit(0)
 
     
-irf_dir = '/u/gl/mdwood/ki10/analysis/custom_irfs/'
+irf_dir = '/u/gl/mdwood/ki20/mdwood/fermi/custom_irfs'
 if 'CUSTOM_IRF_DIR' in os.environ:
     irf_dir = os.environ['CUSTOM_IRF_DIR']
 
@@ -214,7 +212,8 @@ else:
                               make_projection=True,projection=0.5)
         
         fp.make_plots_skycube(suffix='data_map_slice_smooth',
-                              plots_per_fig=args.slice_per_fig,delta_bin=delta_bin,
+                              plots_per_fig=args.slice_per_fig,
+                              delta_bin=delta_bin,
                               make_projection=True,projection=0.5,smooth=True)
 
         fp.make_plots_skycube(smooth=True,resid_type='significance',
