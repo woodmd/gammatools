@@ -31,18 +31,53 @@ from gammatools.fermi.irf_util import *
 from gammatools.fermi.psf_model import *
 
 
+def get_event_types(event_type):
 
+    bits = {0b000100 : 'PSF0',
+            0b001000 : 'PSF1',
+            0b010000 : 'PSF2',
+            0b100000 : 'PSF3'}
+
+    o = []
+    
+    for k,v in bits.items():
+        if (event_type&k): o.append(v)
+    
+    return o
+
+def get_dss_keywords(header):
+
+    o = {}
+    for k, v in header.iteritems():
+
+        m = re.search('DSTYP(\d)',k)
+        if m is None: continue
+        o[v] = header['DSVAL%s'%(m.group(1))]
+
+    return o
+        
 
 def get_irf_version(header):
 
-    for k, v in header.iteritems():
+    kwds = get_dss_keywords(header)
 
-        m = re.search('DSTYP(\d)',k)        
-        if m is None or v != 'IRF_VERSION': continue
+    event_types = None
+    event_class = None
+    
+    for k,v in kwds.items():
 
-        return header['DSVAL%s'%(m.group(1))]
+        print k
+        m = re.search('BIT_MASK\(EVENT_TYPE,([0-9]+),(.+)\)',k)
+        if m is not None:
+            event_types = get_event_types(int(m.groups()[0]))
 
-    return None
+        if k == 'IRF_VERSION':
+            m = re.search('([\S]+)',v)
+            event_class = m.groups()[0]
+
+    if 'PSF' in event_class: event_types = None
+                        
+    return [event_class, event_types]
 
 usage = "usage: %(prog)s [options] [FT1 file ...]"
 description = """Plot the contents of a FITS image file."""
@@ -77,12 +112,17 @@ im = FITSImage.createFromHDU(hdulist[args.hdu])
 if args.model_file:
     model_hdu = pyfits.open(args.model_file)[0]
     irf_version = get_irf_version(model_hdu.header)
+
+    
     im_mdl = FITSImage.createFromHDU(model_hdu)
 
-    m = re.search('(.+)V5_(.+)',irf_version)
+    m = re.search('(.+)V5_(.+)',irf_version[0])
     if m and 'stacked' in args.model_file:
-        irf_version = m.groups()[0]+'V5'
-
+        irf_version[0] = m.groups()[0]+'V5'
+    else:
+        irf_version[1] = None
+        
+        
     
 #fp = FITSPlotter(im,im_mdl,None,args.prefix)
 
@@ -104,16 +144,11 @@ irf = None
 m = None
 
 if irf_version:
-    irf = IRFManager.create(irf_version, load_from_file=True,irf_dir=irf_dir)
+    irf = IRFManager.create(irf_version[0],type_names=irf_version[1],
+                            load_from_file=True,irf_dir=irf_dir)
     ltfile = '/Users/mdwood/fermi/data/p301/ltcube_5years_zmax100.fits'
     m = PSFModelLT(irf,src_type='iso')
     
-#for k, v in hdulist[0].header.iteritems():
-#    print k, v
-    
-#viewer = FITSImageViewer(im)
-#viewer.plot()
-
 
 
 if args.gui:
@@ -125,20 +160,8 @@ if args.gui:
                             size=(2.0*640, 1.5*480))
 
     frame.Show()
-
-
-        
-#frame = Frame(im)
-
-
-
-#frame.Show(True)
-
-
     app.MainLoop()
     plt.show()
-
-
 
 else:
     
