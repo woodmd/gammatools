@@ -319,9 +319,6 @@ class PSFModelLT(PSFModel):
                 self._tau += ltc.get_src_lthist(lonlat[0],
                                                 lonlat[1],
                                                 cth_axis=self._cth_axis)
-        self._tau.normalize().plot()
-
-
 
 if __name__ == '__main__':
 
