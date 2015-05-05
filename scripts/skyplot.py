@@ -92,6 +92,7 @@ parser.add_argument('--slice_per_fig', default=4, type=int)
 parser.add_argument('--model_file', default=None)
 parser.add_argument('--prefix', default=None)
 parser.add_argument('--irf', default=None)
+parser.add_argument('--title', default=None)
 
 parser.add_argument('--hdu', default = 0, type=int,
                     help = 'Set the HDU to plot.')
@@ -143,7 +144,8 @@ im_mdl = None
 if model_hdu:
     im_mdl = FITSImage.createFromHDU(model_hdu)
 
-fp = FITSPlotter(ccube,im_mdl,m,args.prefix,rsmooth=args.rsmooth)
+fp = FITSPlotter(ccube,im_mdl,m,args.prefix,rsmooth=args.rsmooth,
+                 title=args.title)
 
 if isinstance(im,SkyImage):
     fp.make_projection_plots_skyimage(ccube)
