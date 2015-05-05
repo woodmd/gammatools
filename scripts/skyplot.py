@@ -22,8 +22,6 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.pyplot import gcf, setp
 
-
-from matplotlib.widgets import Slider, Button, RadioButtons
 from gammatools.core.fits_util import SkyImage, SkyCube, FITSImage
 from gammatools.core.fits_viewer import *
 from gammatools.core.mpl_util import PowerNormalize
@@ -93,6 +91,7 @@ parser.add_argument('--slice_per_fig', default=4, type=int)
 
 parser.add_argument('--model_file', default=None)
 parser.add_argument('--prefix', default=None)
+parser.add_argument('--irf', default=None)
 
 parser.add_argument('--hdu', default = 0, type=int,
                     help = 'Set the HDU to plot.')
@@ -105,34 +104,24 @@ model_hdu = None
 irf_version = None
 im_mdl = None
 
-
 im = FITSImage.createFromHDU(hdulist[args.hdu])
-
 
 if args.model_file:
     model_hdu = pyfits.open(args.model_file)[0]
-    irf_version = get_irf_version(model_hdu.header)
-    im_mdl = FITSImage.createFromHDU(model_hdu)
 
+    if args.irf:
+        irf_version = [args.irf,None]
+    else:
+        irf_version = get_irf_version(model_hdu.header)
+        
+    im_mdl = FITSImage.createFromHDU(model_hdu)
     m = re.search('(.+)V5_(.+)',irf_version[0])
     if m and 'stacked' in args.model_file:
         irf_version[0] = m.groups()[0]+'V5'
     else:
         irf_version[1] = None
         
-        
-    
-#fp = FITSPlotter(im,im_mdl,None,args.prefix)
-
-#fp.make_plots_skycube(None,smooth=True,resid_type='fractional',
-#                              suffix='_data_map_resid_frac')
-
-#fp.make_plots_skycube(4,smooth=True,resid_type='fractional',
-#                              suffix='_data_map_slice_resid_frac')
-
-#sys.exit(0)
-
-    
+            
 irf_dir = '/u/gl/mdwood/ki20/mdwood/fermi/custom_irfs'
 if 'CUSTOM_IRF_DIR' in os.environ:
     irf_dir = os.environ['CUSTOM_IRF_DIR']
@@ -147,87 +136,71 @@ if irf_version:
     ltfile = '/Users/mdwood/fermi/data/p301/ltcube_5years_zmax100.fits'
     m = PSFModelLT(irf,src_type='iso')
     
-
-
-if args.gui:
     
-    app = wx.App()
+ccube = FITSImage.createFromHDU(hdulist[args.hdu])
 
-    frame = FITSViewerFrame(args.files,hdu=args.hdu,parent=None,
-                            title="FITS Viewer",
-                            size=(2.0*640, 1.5*480))
+im_mdl = None
+if model_hdu:
+    im_mdl = FITSImage.createFromHDU(model_hdu)
 
-    frame.Show()
-    app.MainLoop()
-    plt.show()
+fp = FITSPlotter(ccube,im_mdl,m,args.prefix,rsmooth=args.rsmooth)
 
-else:
-    
-    ccube = FITSImage.createFromHDU(hdulist[args.hdu])
+if isinstance(im,SkyImage):
+    fp.make_projection_plots_skyimage(ccube)
+elif isinstance(ccube,SkyCube):
 
-    im_mdl = None
-    if model_hdu:
-        im_mdl = FITSImage.createFromHDU(model_hdu)
-    
+    # All Energies        
+    fp.make_energy_residual(suffix='eresid')
 
-    fp = FITSPlotter(ccube,im_mdl,m,args.prefix,rsmooth=args.rsmooth)
-        
-    if isinstance(im,SkyImage):
-        fp.make_projection_plots_skyimage(ccube)
-    elif isinstance(ccube,SkyCube):
+    fp.make_plots_skycube(smooth=True,resid_type='significance',
+                          suffix='data_map_resid_sigma',plots_per_fig=1)
 
-        # All Energies        
-        fp.make_energy_residual(suffix='eresid')
-        
-        fp.make_plots_skycube(smooth=True,resid_type='significance',
-                              suffix='data_map_resid_sigma',plots_per_fig=1)
+    fp.make_mdl_plots_skycube(suffix='mdl_map',plots_per_fig=1)
 
-        fp.make_mdl_plots_skycube(suffix='mdl_map',plots_per_fig=1)
+    fp.make_mdl_plots_skycube(suffix='mdl_map_pnorm',plots_per_fig=1,
+                              zscale='pow',zscale_power=3.0)
 
-        fp.make_mdl_plots_skycube(suffix='mdl_map_pnorm',plots_per_fig=1,
-                                  zscale='pow',zscale_power=3.0)
-                                  
-        fp.make_plots_skycube(suffix='data_map',plots_per_fig=1,
-                              make_projection=True,projection=0.5)
-        
-        fp.make_plots_skycube(suffix='data_map_smooth',plots_per_fig=1,
-                              make_projection=True,projection=0.5,smooth=True)
+    fp.make_plots_skycube(suffix='data_map',plots_per_fig=1,
+                          make_projection=True,projection=0.5)
 
-        
-        delta_bin = [2,2,4,16]
+    fp.make_plots_skycube(suffix='data_map_smooth',plots_per_fig=1,
+                          make_projection=True,projection=0.5,smooth=True)
 
-        # Slices
-        fp.make_mdl_plots_skycube(suffix='mdl_map_slice',
-                                  plots_per_fig=args.slice_per_fig,
-                                  delta_bin=delta_bin)
-        
-        fp.make_mdl_plots_skycube(suffix='mdl_map_slice_pnorm',
-                                  plots_per_fig=args.slice_per_fig,
-                                  zscale='pow',zscale_power=3.0,
-                                  delta_bin=delta_bin)
 
-        fp.make_plots_skycube(suffix='data_map_slice',
-                              plots_per_fig=args.slice_per_fig,
-                              delta_bin=delta_bin,
-                              make_projection=True,projection=0.5)
-        
-        fp.make_plots_skycube(suffix='data_map_slice_smooth',
-                              plots_per_fig=args.slice_per_fig,
-                              delta_bin=delta_bin,
-                              make_projection=True,projection=0.5,smooth=True)
+    delta_bin = [2,2,4,16]
 
-        fp.make_plots_skycube(smooth=True,resid_type='significance',
-                              suffix='data_map_slice_resid_sigma',
+    # Slices
+    fp.make_mdl_plots_skycube(suffix='mdl_map_slice',
                               plots_per_fig=args.slice_per_fig,
                               delta_bin=delta_bin)
-        
-        sys.exit(0)
-        
-        fp.make_plots_skycube(smooth=True,resid_type='fractional',
-                              suffix='_data_map_resid_frac',plots_per_fig=1)
 
-        fp.make_plots_skycube(smooth=True,resid_type='fractional',
-                              suffix='_data_map_slice_resid_frac')
+    fp.make_mdl_plots_skycube(suffix='mdl_map_slice_pnorm',
+                              plots_per_fig=args.slice_per_fig,
+                              zscale='pow',zscale_power=3.0,
+                              delta_bin=delta_bin)
 
-        
-        
+    fp.make_plots_skycube(suffix='data_map_slice',
+                          plots_per_fig=args.slice_per_fig,
+                          delta_bin=delta_bin,
+                          make_projection=True,projection=0.5)
+
+    fp.make_plots_skycube(suffix='data_map_slice_smooth',
+                          plots_per_fig=args.slice_per_fig,
+                          delta_bin=delta_bin,
+                          make_projection=True,projection=0.5,smooth=True)
+
+    fp.make_plots_skycube(smooth=True,resid_type='significance',
+                          suffix='data_map_slice_resid_sigma',
+                          plots_per_fig=args.slice_per_fig,
+                          delta_bin=delta_bin)
+
+    sys.exit(0)
+
+    fp.make_plots_skycube(smooth=True,resid_type='fractional',
+                          suffix='_data_map_resid_frac',plots_per_fig=1)
+
+    fp.make_plots_skycube(smooth=True,resid_type='fractional',
+                          suffix='_data_map_slice_resid_frac')
+
+
+
