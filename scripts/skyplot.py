@@ -24,6 +24,7 @@ from matplotlib.pyplot import gcf, setp
 
 from gammatools.core.fits_util import SkyImage, SkyCube, FITSImage
 from gammatools.core.fits_viewer import *
+from gammatools.core.util import mkdir
 from gammatools.core.mpl_util import PowerNormalize
 from gammatools.fermi.irf_util import *
 from gammatools.fermi.psf_model import *
@@ -78,24 +79,29 @@ def get_irf_version(header):
     return [event_class, event_types]
 
 usage = "usage: %(prog)s [options] [FT1 file ...]"
-description = """Plot the contents of a FITS image file."""
+description = """Plot the contents of a FITS image or counts cube file."""
 
 parser = argparse.ArgumentParser(usage=usage,description=description)
 
 parser.add_argument('files', nargs='+')
 
-parser.add_argument('--gui', action='store_true')
-
-parser.add_argument('--rsmooth', default=0.3, type=float)
+parser.add_argument('--rsmooth', default=0.3, type=float,
+                    help='Set the radius (68% containment) of the smoothing '
+                    'kernel in degrees.')
 parser.add_argument('--slice_per_fig', default=4, type=int)
 
-parser.add_argument('--model_file', default=None)
+parser.add_argument('--model_file', default=None,
+                    help='Set the name of the model cube file.')
 parser.add_argument('--prefix', default=None)
 parser.add_argument('--irf', default=None)
-parser.add_argument('--title', default=None)
+parser.add_argument('--title', default=None, help='')
+parser.add_argument('--nosrclabels', default=False,action='store_true')
+parser.add_argument('--srclabels_thresh', default=10.0,type=float)
+parser.add_argument('--format', default='png')
 
 parser.add_argument('--hdu', default = 0, type=int,
-                    help = 'Set the HDU to plot.')
+                    help = 'Set the HDU of the input FITS file from which '
+                    'the image data will be extracted.')
 
 
 args = parser.parse_args()
@@ -144,8 +150,12 @@ im_mdl = None
 if model_hdu:
     im_mdl = FITSImage.createFromHDU(model_hdu)
 
+mkdir('plots')
+    
 fp = FITSPlotter(ccube,im_mdl,m,args.prefix,rsmooth=args.rsmooth,
-                 title=args.title)
+                 title=args.title,format=args.format,
+                 nosrclabels=args.nosrclabels,
+                 srclabels_thresh=args.srclabels_thresh)
 
 if isinstance(im,SkyImage):
     fp.make_projection_plots_skyimage(ccube)

@@ -16,8 +16,8 @@ class FITSPlotter(object):
     fignum = 0
     
     def __init__(self,im,im_mdl,irf=None,prefix=None,outdir='plots',
-                 title=None,
-                 rsmooth=0.2):
+                 title=None,format='png',
+                 rsmooth=0.2,nosrclabels=False,srclabels_thresh=5.0):
 
         self._ft = FigTool(fig_dir=outdir)
         self._im = im
@@ -26,6 +26,13 @@ class FITSPlotter(object):
         self._prefix = prefix
         self._rsmooth = rsmooth
         self._title = title
+        self._format = format
+        self._nosrclabels = nosrclabels
+        if nosrclabels:
+            self._srclabels_thresh = None
+        else:
+            self._srclabels_thresh = srclabels_thresh
+        
         if self._prefix is None: self._prefix = 'fig'
         if outdir: self._prefix_path = os.path.join(outdir,self._prefix)
         
@@ -58,22 +65,25 @@ class FITSPlotter(object):
         title = self.make_title()
         
         fig = self._ft.create(self._prefix + '_' + suffix,
+                              format=self._format,
                               figstyle='residual2',
                               yscale='log',
-                              title=title,
+                              #title=title,
                               ylabel='Counts',
                               xlabel='Energy [log$_{10}$(E/MeV)]')
 
         fig[0].add_hist(hm,hist_style='line',label='Model')
         fig[0].add_hist(h,linestyle='None',label='Data',color='k')
         fig[1].set_style('ylim',[-0.2,0.2])
+        fig[0].ax().set_title(title)
         fig.plot()
 
 
         fig = self._ft.create(self._prefix + '_' + suffix + 'e2',
+                              format=self._format,
                               figstyle='residual2',
                               yscale='log',
-                              title=title,
+                              #title=title,
                               ylabel='E$^{2}$dN/dE [MeV]',
                               xlabel='Energy [log$_{10}$(E/MeV)]')
 
@@ -83,6 +93,7 @@ class FITSPlotter(object):
         fig[0].add_hist(hm*e2,hist_style='line',label='Model')
         fig[0].add_hist(h*e2,linestyle='None',label='Data',color='k')
         fig[1].set_style('ylim',[-0.2,0.2])
+        fig[0].ax().set_title(title)
         fig.plot()
         
 #        fig.savefig('%s_%s.png'%(self._prefix,suffix))
@@ -121,10 +132,10 @@ class FITSPlotter(object):
             if nfig > 1: fig_suffix = '_%02i'%i
             else: fig_suffix = ''
                 
-            fig_name = '%s_%s%s.png'%(self._prefix_path,suffix,fig_suffix)
-            fig2_name = '%s_%s_zproj%s.png'%(self._prefix_path,suffix,fig_suffix)
-            fig3_name = '%s_%s_xproj%s.png'%(self._prefix_path,suffix,fig_suffix)
-            fig4_name = '%s_%s_yproj%s.png'%(self._prefix_path,suffix,fig_suffix)
+            fig_name = '%s_%s%s.%s'%(self._prefix_path,suffix,fig_suffix,self._format)
+            fig2_name = '%s_%s_zproj%s.%s'%(self._prefix_path,suffix,fig_suffix,self._format)
+            fig3_name = '%s_%s_xproj%s.%s'%(self._prefix_path,suffix,fig_suffix,self._format)
+            fig4_name = '%s_%s_yproj%s.%s'%(self._prefix_path,suffix,fig_suffix,self._format)
             
             figs.append({'fig'  : self.create_figure(figsize=(fig_sx,fig_sy)),
                          'fig2' : self.create_figure(figsize=(fig_sx,fig_sy)),
@@ -309,7 +320,7 @@ class FITSPlotter(object):
         axim = h.plot(subplot=subplot,cmap='ds9_b',**kwargs)
         h.plot_circle(rpsf68,color='w',lw=1.5)
         h.plot_circle(rpsf95,color='w',linestyle='--',lw=1.5)
-        h.plot_marker(marker='+',color='w',linestyle='--')
+        h.plot_marker(marker='x',color='w',linestyle='--')
         ax = h.ax()
         ax.set_title(title)
         cb = plt.colorbar(axim,orientation='horizontal',
@@ -324,7 +335,8 @@ class FITSPlotter(object):
         cb.set_label(cb_label)
 
         cat = Catalog.get('3fgl')
-        cat.plot(h,ax=ax,src_color='w',label_threshold=5.0)
+        cat.plot(h,ax=ax,src_color='w',
+                 label_threshold=self._srclabels_thresh)
 
         if resid_type is None: return
         
