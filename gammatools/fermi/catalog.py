@@ -579,7 +579,7 @@ class Catalog(object):
 
         for i in range(len(labels)):
 
-            scale = (min(max(signif_avg[i],5.0),25.0)-5.0)/20.
+            scale = (min(max(signif_avg[i],5.0),50.0)-5.0)/45.
             
             mew = 1.0 + 1.0*scale
             ms = 5.0 + 3.0*scale
