@@ -273,9 +273,9 @@ class Configurable(object):
 #                config = self._config[argname[0]][argname[1]]
 #            else:
                 
-#                if not k in self._default_config: continue                
-#                default_config = self._default_config[k]
-#                config = self._config[k]
+#            if not k in self._default_config: continue                
+#            default_config = self._default_config[k]
+#            config = self._config[k]
 #=======
             if not k in self._default_config: continue
             if isinstance(v,list) and len(v) == 0: continue

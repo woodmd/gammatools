@@ -236,8 +236,8 @@ class PSFModelLT(PSFModel):
         instrument inclination angle."""
 
         gx, gy = np.meshgrid(np.log10(self._energy),
-                             self._cth_axis.center,
-                             indexing='ij') 
+                             self._cth_axis.center)
+        gx, gy = gx.T, gy.T
         
         self._psf = np.zeros((self._loge_axis.nbins,self._nbin_dtheta))
         self._edisp = None

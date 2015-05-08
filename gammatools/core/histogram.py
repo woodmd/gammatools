@@ -828,7 +828,15 @@ class Axis(object):
         if not interpolate: return self._center[ibin]
         else: interpolate(np.linspace(0,self._nbins,self.nbins+1),
                           self.edges,bin)
-                    
+
+    def valToEdge(self,x):
+        """Convert axis coordinate to edge index."""
+        w = np.insert(self._width,0,self._width[0])
+        ibin = np.digitize(np.array(x,ndmin=1),
+                           self._edges-0.5*w)-1
+        ibin[ibin < 0] = 0
+        return ibin
+        
     def valToBin(self,x):
         """Convert axis coordinate to bin index."""
         ibin = np.digitize(np.array(x,ndmin=1),self._edges)-1
