@@ -207,8 +207,6 @@ class HealpixImage(HistogramND):
 
         h = HistogramND.slice(self,sdims,dim_index)
 
-        print h.ndim()
-
         if h.ndim() == 2:
             return HealpixSkyCube(h.axes(),h.counts)
         elif h.ndim() == 1 and h.axis(0).nbins == self._hp_axis.nbins:        
@@ -287,7 +285,7 @@ class HealpixSkyImage(HealpixImage):
         kwargs_imshow = { 'norm' : None,
                           'vmin' : None, 'vmax' : None }
 
-        zscale_power = kwargs.get('zscale_power',2.0)
+        gamma = kwargs.get('gamma',2.0)
         zscale = kwargs.get('zscale',None)
         cbar = kwargs.get('cbar',None)
         cbar_label = kwargs.get('cbar_label','')
@@ -307,8 +305,7 @@ class HealpixSkyImage(HealpixImage):
             vmin = min(1.1*self.counts[self.counts>0])
 #            vmin = max(vmed*(vmed/vmax),min(self.counts[self.counts>0]))
 
-            kwargs_imshow['norm'] = PowerNorm(gamma=1./zscale_power,
-                                              clip=True)
+            kwargs_imshow['norm'] = PowerNorm(gamma=gamma,clip=True)
         elif zscale == 'log': kwargs_imshow['norm'] = LogNorm()
         else: kwargs_imshow['norm'] = Normalize(clip=True)
         
@@ -955,13 +952,13 @@ class SkyImage(FITSImage):
                           'vmin' : None, 'vmax' : None }
 
         zscale = kwargs.get('zscale',None)
-        zscale_power = kwargs.get('zscale_power',2.0)
+        gamma = kwargs.get('gamma',0.5)
         beam_size = kwargs.get('beam_size',None)
         
         if zscale == 'pow':
-            kwargs_imshow['norm'] = PowerNorm(gamma=1./zscale_power)
+            kwargs_imshow['norm'] = PowerNorm(gamma=gamma)
         elif zscale == 'sqrt': 
-            kwargs_imshow['norm'] = PowerNorm(gamma=1./2.0)
+            kwargs_imshow['norm'] = PowerNorm(gamma=0.5)
         elif zscale == 'log': kwargs_imshow['norm'] = LogNorm()
         else: kwargs_imshow['norm'] = Normalize()
 

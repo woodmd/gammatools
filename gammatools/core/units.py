@@ -1,4 +1,5 @@
 import numpy as np
+import re
 
 class Units(object):
 
@@ -60,11 +61,16 @@ class Units(object):
         m = re.search('([-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?)(\s+)?(\w+)?',s)
 
         if m is None: return s
+            
 
         v = float(m.group(1))
         units = m.group(4)
         
         if not m.group(4) is None:
+            
+            if not units in cls.__dict__:
+                raise Exception('Failed to parse units.')
+
             v *= cls.__dict__[units]
 
         return v

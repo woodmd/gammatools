@@ -132,7 +132,7 @@ def tolist(x):
     else:
         return x
 
-def merge_dict(d0,d1,add_new_keys=False,append_arrays=False):
+def merge_dict(d0,d1,add_new_keys=False,append_arrays=False,skip_values=None):
     """Recursively merge the contents of python dictionary d0 with
     the contents of another python dictionary, d1.
 
@@ -142,6 +142,8 @@ def merge_dict(d0,d1,add_new_keys=False,append_arrays=False):
     that element by concatenating the two arrays.
     """
     
+    if skip_values is None: skip_values = []
+    
     if d1 is None: return d0
     elif d0 is None: return d1
     elif d0 is None and d1 is None: return {}
@@ -149,8 +151,8 @@ def merge_dict(d0,d1,add_new_keys=False,append_arrays=False):
     od = {}
     
     for k, v in d0.items():
-        
-        if not k in d1:
+
+        if not k in d1 or k in d1 and d1[k] in skip_values:
             od[k] = copy.copy(d0[k])
         elif isinstance(v,dict) and isinstance(d1[k],dict):
             od[k] = merge_dict(d0[k],d1[k],add_new_keys,append_arrays)
