@@ -279,6 +279,41 @@ class HealpixSkyImage(HealpixImage):
         im._var = copy.deepcopy(sc)
 
         return im
+
+    def draw_graticule_labels(self):
+
+        phi = np.array([-179.999,-150.,-120.,-90.,-60.,-30.,0.0,
+                         30.0,60.,90.,120.,150.,179.99])
+                       
+        phi_labels = ['-180','-150','-120','-90','-60','-30','0',
+                      '30','60','90','120','150','180']
+
+        phi = 180.+np.array([-179.999,-120.,-60.,0.0,
+                              60.0,120.,179.99])
+                       
+        phi_labels = ['-180','-120','-60','0',
+                      '60','120','180']
+                      
+  
+        th = np.array([-60,-30,30,60])
+
+        import matplotlib.patheffects as path_effects
+ 
+        ef = path_effects.withStroke(foreground="w", linewidth=2)
+#        text.set_path_effects([ef])
+
+        for p,l in zip(phi,phi_labels):
+
+            plt.gca().projtext(np.pi/2.,np.radians(p+180.),
+                               l,color='k',ha='center',
+                               fontsize=12,path_effects=[ef])
+
+        for t in th:
+            plt.gca().projtext(np.radians(t)-np.pi/2.,np.pi,
+                               '%.0f'%(t),color='k',ha='center',
+                               fontsize=12,path_effects=[ef])
+                               
+
                 
     def plot(self,**kwargs):
 
