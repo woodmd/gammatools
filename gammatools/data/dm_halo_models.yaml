@@ -20,12 +20,13 @@ sculptor:
   type : nfw
 
 segue_1:
-  rs : 0.0437
+  rs   : 0.146
   dist : 23.0
   rmax : 5.0
-  rhos : 9.14
+  rhos : '1.38e+9 msun_kpc3'
   type : nfw
 #  jval : !!float 1.0e19
+  jvalue : ['3.2359E19 gev2_cm5',0.5]
 
 carina:
   rs : 2.95

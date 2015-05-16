@@ -1,13 +1,14 @@
 import yaml
+import copy
 
 import gammatools
 from gammatools.dm.jcalc import *
+from gammatools.core.util import merge_dict
 
 class HaloModelFactory(object):
 
     @staticmethod
-    def create(src_name,model_file = None,rho_rsun = None, gamma = None,
-               **kwargs):
+    def create(src_name,model_file = None,**kwargs):
 
         if model_file is None:
             model_file = os.path.join(gammatools.PACKAGE_ROOT,
@@ -19,15 +20,23 @@ class HaloModelFactory(object):
             raise Exception('Could not find profile: ' + src_name)
 
         src = halo_model_lib[src_name]
-        src.update(kwargs)
+        src = merge_dict(src,kwargs,skip_values=[None])
 
-        if rho_rsun is not None:
-            src['rhor'] = [rho_rsun,8.5]
+#        if rho_rsun is not None:
+#            src['rhor'] = [rho_rsun,8.5]
+#        if gamma is not None:
+#            src['gamma'] = gamma
+        hm = HaloModel(src)
 
-        if gamma is not None:
-            src['gamma'] = gamma
+        if 'jvalue' in src:
+            
+            if len(src['jvalue']) == 1:
+                hm.set_jvalue(Units.parse(src['jvalue'][0]),0.5)
+            else:
+                hm.set_jvalue(Units.parse(src['jvalue'][0]),
+                              Units.parse(src['jvalue'][1]))
 
-        return HaloModel(src)
+        return hm
 
 class HaloModel(object):
 
@@ -56,6 +65,38 @@ class HaloModel(object):
     def losfn(self):
         return self._losfn
 
-    def jval(self,loge,psi):
+    def set_jvalue(self,jvalue,psi):
+
+        jv = self._jp.cumsum(psi)
+        scale = jvalue/jv
+        self._dp._rhos *= scale**0.5
+        self._losfn._dp = copy.deepcopy(self._dp)
+        self._jp = JProfile(self._losfn)
+
+        import matplotlib.pyplot as plt
+
+        j90 = self._jp.cumsum(0.3597)
+
+        print self._jp.cumsum(0.122)/self._jp.cumsum(0.5)
+
+
+        return
+
+        plt.figure()
+        plt.plot(np.degrees(self._jp._psi),self._jp._jcum/self._jp._jcum[-1])
+#        plt.gca().set_yscale('log')
+        plt.gca().set_xscale('log')
+        plt.gca().grid(True)
+        plt.gca().set_xlim(0.01,1.0)
+#        plt.gca().set_ylim(1E18,1E20)
+
+        plt.gca().axvline(0.5,color='k')
+        plt.gca().axvline(0.3597,color='k')
+        plt.gca().axvline(0.122,color='k')
+
+        plt.show()
+
+
+    def jvalue(self,loge,psi):
 
         return self._jp(psi)

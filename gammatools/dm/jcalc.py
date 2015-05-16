@@ -23,6 +23,7 @@ from scipy.interpolate import interp1d, UnivariateSpline
 import scipy.special as spfn
 import scipy.optimize as opt
 from gammatools.core.util import *
+from gammatools.core.units import Units
 from gammatools.core.algebra import *
 
 class LoSFn(object):
@@ -364,17 +365,20 @@ def SolidAngleIntegral(psi,pdf,angle):
 class JProfile(object):
     def __init__(self,losfn):
 
-        self._log_psi = np.linspace(np.log10(np.radians(0.001)),
-                                    np.log10(np.radians(90.)),1000)
-        self._psi = np.power(10,self._log_psi)
+        log_psi = np.linspace(np.log10(np.radians(1E-5)),
+                              np.log10(np.radians(90.)),1001)
+        self._psi = np.power(10,log_psi)
+        self._psi = np.insert(self._psi,0,0)
 
         domega = 2*np.pi*(-np.cos(self._psi[1:])+np.cos(self._psi[:-1]))
         x = 0.5*(self._psi[1:]+self._psi[:-1])
 
-        self._jpsi = losfn(self._psi)
-        self._spline = UnivariateSpline(self._psi,self._jpsi,s=0,k=2)
+        self._jpsi = losfn(x)
+        self._spline = UnivariateSpline(x,self._jpsi,s=0,k=1)
         self._jcum = np.cumsum(self._spline(x)*domega)
-        self._cum_spline = UnivariateSpline(x,self._jcum,s=0,k=2)
+        self._jcum = np.insert(self._jcum,0,0)
+
+        self._cum_spline = UnivariateSpline(self._psi,self._jcum,s=0,k=2)
 
     @staticmethod
     def create(dp,dist,rmax):
@@ -392,10 +396,9 @@ class JProfile(object):
         return np.sum(self._spline(x)*domega)
 
     def cumsum(self,psi):
-        return self._cum_spline(psi)
-#        x = 0.5*(psi[1:]+psi[:-1])
-#        dcos = -np.cos(psi[1:])+np.cos(psi[:-1])
-#        return np.cumsum(self._spline(x)*dcos)
+        print psi, type(psi)
+
+        return self._cum_spline(np.radians(psi))
 
 class ROIIntegrator(object):
 
@@ -464,9 +467,6 @@ class ROIIntegrator(object):
 
             msk &= src_msk
             dphi = 2.*np.pi*float(len(lat[msk]))/float(len(phi))
-
-#    hc._counts[i0,msk] = 1
-
             jtot *= dphi
 #            jsum += jtot
 #            domegasum += costh_width[i0]*dphi
@@ -501,9 +501,8 @@ class ROIIntegrator(object):
             domega = np.cos(np.radians(rgc[0]))*2*np.pi/Units.deg2
         else:
             jv = self._jv_cum_spline(rgc[1]) - self._jv_cum_spline(rgc[0])
-            domega = -(np.cos(np.radians(rgc[1])) - np.cos(np.radians(rgc[0])))*2*np.pi/Units.deg2
-
-#        i = np.argmin(np.abs(rgc-self._theta))
+            domega = -(np.cos(np.radians(rgc[1])) - 
+                       np.cos(np.radians(rgc[0])))*2*np.pi/Units.deg2
 
         print '%20.6g %20.6g %20.6g %20.6g'%(jv, 
                                              jv/units0, 
@@ -619,7 +618,12 @@ class DensityProfile(object):
                 if k in d: od[k] = d[k]
             return od
 
+        default_units = {'dist' : Units.kpc,
+                         'rs'   : Units.kpc,
+                         'rhos' : Units.msun_kpc3}
+
         for k, v in o.iteritems():
+
             if v is None: continue
             elif isinstance(v,str): o[k] = Units.parse(v)
             elif k == 'dist': o[k] *= Units.kpc
@@ -627,7 +631,7 @@ class DensityProfile(object):
             elif k == 'rhos': o[k] *= Units.msun_kpc3
             elif k == 'rhor': o[k] = [o[k][0]*Units.gev_cm3,
                                       o[k][1]*Units.kpc]
-            elif k ==' jval' : o[k] = o[k]*Units.gev2_cm5
+#            elif k ==' jval' : o[k] = o[k]*Units.gev2_cm5
 
         if o['rhos'] is None: o['rhos'] = 1.0
 
@@ -646,7 +650,7 @@ class DensityProfile(object):
             sys.exit(1)
 
         if 'rhor' in o: dp.set_rho(o['rhor'][0],o['rhor'][1])
-        elif 'jval' in o: dp.set_jval(o['jval'],o['rs'],o['dist'])
+#        elif 'jval' in o: dp.set_jval(o['jval'],o['rs'],o['dist'])
 
         return dp
 
@@ -713,8 +717,6 @@ class NFWProfile(DensityProfile):
             return (4*np.pi/3.)*rhos**2*rs**3*(1.-np.power(1.+x,-3))
         else:
             return (4*np.pi/3.)*rhos**2*rs**3
-
-#(4*M_PI/3.)*std::pow(a(0),2)*std::pow(a(1),3)*(1.-std::pow(1+x,-3));
 
     def _rho(self,r):
         x = r/self._rs
