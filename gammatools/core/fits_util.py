@@ -174,13 +174,17 @@ class FITSAxis(Axis):
 
 class HealpixImage(HistogramND):    
     """Base class for 2-D and 3-D HEALPix sky maps."""
-    def __init__(self,axes,hp_axis_index=0,counts=None,var=None):
+    def __init__(self,axes,hp_axis_index=0,counts=None,var=None,
+                 coordsys='CEL'):
         super(HealpixImage, self).__init__(axes,counts=counts,var=var)
 
         self._hp_axis_index = hp_axis_index
         self._hp_axis = self.axes()[hp_axis_index]
         self._nside = hp.npix2nside(self._hp_axis.nbins)
         self._nest=False
+        self._coordsys=coordsys
+        self._mask = np.empty(self.counts.shape,dtype='bool');
+        self._mask.fill(True)
 
     @property
     def nside(self):
@@ -189,6 +193,69 @@ class HealpixImage(HistogramND):
     @property
     def nest(self):
         return self._nest
+
+    @property
+    def coordsys(self):
+        return self._coordsys
+
+    def create_mask(self,**kwargs):
+
+        cuts = kwargs.get('cuts',[])
+        mask = kwargs.get('mask',None)        
+        if mask is None:
+            mask = np.empty(self.counts.shape,dtype='bool'); mask.fill(True)
+        
+        for cut in cuts:
+            self.create_lonlat_mask(mask=mask,**cut)
+
+        return mask
+        
+    def create_lonlat_mask(self,**kwargs):
+
+        norm_angle = lambda t: ( t + 180.) % (2 * 180. ) - 180.
+        
+        mask = kwargs.get('mask',None)
+        coordsys = kwargs.get('coordsys',self.coordsys)
+        complement = kwargs.get('complement',False)
+        latrange = kwargs.get('latrange',None)
+        lonrange = kwargs.get('lonrange',None)
+        
+        if mask is None:
+            mask = np.empty(self.counts.shape,dtype='bool');
+            mask.fill(True)
+        
+        c = self.center()
+        
+        if self.ndim() == 2:
+            lon,lat = c[1],c[2]
+        else:
+            lon,lat = c[0],c[1]
+        
+        if coordsys == 'GAL' and (self.coordsys == 'EQU' or self.coordsys == 'CEL'):            
+            lon, lat = eq2gal(lon,lat)
+        elif coordsys == 'CEL' and self.coordsys == 'GAL':
+            lon, lat = gal2eq(lon,lat)
+
+        if latrange is not None:
+            m = (lat > latrange[0])&(lat < latrange[1])
+            
+            if complement: mask &= ~m
+            else: mask &= m
+            
+        if lonrange is not None:
+
+            lon0 = norm_angle(lonrange[0])
+            lon1 = norm_angle(lonrange[1])
+
+            if lon0 > lon1:
+                m = (norm_angle(lon) > lon0)|(norm_angle(lon) < lon1)
+            else:
+                m = (norm_angle(lon) > lon0)&(norm_angle(lon) < lon1)
+
+            if complement: mask &= ~m
+            else: mask &= m
+                
+        return mask        
     
     def createFromHist(self,h):
         """Take an input HistogramND object and cast it into a
@@ -208,9 +275,11 @@ class HealpixImage(HistogramND):
         h = HistogramND.slice(self,sdims,dim_index)
 
         if h.ndim() == 2:
-            return HealpixSkyCube(h.axes(),h.counts)
+            return HealpixSkyCube(h.axes(),h.counts,h.var,
+                                  coordsys=self.coordsys)
         elif h.ndim() == 1 and h.axis(0).nbins == self._hp_axis.nbins:        
-            return HealpixSkyImage(h.axes(),h.counts)
+            return HealpixSkyImage(h.axes(),h.counts,h.var,
+                                   coordsys=self.coordsys)
         else:
             return h
 
@@ -228,21 +297,31 @@ class HealpixImage(HistogramND):
 class HealpixSkyImage(HealpixImage):
     """HEALPix representation of a 2-D sky map."""
 
-    def __init__(self,axes,counts=None,var=None):
-        super(HealpixSkyImage, self).__init__(axes,counts=counts,var=var)
+    def __init__(self,axes,counts=None,var=None,coordsys='CEL'):
+        super(HealpixSkyImage, self).__init__(axes,counts=counts,var=var,
+                                              coordsys=coordsys)
+
+    @staticmethod
+    def create(nside,coordsys='CEL'):
+        npix = hp.pixelfunc.nside2npix(nside)
+        hp_axis = Axis.create(0,npix,npix) 
+        return HealpixSkyImage([hp_axis],0,coordsys=coordsys)
         
     def fill(self,lon,lat,w=1.0):
         ipix = hp.ang2pix(self.nside,lat,lon,nest=self.nest)
         super(HealpixSkyImage,self).fill(ipix,w)
 
-#    def interpolate(self,lon,lat):
-#        hp.pixelfunc.get_interp_val()       
+    def interpolate(self,lon,lat):
+
+        theta = np.pi/2.-lat        
+        return hp.pixelfunc.get_interp_val(self.counts,theta,
+                                           lon,nest=self.nest)       
 #        pixcrd = self._wcs.wcs_world2pix(lon, lat, 0)
 #        return interpolate2d(self._xedge,self._yedge,self._counts,
 #                             *pixcrd)
 
     def center(self):
-        """Returns lon,lat."""
+        """Returns lon,lat of the pixel centers."""
 
         pixcrd = np.array(self.axes()[0].edges[:-1],dtype=int)
         pixang0, pixang1 = hp.pixelfunc.pix2ang(self.nside,pixcrd)
@@ -251,27 +330,24 @@ class HealpixSkyImage(HealpixImage):
         pixang1 = np.ravel(pixang1)
         pixang0 = np.pi/2. - pixang0
         
-        return np.vstack((np.degrees(pixang1),np.degrees(pixang0)))
+        return (np.degrees(pixang1),np.degrees(pixang0))
 
-    def mask(self,lonrange=None,latrange=None):
+    def mask(self,**kwargs):
         
-        c = self.center()
-        msk = np.empty(self.axis(0).nbins,dtype='bool'); msk.fill(True)
-        msk &= (c[1] > latrange[0])&(c[1] < latrange[1])
-        self._counts[msk]=np.nan
+        mask = self.create_mask(**kwargs)
+        self._mask = mask
         
-    def integrate(self,lonrange=None,latrange=None):
-
-        c = self.center()
-        msk = np.empty(self.axis(0).nbins,dtype='bool'); msk.fill(True)
-        msk &= (c[1] > latrange[0])&(c[1] < latrange[1])
-        return np.sum(self._counts[msk])        
+    def integrate(self,**kwargs):
+        
+        mask = self.create_mask(**kwargs)
+        return np.sum(self._counts[mask])        
         
     def smooth(self,sigma):
 
         im = HealpixSkyImage(copy.deepcopy(self.axes()),
                              counts=copy.deepcopy(self._counts),
-                             var=copy.deepcopy(self._var))
+                             var=copy.deepcopy(self._var),
+                             coordsys=self.coordsys)
         
         sc = hp.sphtfunc.smoothing(im.counts,sigma=np.radians(sigma))
 
@@ -291,7 +367,8 @@ class HealpixSkyImage(HealpixImage):
         cbar_label = kwargs.get('cbar_label','')
         title = kwargs.get('title','')
         levels = kwargs.get('levels',None)
-
+        rot = kwargs.get('rot',None)
+        
         kwargs_imshow['vmin'] = kwargs.get('vmin',None)
         kwargs_imshow['vmax'] = kwargs.get('vmax',None)
 
@@ -332,7 +409,7 @@ class HealpixSkyImage(HealpixImage):
         else:
             extent = (0.02,0.05,0.96,0.9)
 
-        ax=PA.HpxMollweideAxes(fig,extent,coord=None,rot=None,
+        ax=PA.HpxMollweideAxes(fig,extent,coord=None,rot=rot,
                                format='%g',flipconv='astro')
 
         ax.set_title(title)
@@ -375,8 +452,10 @@ class HealpixSkyImage(HealpixImage):
     
 class HealpixSkyCube(HealpixImage):
 
-    def __init__(self,axes,hp_axis_index=1,counts=None):
-        super(HealpixSkyCube, self).__init__(axes,hp_axis_index,counts)
+    def __init__(self,axes,hp_axis_index=1,
+                 counts=None,var=None,coordsys='CEL'):
+        super(HealpixSkyCube, self).__init__(axes,hp_axis_index,counts,
+                                             var,coordsys)
 
 #    def fill(self,lon,lat,loge,w=1.0):
 #        ipix = hp.ang2pix(self.nside,lat,lon,nest=self.nest)
@@ -391,36 +470,39 @@ class HealpixSkyCube(HealpixImage):
 #        return interpolate2d(self._xedge,self._yedge,self._counts,
 #                             *pixcrd)
 
-    def integrate(self,lonrange=None,latrange=None):
+    def integrate(self,**kwargs):
 
-        c = self.center()
-        msk = np.empty(len(c[0]),dtype='bool'); msk.fill(True)
-        msk &= (c[2] > latrange[0])&(c[2] < latrange[1])
-        msk = msk.reshape(self._counts.shape)
-
-        c = copy.copy(self._counts); c[~msk] = 0
-        v = copy.copy(self._var); v[~msk] = 0
+        mask = self.create_mask(**kwargs)
+                
+#        c = self.center()
+#        msk = np.empty(len(c[0]),dtype='bool'); msk.fill(True)
+#        msk &= (c[2] > latrange[0])&(c[2] < latrange[1])
+#        mask = mask.reshape(self.counts.shape)
         
-        return Histogram(self.axis(0),
-                         counts=np.sum(c,axis=1),
+        c = copy.copy(self._counts); c[~mask] = 0
+        v = copy.copy(self._var); v[~mask] = 0
+        return Histogram(self.axis(0),counts=np.sum(c,axis=1),
                          var=np.sum(v,axis=1))     
         
     def center(self):
         pixcrd = np.array(self.axes()[1].edges[:-1],dtype=int)
         pixang0, pixang1 = hp.pixelfunc.pix2ang(self.nside,pixcrd)
 
-        pixloge = self.axis(0).center
+        pixloge = self.axis(0).center[:,np.newaxis]
+        pixang0 = pixang0[np.newaxis,:]
+        pixang1 = pixang1[np.newaxis,:]
+        
+        
+#        pixloge = np.repeat(pixloge[:,np.newaxis],len(pixang0),axis=1)
+#        pixang0 = np.repeat(pixang0[np.newaxis,:],len(pixloge),axis=0)
+#        pixang1 = np.repeat(pixang1[np.newaxis,:],len(pixloge),axis=0)
 
-        pixloge = np.repeat(pixloge[:,np.newaxis],len(pixang0),axis=1)
-        pixang0 = np.repeat(pixang0[np.newaxis,:],len(pixloge),axis=0)
-        pixang1 = np.repeat(pixang1[np.newaxis,:],len(pixloge),axis=0)
-
-        pixloge = np.ravel(pixloge)
-        pixang0 = np.ravel(pixang0)
-        pixang1 = np.ravel(pixang1)
+#        pixloge = np.ravel(pixloge)
+#        pixang0 = np.ravel(pixang0)
+#        pixang1 = np.ravel(pixang1)
         pixang0 = np.pi/2. - pixang0
        
-        return np.vstack((pixloge,np.degrees(pixang1),np.degrees(pixang0)))
+        return (pixloge,np.degrees(pixang1),np.degrees(pixang0))
          
     def ud_grade(self,nside):
 
@@ -442,6 +524,20 @@ class HealpixSkyCube(HealpixImage):
         hp_axis = Axis.create(0,counts.shape[1],counts.shape[1])
         return HealpixSkyCube([self.axis(0),hp_axis],1,counts)
 
+    def smooth(self,sigma):
+
+        sc = np.zeros(self.counts.shape)
+
+        for i in range(self.axis(0).nbins):
+            sc[i,:] = hp.sphtfunc.smoothing(self.counts[i,:],sigma=np.radians(sigma))
+            
+#        im = HealpixSkyImage(copy.deepcopy(self.axes()),
+#                             counts=copy.deepcopy(self._counts),
+#                             var=copy.deepcopy(self._var),
+#                             coordsys=self.coordsys)
+        
+        return HealpixSkyCube(copy.deepcopy(self.axes()),1,counts=sc,coordsys=self.coordsys)
+    
     @staticmethod
     def create(energy_axis,nside):
 
@@ -459,7 +555,8 @@ class HealpixSkyCube(HealpixImage):
 
         header = hdulist[image_hdu].header
         v = hdulist[image_hdu].data
-
+        coordsys = header.get('COORDSYS','GAL')            
+        
         if image_hdu == 'SKYMAP':
             dtype = v.dtype[0]
             image_data = copy.deepcopy(v.view((dtype, len(v.dtype.names)))).T
@@ -481,7 +578,8 @@ class HealpixSkyCube(HealpixImage):
             raise Exception('Unknown HDU name.')
 
         hp_axis = Axis.create(0,image_data.shape[1],image_data.shape[1])
-        return HealpixSkyCube([energy_axis,hp_axis],1,image_data)
+        return HealpixSkyCube([energy_axis,hp_axis],1,image_data,
+                              coordsys=coordsys)
 
     def save(self,fitsfile):
 

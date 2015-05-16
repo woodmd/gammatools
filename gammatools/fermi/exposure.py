@@ -61,7 +61,8 @@ class LTCube(object):
         cth_edges = cth_edges[::-1]
         self._cth_axis = Axis(cth_edges)
 
-        self._domega = (self._cth_axis.edges[1:]-self._cth_axis.edges[:-1])*2*np.pi
+        self._domega = (self._cth_axis.edges[1:]-
+                        self._cth_axis.edges[:-1])*2*np.pi
             
     def get_src_lthist(self,ra,dec,cth_axis=None):
 
@@ -90,14 +91,14 @@ class LTCube(object):
 
         return Histogram(cth_axis,counts=lt,var=0)
 
-    def get_allsky_lthist(self,slat_axis,lon_axis,coordsys='gal'):
+    def get_allsky_lthist(self,lon_axis,slat_axis,coordsys='gal',cth_axis=None):
 
         h = HistogramND([lon_axis,slat_axis,self._cth_axis])
 
         if coordsys=='gal':
         
-            lon, slat = np.meshgrid(h.axis(0).center(),
-                                    h.axis(1).center(),
+            lon, slat = np.meshgrid(h.axis(0).center,
+                                    h.axis(1).center,
                                     indexing='ij')
         
 
@@ -108,22 +109,25 @@ class LTCube(object):
             dec = np.radians(dec)
 
         else:
-            ra, dec = np.meshgrid(h.axis(0).center(),
-                                  np.arcsin(h.axis(1).center()),
+            ra, dec = np.meshgrid(h.axis(0).center,
+                                  np.arcsin(h.axis(1).center),
                                   indexing='ij')
 
-        
-        ipix = healpy.ang2pix(64,np.ravel(np.pi/2. - dec),
-                              np.ravel(ra),nest=True)
+
+        theta = np.pi/2. - dec
+        phi = ra
+            
+        ipix = healpy.ang2pix(64,np.ravel(theta),
+                              np.ravel(phi),nest=True)
 
         lt = self._ltmap[ipix,::-1]
 
-        print lt.shape
-        print h.axes()[0].nbins(), h.axes()[1].nbins(), h.axes()[2].nbins()
+#        print lt.shape
+#        print h.axes()[0].nbins, h.axes()[1].nbins, h.axes()[2].nbins
         
-        lt = lt.reshape((h.axes()[0].nbins(),
-                         h.axes()[1].nbins(),
-                         h.axes()[2].nbins()))
+        lt = lt.reshape((h.axes()[0].nbins,
+                         h.axes()[1].nbins,
+                         h.axes()[2].nbins))
 
         h._counts = lt
 

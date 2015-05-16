@@ -577,7 +577,7 @@ class HistogramND(object):
         return o
 
     def __mul__(self,x):
-
+        
         o = copy.deepcopy(self)
 
         if isinstance(x, HistogramND):
@@ -586,7 +586,7 @@ class HistogramND(object):
             y2 = x._counts
             y1v = self._var
             y2v = x._var
-
+            
             f1 = np.zeros(self.shape)
             f2 = np.zeros(self.shape)
 
@@ -597,7 +597,7 @@ class HistogramND(object):
             f2[msk2] = y2v[msk2]/y2[msk2]**2
 
             o._counts = y1*y2
-            o._var = x._counts**2*(f1+f2)
+            o._var = (y1*y2)**2*(f1+f2)
         else:
             o._counts *= x
             o._var *= x*x
@@ -1538,70 +1538,12 @@ class Histogram(HistogramND):
 
         return np.argmax(self._counts[msk])
 
-
-    def __mul__(self,x):
-
-        o = copy.deepcopy(self)
-
-        if isinstance(x, Histogram):
-
-            y1 = self._counts
-            y2 = x._counts
-            y1v = self._var
-            y2v = x._var
-
-            f0 = np.zeros(self.axis().nbins)
-            f1 = np.zeros(self.axis().nbins)
-
-            f0[y1 != 0] = y1v/y1**2
-            f1[y2 != 0] = y2v/y2**2
-
-            o._counts = y1*y2
-            o._var = x._counts**2*(f0+f1)
-        else:
-            o._counts *= x
-            o._var *= x*x
-
-        return o
-
-
-#    def __div__(self,x):
-#
-#        if isinstance(x, Histogram):
-#            o = copy.deepcopy(self)
-#
-#            y1 = self._counts
-#            y2 = x._counts
-#            y1_var = self._var
-#            y2_var = x._var
-#
-#            msk = ((y1!=0) & (y2!=0))
-#
-#            o._counts[~msk] = 0.
-#            o._var[~msk] = 0.
-#            
-#            o._counts[msk] = y1[msk] / y2[msk]
-#            o._var[msk] = (y1[msk] / y2[msk])**2
-#            o._var[msk] *= (y1_var[msk]/y1[msk]**2 + y2_var[msk]/y2[msk]**2)
-#
-#            return o
-#        else:
-#            x = np.array(x,ndmin=1)
-#            msk = x != 0
-#            x[msk] = 1./x[msk]
-#            x[~msk] = 0.0
-#            return self.__mul__(x)
-
     def _prepare_xaxis(self, rotation=0, alignment='center'):
         """Apply bounds and text labels on x axis."""
 #        if self.binlabels is not None:
 #            plt.xticks(self._x, self.binlabels,
 #                       rotation=rotation, ha=alignment)
         plt.xlim(self._axes[0].edges[0], self._axes[0].edges[-1])
-
-
-
-
 
 class Histogram2D(HistogramND):
 

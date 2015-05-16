@@ -11,6 +11,8 @@ matplotlib.use('Agg')
 from gammatools.core.fits_util import *
 from gammatools.fermi.irf_util import *
 from gammatools.fermi.psf_model import *
+from gammatools.fermi.fermi_tools import *
+from gammatools.fermi.exposure import *
 from gammatools.core.stats import poisson_lnl
 from gammatools.core.util import *
 from gammatools.core.bspline import BSpline, PolyFn
@@ -21,114 +23,6 @@ import glob
 
 def poisson_ts(sig,bkg):
     return 2*(poisson_lnl(sig+bkg,sig+bkg) - poisson_lnl(sig+bkg,bkg))
-
-
-def compute_flux(hp_bexp,hp_bdiff_counts,psf_pdf_hist,
-                 psf_domega,rebin,ts_threshold,min_counts,
-                 gamma):
-
-#    from time import sleep
-#    print 'Entering flux'
-#    sleep(5)
-
-    ntype = len(hp_bexp)
-    energy_axis = hp_bexp[0].axis(0)
-    energy_axis_rebin = Axis(energy_axis.edges[::rebin])
-
-    deltae = 10**energy_axis.edges[1:] - 10**energy_axis.edges[:-1]
-    
-    hp_flux = HealpixSkyCube([energy_axis_rebin,hp_bexp[0].axis(1)])
-
-    scale = 10**np.linspace(-0.5,4,25)
-    ts = np.zeros((energy_axis_rebin.nbins,hp_bexp[0].axis(1).nbins))
-    bexps = np.zeros((energy_axis_rebin.nbins,hp_bexp[0].axis(1).nbins))
-    ts_scale = np.zeros((energy_axis_rebin.nbins,hp_bexp[0].axis(1).nbins,25))
-
-    # Loop over spatial bins
-    for k in range(0,hp_flux.axis(1).nbins,1000):
-
-        ss = slice(k,k+1000)
-        print k, ss
-
-        # Loop over energy bins
-        for i in range(0,energy_axis_rebin.nbins):
-
-            es = slice(i*rebin,(i+1)*rebin)
-            ebin = np.sum(energy_axis.center[es])/float(rebin)
-            ew = (10**energy_axis.center[es]/10**ebin)**-gamma
-            
-            # Loop over event types
-
-            bexps = None
-            for j in range(ntype):
-                bexpw = (hp_bexp[j].counts[es,ss,np.newaxis]*
-                         deltae[es,np.newaxis,np.newaxis]*
-                         ew[:,np.newaxis,np.newaxis])
-
-                if bexps is None:
-                    bexps = np.sum(bexpw,axis=0)
-                else:
-                    bexps += np.sum(bexpw,axis=0)
-
-            for j in range(ntype):
-
-                bexpw = (hp_bexp[j].counts[es,ss,np.newaxis]*
-                         deltae[es,np.newaxis,np.newaxis]*
-                         ew[:,np.newaxis,np.newaxis])
-
-                sig = (min_counts*psf_pdf_hist[j].counts[es,np.newaxis,:]*
-                       bexpw/bexps[np.newaxis,:,:])
-                sig_scale = sig[:,:,:,np.newaxis]*scale[np.newaxis,np.newaxis,:]
-
-#            bkg = hp_bdiff*hp_bexp
-#            hp_gdiff_counts *= deltae[:,np.newaxis]
-            
-                bkg = hp_bdiff_counts[j].counts[es,ss,np.newaxis]*psf_domega[j][es,np.newaxis,:]
-            
-                print i, j, sig.shape, bkg[es,ss,:].shape, bexps.shape
-
-                ts[i,ss] += np.squeeze(np.apply_over_axes(np.sum,poisson_ts(sig,bkg),axes=[0,2]))
-                ts_scale[i,ss,:] += np.squeeze(np.apply_over_axes(np.sum,
-                                                                  poisson_ts(sig_scale,
-                                                                             bkg[:,:,:,np.newaxis]),
-                                                                  axes=[0,2]))
-#                print ts[0,0]
-#                print ts_scale[0,0,:]
-#                print np.sum(sig[:,0])
-#                print np.sum(psf_pdf_hist[j].counts[0,np.newaxis,:])
-#                print np.sum(bexpw/bexps[np.newaxis,:,:])
-                
-            hp_flux._counts[i,ss] = min_counts/np.squeeze(bexps)
-
-#    print ts.shape
-#    ts_scale[ts_scale<0]=0
-    
-    # Loop over energy bins
-    for i in range(0,energy_axis_rebin.nbins):
-
-        # Loop over spatial bins
-        for j in range(hp_flux.axis(1).nbins):
-
-            if ts[i,j] >= ts_threshold: continue
-    #            hp_flux._counts[i,j] = min_counts/bexps[j,...]
-    #        else:
-#            print i, j, ts[i,j]
-            
-            try:
-                fn = PolyFn.fit(4,np.log10(scale),np.log10(ts_scale[i,j]))
-                r = fn.roots(offset=np.log10(ts_threshold),imag=False)
-                r = r[(r > np.log10(scale[0]))&(r < np.log10(scale[-1]))]
-            except Exception, e:
-                print e.message
-                print 'EXCEPTION ', i, j, ts[i,j], ts_scale[i,j], r
-#                plt.figure()
-#                plt.plot(np.log10(scale),np.log10(ts_scale[j]))
-#                plt.plot(np.log10(scale),fn(np.log10(scale)))
-#                plt.axhline(np.log10(ts_threshold))
-#                plt.show()
-            hp_flux._counts[i,j] *= 10**r
-            
-    return hp_flux
     
 usage = "usage: %(prog)s [options] [ft1file]"
 description = "Run both gtmktime and gtselect on an FT1 file."
@@ -139,7 +33,7 @@ parser.add_argument('--min_counts', default=3.0, type=float)
 parser.add_argument('--ts_threshold', default=25.0, type=float)
 parser.add_argument('--bexp_scale', default=1.0, type=float)
 parser.add_argument('--nside', default=16, type=int)
-parser.add_argument('--irfs', default='P8_SOURCE_V5')
+parser.add_argument('--irfs', default='P8R2_SOURCE_V6')
 parser.add_argument('--bexpmap', default=None,required=True)
 parser.add_argument('--galdiff', default=None,required=True)
 parser.add_argument('--isodiff', default=None,required=True)
@@ -196,6 +90,10 @@ for t in types:
         
 nbin = np.round((args.emax-args.emin)*8)
 energy_axis = Axis.create(args.emin,args.emax,nbin)
+nside = args.nside
+min_counts = args.min_counts
+ts_threshold = args.ts_threshold
+
 
 print energy_axis
 
@@ -205,9 +103,63 @@ energy_axis2 = Axis(energy_axis.edges[::rebin])
 theta_axis = Axis.create(-1.5,1.0,50)
 cth_axis = Axis.create(0.2,1.0,16)
 
-psf_pdf_hist = []
+# Setup exposure
+print 'Loading exposure model'
+hp_bexp = []
+for t in types:
+
+    if t is None: bexpmap = args.bexpmap
+    else: bexpmap = args.bexpmap.replace('all',t)
+    
+    im_bexp = SkyCube.createFromFITS(bexpmap)
+    bexp = im_bexp.createHEALPixMap(nside,energy_axis=energy_axis)
+    bexp *= args.bexp_scale
+    hp_bexp += [bexp]
+
+
+# Setup PSF
+ltfile = '/u/gl/mdwood/ki20/mdwood/fermi/data/P8_SOURCE_V6/P8_SOURCE_V6_239557414_397345414_z100_r180_gti_ft1_gtltcube_z100.fits'
+
+ltc = LTCube(ltfile)
+print 'Creating PSF'
+
+psf_pdf = []
 psf_domega = []
-for irf in irfs:
+for irf, bexp in zip(irfs,hp_bexp):
+
+    haxis = Axis.create(0,bexp.axis(1).nbins,bexp.axis(1).nbins)
+    c = bexp.slice(0,0).center()
+
+    print 'Filling livetime'
+    lth = Histogram2D(haxis,cth_axis)
+    for i in range(lth.axis(0).nbins):
+
+        th,phi = hp.pix2ang(nside,i)
+        glat = np.degrees(np.pi/2.-th)
+        glon = np.degrees(phi)
+        ra,dec = gal2eq(glon,glat)        
+        h = ltc.get_src_lthist(ra[0],dec[0],cth_axis)
+        lth._counts[i,:] = h.counts
+        
+#        print i, th, phi, h.counts
+
+#    plt.figure()
+#    lth.slice(0,0).plot()
+#    lth.slice(0,1000).plot()
+#    lth.slice(0,2000).plot()
+#    lth.slice(0,3000).plot()
+
+        
+#        ltc.get_src_lthist(ra,dec,cth_axis)
+#    slat = np.sin(np.radians(c[1]))
+#    lon = np.radians(c[0])
+    
+#    # Loop over sky bins
+#    for i in range(lth.axis(2).nbins):
+#    lt = ltc_hist.interpolate(lon[:,np.newaxis],
+#                              slat[:,np.newaxis],
+#                              cth_axis.center[:,np.newaxis])
+    
     psf_q68 = irf.psf_quantile(energy_axis.center,0.6)
 
     theta_edges = theta_axis.edges[np.newaxis,:] + np.log10(psf_q68)[:,np.newaxis]
@@ -220,26 +172,53 @@ for irf in irfs:
                     cth_axis.center[np.newaxis,:])
 
     print 'Evaluating PSF'
-    psf = irf.psf(10**theta[:,:,np.newaxis],  #10**theta_axis.center[np.newaxis,:,np.newaxis],
+    psf = irf.psf(10**theta[:,:,np.newaxis],
+                  #10**theta_axis.center[np.newaxis,:,np.newaxis],
                   energy_axis.center[:,np.newaxis,np.newaxis],
                   cth_axis.center[np.newaxis,np.newaxis,:])
+
+    # PSF = E, Theta, Cth
+    # Aeff = E, Cth
+    # LT = S, Cth
+
+    wpsf = np.zeros((energy_axis.nbins,haxis.nbins,theta_axis.nbins))
+
+    for i in range(0,haxis.nbins,1000):
+        s = slice(i,i+1000)    
+        psf2 = (psf[:,np.newaxis,:,:]*
+                aeff[:,np.newaxis,np.newaxis,:]*
+                lth.counts[np.newaxis,s,np.newaxis,:])
+
+        wpsf[:,s,:] = np.sum(psf2,axis=3)/np.sum(aeff[:,np.newaxis,np.newaxis,:]*
+                                                 lth.counts[np.newaxis,s,np.newaxis,:],
+                                                 axis=3)
+
+    psf = wpsf
     
-    psf = np.sum(psf*aeff[:,np.newaxis,:],axis=2)
-    psf /= np.sum(aeff,axis=1)[:,np.newaxis]    
+#    psf = np.sum(psf*aeff[:,np.newaxis,:],axis=2)
+#    psf /= np.sum(aeff,axis=1)[:,np.newaxis]
+
+    # Energy, Space, Theta
+
+#    plt.figure()
+#    plt.plot(theta_axis.center,psf2[16,0,:])
+#    plt.plot(theta_axis.center,psf2[16,1000,:])
+#    plt.plot(theta_axis.center,psf2[16,2000,:])
+#    plt.plot(theta_axis.center,psf2[16,3000,:])
+#    plt.plot(theta_axis.center,psf[16,:],color='k')
+#    plt.show()
+       
     psf_q68_domega = np.radians(psf_q68)**2*np.pi
 
-    aeff_hist = Histogram2D(energy_axis,cth_axis,counts=aeff)
-    hist = Histogram2D(energy_axis,theta_axis,counts=psf)
-    hist *= (180./np.pi)**2
-    hist = hist*domega
-
-    psf_pdf_hist.append(hist)
-    psf_domega.append(domega)
-
+    psf *= (180./np.pi)**2
+    psf *= domega[:,np.newaxis,:]
+    psf_pdf.append(psf)
     
-nside = args.nside
-min_counts = args.min_counts
-ts_threshold = args.ts_threshold
+#    hist = HistogramND([energy_axis,haxis,theta_axis],counts=psf)
+#    hist *= (180./np.pi)**2
+#    hist = hist*domega[:,np.newaxis,:]
+#    psf_pdf_hist.append(hist)
+    psf_domega.append(domega[:,np.newaxis,:])
 
 # Setup galactic diffuse model
 print 'Loading diffuse model'
@@ -258,20 +237,6 @@ for i, t in enumerate(types):
     hp_bdiff += [bdiff]
 
     
-print 'Loading exposure model'
-hp_bexp = []
-for t in types:
-
-#    print t, args.bexpmap.replace('all',t)
-    if t is None: bexpmap = args.bexpmap
-    else: bexpmap = args.bexpmap.replace('all',t)
-    
-    im_bexp = SkyCube.createFromFITS(bexpmap)
-    bexp = im_bexp.createHEALPixMap(hp_gdiff.nside,hp_gdiff.axis(0))
-    bexp *= args.bexp_scale
-    hp_bexp += [bexp]
-
-
 deltae = 10**energy_axis.edges[1:] - 10**energy_axis.edges[:-1]
 #domega = hp.nside2pixarea(hp_gdiff.nside)
 
@@ -286,9 +251,11 @@ for i,t in enumerate(types):
     hp_bdiff_counts += [hc]
     
 
+
+
 print 'Computing sensitivity'
     
-filename = '{prefix:s}_ebin2_n{min_counts:04.1f}_'
+filename = '{prefix:s}_ebin_n{min_counts:04.1f}_'
 filename += 'g{gamma:04.2f}_ts{ts_threshold:02.0f}_nside{nside:03d}'
 
 filename = filename.format(**{'prefix' : args.prefix,
@@ -297,23 +264,26 @@ filename = filename.format(**{'prefix' : args.prefix,
                               'ts_threshold' : args.ts_threshold,
                               'nside' : args.nside})
 
-hp_flux = compute_flux(hp_bexp,hp_bdiff_counts,psf_pdf_hist,psf_domega,rebin,ts_threshold,min_counts,args.gamma)
-hp_flux.save('%s.fits'%filename)
+if args.ethresh is None:
+    hp_flux = compute_flux(hp_bexp,hp_bdiff_counts,psf_pdf,psf_domega,rebin,ts_threshold,min_counts,args.gamma)
+    hp_flux.save('%s.fits'%filename)
 
-
-
-filename = '{prefix:s}_powerlaw2_n{min_counts:04.1f}_'
-filename += 'g{gamma:04.2f}_ts{ts_threshold:02.0f}_nside{nside:03d}'
+if args.ethresh is None: ethresh = args.emin
+else: ethresh = args.ethresh
+    
+filename = '{prefix:s}_powerlaw_n{min_counts:04.1f}_'
+filename += 'g{gamma:04.2f}_e{ethresh:04.2f}_ts{ts_threshold:02.0f}_nside{nside:03d}'
 
 filename = filename.format(**{'prefix' : args.prefix,
                               'min_counts':args.min_counts,
                               'gamma': args.gamma,
                               'ts_threshold' : args.ts_threshold,
-                              'nside' : args.nside})
+                              'nside' : args.nside,
+                              'ethresh' : ethresh})
     
-hp_flux = compute_flux(hp_bexp,hp_bdiff_counts,psf_pdf_hist,psf_domega,
+hp_flux = compute_flux(hp_bexp,hp_bdiff_counts,psf_pdf,psf_domega,
                        energy_axis.nbins,
-                       ts_threshold,min_counts,args.gamma)
+                       ts_threshold,min_counts,args.gamma,ethresh,escale=3.5)
 
 hp_flux.save('%s.fits'%filename)
     
@@ -356,7 +326,7 @@ for k in range(0,hp_flux.axis(1).nbins,1000):
                  ew[:,np.newaxis,np.newaxis])
         bexps = np.sum(bexpw,axis=0)
 
-        sig = (min_counts*psf_pdf_hist.counts[es,np.newaxis,:]*
+        sig = (min_counts*psf_pdf.counts[es,np.newaxis,:]*
                bexpw/bexps[np.newaxis,:,:])
         sig_scale = sig[:,:,:,np.newaxis]*scale[np.newaxis,np.newaxis,:]
 
