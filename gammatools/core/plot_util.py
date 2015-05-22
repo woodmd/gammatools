@@ -50,10 +50,11 @@ class FigureSubplot(object):
               'markersize' : None,
               'hist_style' : None,
               'hist_xerr' : True,
-              'legend_loc' : 'upper right',
-              'legend_ncol' : 1,
-              'legend_fontsize' : 10,
-              'legend'   : True,
+              'nolegend'  : False,
+              'legend' : {'loc' : 'best',
+                          'ncol' : 1,
+                          'frameon' : True,
+                          'size' : 10},
               'norm_style' : 'ratio',
               'norm_index' : None,
               'norm_interpolation' : 'log' }
@@ -215,8 +216,6 @@ class FigureSubplot(object):
         
         style = copy.deepcopy(self._style)
         update_dict(style,kwargs)
-
-
         
         ax = self._ax
 
@@ -258,10 +257,12 @@ class FigureSubplot(object):
             ax.text(*t,transform=ax.transAxes, **self._text_style[i])
 
         ax.grid(True)
-        if len(labels) > 0 and style['legend']:
-            ax.legend(prop={'size' : style['legend_fontsize']},
-                      loc=style['legend_loc'],
-                      ncol=style['legend_ncol'],numpoints=1)
+        if len(labels) > 0 and not style['nolegend']:
+            
+            legkwargs = copy.deepcopy(style['legend'])
+            legkwargs['prop'] = {'size' : legkwargs.pop('size',12)}
+
+            ax.legend(numpoints=1,**legkwargs)
 
         if not style['ylabel'] is None:
             ax.set_ylabel(style['ylabel'])
@@ -393,16 +394,26 @@ class Figure(object):
 
     def plot(self,**kwargs):
 
-        fig_name = '%s.%s'%(self._figlabel,self._style['format'])
-        fig_name = os.path.join(self._style['fig_dir'],fig_name)
+        style = copy.deepcopy(self._style)
+        update_dict(style,kwargs)
+
+        fig_name = '%s'%(self._figlabel)
+        fig_name = os.path.join(style['fig_dir'],fig_name)
         
         for p in self._subplots: p.plot(**kwargs)
 
-        if not self._style['fontsize'] is None:
+        if not style['fontsize'] is None:
             for p in self._subplots:
-                set_font_size(p.ax(),self._style['fontsize'])
-        self._fig.subplots_adjust(**self._style['subplot_margins'])
-        self._fig.savefig(fig_name)
+                set_font_size(p.ax(),style['fontsize'])
+        self._fig.subplots_adjust(**style['subplot_margins'])
+
+        if isinstance(style['format'],list):
+            formats = style['format']
+        else:
+            formats = [style['format']]
+
+        for fmt in formats:
+            self._fig.savefig(fig_name + '.%s'%fmt)
         
 class TwoPaneFigure(Figure):
 
@@ -488,7 +499,7 @@ class FigTool(Configurable):
         'markersize' : [6.0],
         'figsize' : [8.0,6.0],
         'norm_index'  : None,
-        'legend_loc' : 'best',        
+        'legend_kwargs' : {'loc' : 'best'}, 
         'fig_dir' :
             ( './', 'Set the output directory.' ),
         'fig_prefix'   :
