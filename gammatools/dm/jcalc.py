@@ -54,8 +54,6 @@ class LoSFn(object):
         self._alpha = alpha
 
     def __call__(self,xp):
-        #xp = np.asarray(xp)
-        #if xp.ndim == 0: xp = np.array([xp])
 
         x = np.power(xp,self._alpha)
         r = np.sqrt(x*x+self._d2*self._sinxi2)
@@ -209,15 +207,12 @@ class LoSIntegralFnFast(LoSIntegralFn):
         else: dhalo = np.array(dhalo,ndmin=1)
 
         psi = np.array(psi,ndmin=1)
+        v = psi*dhalo
+        v.fill(0)
+        v = v.reshape(v.shape + (1,))
 
-#        if dhalo.shape != psi.shape:
-#            d = np.zeros(shape=psi.shape)
-#            d[:] = dhalo
-#            dhalo = d
-#        elif dhalo.ndim == 0: dhalo = np.array([dhalo])
-#        if psi.ndim == 0: psi = np.array([psi])
-        
-        v = np.zeros(shape=psi.shape)
+        dhalo = np.ones(v.shape)*dhalo[...,np.newaxis]
+        psi = np.ones(v.shape)*psi[...,np.newaxis]
 
         if self._ann: losfn = LoSFn(dhalo,psi,self._dp,self._alpha)
         else: losfn = LoSFnDecay(dhalo,psi,self._dp,self._alpha)
@@ -248,11 +243,13 @@ class LoSIntegralFnFast(LoSIntegralFn):
                 dx0 = xlim0/float(self._nstep)
                 dx1 = (xlim1-xlim0)/float(self._nstep)
 
-                x0 = np.outer(self._x,xlim0)
-                x1 = xlim0 + np.outer(self._x,xlim1-xlim0)
+                x0 = self._x*xlim0
+                x1 = xlim0 + self._x*(xlim1-xlim0)
 
-                s0 = 2*np.sum(losfn(x0)*dx0,axis=0)
-                s1 = np.sum(losfn(x1)*dx1,axis=0)
+#                s0 = 2*np.sum(losfn(x0)*dx0,axis=0)
+#                s1 = np.sum(losfn(x1)*dx1,axis=0)
+                s0 = 2*np.apply_over_axes(np.sum,losfn(x0)*dx0,axes=[-1])
+                s1 = np.apply_over_axes(np.sum,losfn(x1)*dx1,axes=[-1])
 
                 v[msk01] = s0[msk01]+s1[msk01]
 
@@ -260,8 +257,9 @@ class LoSIntegralFnFast(LoSIntegralFn):
             
                 dx1 = (xlim1-xlim0)/float(self._nstep)
 
-                x1 = xlim0 + np.outer(self._x,xlim1-xlim0)
-                s0 = np.sum(losfn(x1)*dx1,axis=0)
+                x1 = xlim0 + self._x*(xlim1-xlim0)
+#                s0 = np.sum(losfn(x1)*dx1,axis=0)
+                s0 = np.apply_over_axes(np.sum,losfn(x1)*dx1,axes=[-1])
             
                 v[msk02] = s0[msk02]
                 
@@ -269,13 +267,12 @@ class LoSIntegralFnFast(LoSIntegralFn):
         if np.any(~msk0 & msk1):
             
             dx0 = xlim1/float(self._nstep)
-            x0 = np.outer(self._x,xlim1)
-
-            s0 = 2*np.sum(losfn(x0)*dx0,axis=0)
+            x0 = xlim1*self._x
+            s0 = 2*np.apply_over_axes(np.sum,losfn(x0)*dx0,axes=[-1])
 
             v[~msk0 & msk1] = s0[~msk0 & msk1]
 
-
+        v = v.reshape(v.shape[:-1])
         return v
 
 class LoSIntegralSplineFn(object):

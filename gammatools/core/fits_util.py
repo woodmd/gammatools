@@ -483,7 +483,14 @@ class HealpixSkyImage(HealpixImage):
 #            cb.ax.xaxis.labelpad = -8
             # workaround for issue with viewers, see colorbar docstring
 #            cb.solids.set_edgecolor("face")
+    
+    def save(self,fitsfile):
 
+        hdu_image = pyfits.PrimaryHDU()
+        col = pyfits.Column(name='CHANNEL1', format='D', array=self._counts)
+        hdu = pyfits.BinTableHDU.from_columns([col],name='SKYMAP')
+        hdulist = pyfits.HDUList([hdu_image,hdu])
+        hdulist.writeto(fitsfile,clobber=True)
     
 class HealpixSkyCube(HealpixImage):
 

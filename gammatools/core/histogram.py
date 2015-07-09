@@ -1072,7 +1072,7 @@ class Histogram(HistogramND):
         All additional keyword arguments will be passed to
         :func:`matplotlib.pyplot.errorbar`.
         """
-        style = kwargs
+        style = copy.deepcopy(kwargs)
 
         if ax is None: ax = plt.gca()
         if counts is None: counts = self._counts
