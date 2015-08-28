@@ -70,8 +70,6 @@ class BSpline(object):
 
         nrow = k.shape[0]
         ndata = x.shape[0]
-        
-        print nrow, ndata
 
         a = np.zeros(shape=(ndata,nrow))
 

@@ -74,7 +74,7 @@ class FITSPlotter(object):
 
         fig[0].add_hist(hm,hist_style='line',label='Model')
         fig[0].add_hist(h,linestyle='None',label='Data',color='k')
-        fig[1].set_style('ylim',[-0.2,0.2])
+        fig[1].set_style('ylim',[-0.4,0.4])
         fig[0].ax().set_title(title)
         fig.plot()
 

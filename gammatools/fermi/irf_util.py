@@ -34,6 +34,10 @@ class IRFManager(object):
         self._irfs = []
         if not irfs is None: self._irfs = irfs
 
+    @property
+    def irfs(self):
+        return self._irfs
+        
     @staticmethod
     def add_arguments(parser):
         parser.add_argument('--irf_dir', default = None, 
@@ -184,6 +188,7 @@ class IRF(object):
         self._aeff = aeff
         self._edisp = edisp
 
+        
     @staticmethod
     def create(irf_name,load_from_file=False,irf_dir=None):
         
@@ -358,12 +363,47 @@ class EDispIRF(IRFComponent):
         self._hdulist = pyfits.open(fits_file)
         hdulist = self._hdulist
 #        hdulist.info()
-       
+
+        if re.search('front',fits_file.lower()) is not None: self._ct = 'front'
+        elif re.search('back',fits_file.lower()) is not None: self._ct = 'back'
+        else: self._ct = 'none'
+
+        self.load_scaling_params(hdulist)
+
+        self.setup_axes(hdulist[1].data)
+        
         self._elo = np.log10(np.array(hdulist[1].data[0][0]))
         self._ehi = np.log10(np.array(hdulist[1].data[0][1]))
         self._cthlo = np.array(hdulist[1].data[0][2])
         self._cthhi = np.array(hdulist[1].data[0][3])
 
+        nx = self._cth_axis.nbins
+        ny = self._energy_axis.nbins
+        shape = (nx,ny)
+        
+        self._param_hists = {
+            'f' : Histogram2D(self._cth_axis,self._energy_axis,
+                              counts=np.array(hdulist[1].data[0][4]).reshape(shape),var=0),
+            's1' : Histogram2D(self._cth_axis,self._energy_axis,
+                              counts=np.array(hdulist[1].data[0][5]).reshape(shape),var=0),
+            'k1' : Histogram2D(self._cth_axis,self._energy_axis,
+                              counts=np.array(hdulist[1].data[0][6]).reshape(shape),var=0),
+            'bias' : Histogram2D(self._cth_axis,self._energy_axis,
+                              counts=np.array(hdulist[1].data[0][7]).reshape(shape),var=0),
+            'bias2' : Histogram2D(self._cth_axis,self._energy_axis,
+                              counts=np.array(hdulist[1].data[0][8]).reshape(shape),var=0),
+            's2' : Histogram2D(self._cth_axis,self._energy_axis,
+                              counts=np.array(hdulist[1].data[0][9]).reshape(shape),var=0),
+            'k2' : Histogram2D(self._cth_axis,self._energy_axis,
+                              counts=np.array(hdulist[1].data[0][10]).reshape(shape),var=0),
+            'pindex1' : Histogram2D(self._cth_axis,self._energy_axis,
+                              counts=np.array(hdulist[1].data[0][11]).reshape(shape),var=0),
+            'pindex2' : Histogram2D(self._cth_axis,self._energy_axis,
+                              counts=np.array(hdulist[1].data[0][12]).reshape(shape),var=0)
+            }
+            
+        
+        
         edges = np.concatenate((self._elo,np.array(self._ehi[-1],ndmin=1)))
         self._energy_axis = Axis(edges)
         edges = np.concatenate((self._cthlo,np.array(self._cthhi[-1],ndmin=1)))
@@ -376,6 +416,112 @@ class EDispIRF(IRFComponent):
         self._bin_width = [self._cthhi-self._cthlo,
                            self._ehi-self._elo]
 
+
+        self._deltae_axis = Axis(np.linspace(-1.0,1.0,1001))
+        self._edisp_hist = HistogramND([self._cth_axis,
+                                        self._energy_axis,
+                                        self._deltae_axis])
+                                     
+        deltae = self._deltae_axis.center
+
+        for i in range(nx):
+            for j in range(ny):
+                x = self._cth_axis.center[i]
+                y = self._energy_axis.center[j]                
+#                z = self.eval(y+deltae,y,x)
+                self._edisp_hist._counts[i,j] = np.log10(self.eval(y+deltae,y,x))
+
+#        plt.figure()
+#        self._edisp_hist.slice(0,5).plot()
+#        plt.show()
+                
+
+    def load_scaling_params(self,hdulist):
+        self._sparam = np.array(hdulist['EDISP_SCALING_PARAMS'].data[0][0])
+
+    def eval_scale_factor(self,egy,cth):
+        
+        sd = (self._sparam[0]*egy**2+
+              self._sparam[1]*cth**2+
+              self._sparam[2]*egy+
+              self._sparam[3]*cth+
+              self._sparam[4]*egy*cth+
+              self._sparam[5])
+        
+        return sd
+        
+    def eval(self,erec,egy,cth,**kwargs):        
+
+
+        
+        erec = np.array(erec,ndmin=1)
+        egy = np.array(egy,ndmin=1)
+        cth = np.array(cth,ndmin=1)
+
+#        print 'eval ', erec.shape, egy.shape, cth.shape
+        
+        sd = self.eval_scale_factor(egy,cth)
+
+        x = (10**erec-10**egy)/10**egy/sd
+        
+        f = self._param_hists['f'].interpolate(cth,egy)
+        s1 = self._param_hists['s1'].interpolate(cth,egy)
+        k1 = self._param_hists['k1'].interpolate(cth,egy)
+        bias = self._param_hists['bias'].interpolate(cth,egy)
+        bias2 = self._param_hists['bias2'].interpolate(cth,egy)
+        s2 = self._param_hists['s2'].interpolate(cth,egy)
+        k2 = self._param_hists['k2'].interpolate(cth,egy)
+        pindex1 = self._param_hists['pindex1'].interpolate(cth,egy)
+        pindex2 = self._param_hists['pindex2'].interpolate(cth,egy)
+        
+        v = f*EDispIRF.base_function(x,s1,k1,bias,pindex1)+(1-f)*EDispIRF.base_function(x,s2,k2,bias2,pindex2)
+
+        return v/(10**egy*sd)
+
+    def eval2(self,erec,egy,cth):
+        """Evaluate PSF by interpolating in PSF density."""
+        erec = np.array(erec,ndmin=1)
+        egy = np.array(egy,ndmin=1)
+        cth = np.array(cth,ndmin=1)
+                
+        return 10**self._edisp_hist.interpolate(cth,egy,erec-egy)
+    
+    @staticmethod
+    def base_function(x,s,k,b,p):
+
+        dx = x-b
+
+        m0 = dx >= 0
+        m1 = dx < 0
+
+#        print '---------------'
+#        print x.shape
+#        print m0.shape, np.sum(m0)
+#        print m1.shape, np.sum(m1)
+#        print s.shape, k.shape, b.shape, p.shape
+        
+        exp0 = np.power(k/s*np.abs(dx),p)
+        exp1 = np.power(1./(k*s)*np.abs(dx),p)
+
+        exp0[m1]=0.0
+        exp1[m0]=0.0
+        
+#        v = np.zeros(x.shape)
+
+        prefact = p/(s*spfn.gamma(1./p))*(k/(1+k**2))
+
+        return prefact*np.exp(-exp0)*np.exp(-exp1)
+        
+        if np.any(m0):
+            v[m0] = prefact*np.exp(-np.power(k/s*np.abs(dx),p))
+
+        if np.any(m1):
+            v[m1] = prefact*np.exp(-np.power(1./(k*s)*np.abs(dx),p))
+        
+        return v
+        
+
+    
     def dump(self):
         self._hdulist.info()
 

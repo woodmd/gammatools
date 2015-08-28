@@ -266,30 +266,23 @@ class Configurable(object):
 
             argname = k.split('.')
             if v is None: continue
-#<<<<<<< HEAD
 
-#            if len(argname) == 2:
-#                default_config = self._default_config[argname[0]][argname[1]]
-#                config = self._config[argname[0]][argname[1]]
-#            else:
+            if len(argname) == 2:
+                default_config = self._default_config[argname[0]][argname[1]]
+                config = self._config[argname[0]][argname[1]]
+            else:
                 
-#            if not k in self._default_config: continue                
-#            default_config = self._default_config[k]
-#            config = self._config[k]
-#=======
-            if not k in self._default_config: continue
-            if isinstance(v,list) and len(v) == 0: continue
+                if not k in self._default_config: continue                
+                default_config = self._default_config[k]
+                config = self._config[k]
 
-            default_config = self._default_config[k]
-            config = self._config[k]
-#>>>>>>> b395e1b2083e97b0d30d25de63f242dee0c66d80
+#            if isinstance(v,list) and len(v) == 0: continue
 
             if default_config.type == list and v is not None:
                 value = v.split(',')
                 value = map(default_config.list_type,value)
             else:
                 value = v
-
                 
             if len(argname) == 1:
                 self._config[k] = value

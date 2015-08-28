@@ -175,6 +175,9 @@ elif isinstance(ccube,SkyCube):
     fp.make_plots_skycube(suffix='data_map',plots_per_fig=1,
                           make_projection=True,projection=0.5)
 
+    fp.make_plots_skycube(suffix='data_map_pnorm',plots_per_fig=1,
+                          zscale='pow',zscale_power=3.0)
+    
     fp.make_plots_skycube(suffix='data_map_smooth',plots_per_fig=1,
                           make_projection=True,projection=0.5,smooth=True)
 

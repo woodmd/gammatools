@@ -887,7 +887,9 @@ class SkyCube(FITSImage):
         header = hdulist[ihdu].header
         wcs = pywcs.WCS(header,naxis=[1,2],relax=True)
 
-        if hdulist[1].name == 'ENERGIES':
+        hdunames = [t.name for t in hdulist]
+        
+        if 'ENERGIES' in hdunames and hdulist[1].name == 'ENERGIES':
             v = bintable_to_array(hdulist[1].data)
             v = np.log10(v)
             energy_axis = Axis.createFromArray(v)
