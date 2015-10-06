@@ -583,6 +583,9 @@ class Catalog(object):
             
             mew = 1.0 + 1.0*scale
             ms = 5.0 + 3.0*scale
+
+            mew = 1.0
+            ms = 5.0
             
             if label_threshold is not None and signif_avg[i] > label_threshold:
 
