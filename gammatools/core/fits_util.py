@@ -489,6 +489,31 @@ class HealpixSkyImage(HealpixImage):
         hdu_image = pyfits.PrimaryHDU()
         col = pyfits.Column(name='CHANNEL1', format='D', array=self._counts)
         hdu = pyfits.BinTableHDU.from_columns([col],name='SKYMAP')
+
+        SCHEME = "RING"
+        GALACTIC = True
+        ORDERDICT = {1:0,2:1,4:2,8:3,16:4,32:5,64:6,128:7,256:8,512:9,1024:10,2048:11,4096:12,8192:13}
+        
+        hdu.header.set("PIXTYPE", "HEALPIX");
+        hdu.header.set("ORDERING", SCHEME)
+        
+        try:
+            hdu.header.set("ORDER", ORDERDICT[self.nside] )
+        except:
+            hdu.header.set("ORDER", -1)
+        hdu.header.set("NSIDE", self.nside )
+        if GALACTIC:
+            hdu.header.set("COORDSYS", "GAL")
+        else:
+            hdu.header.set("EQUINOX", 2000.0,"","Equinox of RA & DEC specifications")
+            hdu.header.set("COORDSYS", "EQU")
+            hdu.header.set("RADECSYS","FK5")
+             
+        hdu.header.set("FIRSTPIX", 0);
+        hdu.header.set("LASTPIX", (12*self.nside*self.nside)-1)
+        hdu.header.set("INDXSCHM","IMPLICIT")
+        
+        
         hdulist = pyfits.HDUList([hdu_image,hdu])
         hdulist.writeto(fitsfile,clobber=True)
     
