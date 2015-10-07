@@ -434,7 +434,7 @@ class TwoPaneFigure(Figure):
         style1 = copy.deepcopy(style)
 
         style0['xlabel'] = None
-        style1['legend'] = False
+        style1['nolegend'] = True
         style1['title'] = None
 
         fp0 = FigureSubplot(ax0,**style0)
@@ -473,7 +473,8 @@ class TwoPaneRatioFigure(Figure):
             
         style1['yscale'] = 'lin'
         style1['ylim'] = style['ylim_ratio']
-        style1['legend'] = False
+        style1['nolegend'] = True
+        style1['title'] = ''
 
 #        ratio_subp.set_style('show_args',style['show_ratio_args'])
 #        ratio_subp.set_style('mask_args',style['mask_ratio_args'])

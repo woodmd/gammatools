@@ -268,8 +268,13 @@ class Configurable(object):
             if v is None: continue
 
             if len(argname) == 2:
+
+                if not argname[0] in self._default_config: continue    
+
                 default_config = self._default_config[argname[0]][argname[1]]
                 config = self._config[argname[0]][argname[1]]
+
+
             else:
                 
                 if not k in self._default_config: continue                

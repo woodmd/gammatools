@@ -128,7 +128,7 @@ class HistogramND(object):
     def counts(self):
         """Return the counts array."""
         return self._counts
-        
+    
     @property
     def var(self):
         return self._var
@@ -240,6 +240,9 @@ class HistogramND(object):
                     h.SetBinError(i+1,j+1,k+1,np.sqrt(self._var[i,j,k]))
 
         return h
+
+    def set_counts(self,counts):
+        self._counts = counts
 
     def set_label(self,label):
         self._style['label'] = label
