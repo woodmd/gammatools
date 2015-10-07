@@ -393,8 +393,6 @@ class JProfile(object):
         return np.sum(self._spline(x)*domega)
 
     def cumsum(self,psi):
-        print psi, type(psi)
-
         return self._cum_spline(np.radians(psi))
 
 class ROIIntegrator(object):

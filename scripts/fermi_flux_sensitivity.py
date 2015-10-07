@@ -40,7 +40,7 @@ parser.add_argument('--isodiff', default=None,required=True)
 parser.add_argument('--prefix', default='p8source')
 parser.add_argument('--gamma', default=2.0,type=float)
 parser.add_argument('--emin', default=1.5,type=float)
-parser.add_argument('--emax', default=5.75,type=float)
+parser.add_argument('--emax', default=6.0,type=float)
 parser.add_argument('--ethresh', default=None,type=float)
 parser.add_argument('--bins_per_decade', default=4,type=int)
 parser.add_argument('--event_type', default='all')
@@ -94,7 +94,6 @@ nside = args.nside
 min_counts = args.min_counts
 ts_threshold = args.ts_threshold
 
-
 print energy_axis
 
 rebin=8/args.bins_per_decade
@@ -117,6 +116,7 @@ for t in types:
     hp_bexp += [bexp]
 
 
+    
 # Setup PSF
 ltfile = '/u/gl/mdwood/ki20/mdwood/fermi/data/P8_SOURCE_V6/P8_SOURCE_V6_239557414_397345414_z100_r180_gti_ft1_gtltcube_z100.fits'
 
@@ -193,21 +193,7 @@ for irf, bexp in zip(irfs,hp_bexp):
                                                  lth.counts[np.newaxis,s,np.newaxis,:],
                                                  axis=3)
 
-    psf = wpsf
-    
-#    psf = np.sum(psf*aeff[:,np.newaxis,:],axis=2)
-#    psf /= np.sum(aeff,axis=1)[:,np.newaxis]
-
-    # Energy, Space, Theta
-
-#    plt.figure()
-#    plt.plot(theta_axis.center,psf2[16,0,:])
-#    plt.plot(theta_axis.center,psf2[16,1000,:])
-#    plt.plot(theta_axis.center,psf2[16,2000,:])
-#    plt.plot(theta_axis.center,psf2[16,3000,:])
-#    plt.plot(theta_axis.center,psf[16,:],color='k')
-#    plt.show()
-       
+    psf = wpsf       
     psf_q68_domega = np.radians(psf_q68)**2*np.pi
 
     psf *= (180./np.pi)**2
@@ -242,7 +228,6 @@ deltae = 10**energy_axis.edges[1:] - 10**energy_axis.edges[:-1]
 
 print len(hp_bdiff), len(hp_bexp)
 
-
 hp_bdiff_counts = []
 for i,t in enumerate(types):
 
@@ -250,8 +235,6 @@ for i,t in enumerate(types):
     hc *= deltae[:,np.newaxis]
     hp_bdiff_counts += [hc]
     
-
-
 
 print 'Computing sensitivity'
     
@@ -264,7 +247,7 @@ filename = filename.format(**{'prefix' : args.prefix,
                               'ts_threshold' : args.ts_threshold,
                               'nside' : args.nside})
 
-if args.ethresh is None:
+if args.ethresh is None and not os.path.isfile('%s.fits'%filename):
     hp_flux = compute_flux(hp_bexp,hp_bdiff_counts,psf_pdf,psf_domega,rebin,ts_threshold,min_counts,args.gamma)
     hp_flux.save('%s.fits'%filename)
 
@@ -280,92 +263,11 @@ filename = filename.format(**{'prefix' : args.prefix,
                               'ts_threshold' : args.ts_threshold,
                               'nside' : args.nside,
                               'ethresh' : ethresh})
+
+if not os.path.isfile('%s.fits'%filename):
+    hp_flux = compute_flux(hp_bexp,hp_bdiff_counts,psf_pdf,psf_domega,
+                           energy_axis.nbins,
+                           ts_threshold,min_counts,args.gamma,ethresh,escale=3.5)
+
+    hp_flux.save('%s.fits'%filename)
     
-hp_flux = compute_flux(hp_bexp,hp_bdiff_counts,psf_pdf,psf_domega,
-                       energy_axis.nbins,
-                       ts_threshold,min_counts,args.gamma,ethresh,escale=3.5)
-
-hp_flux.save('%s.fits'%filename)
-    
-sys.exit(0)
-
-#sig0 = 1.*psf_pdf_hist.counts[:,np.newaxis,:]
-#sig1 = 5.*np.sqrt(psf_q68_domega[:,np.newaxis]*hp_gdiff_counts.counts)
-#sig1 = sig1[:,:,np.newaxis]*psf_pdf_hist.counts[:,np.newaxis,:]
-
-#ts0 = poisson_ts(sig0,bkg)
-#ts0 = np.sum(ts0,axis=2)
-#ts1 = poisson_ts(sig1,bkg)
-#ts1 = np.sum(ts1,axis=2)
-#hp_ts0 = HealpixSkyCube(hp_bexp.axes(),counts=ts0)
-#hp_ts1 = HealpixSkyCube(hp_bexp.axes(),counts=ts1)
-
-
-
-print 'Creating flux hist'
-hp_flux = HealpixSkyCube([energy_axis2,hp_bexp.axis(1)])
-
-scale = 10**np.linspace(-0.5,5,25)
-ts = np.zeros((energy_axis2.nbins,hp_bexp.axis(1).nbins))
-ts_scale = np.zeros((energy_axis2.nbins,hp_bexp.axis(1).nbins,25))
-
-for k in range(0,hp_flux.axis(1).nbins,1000):
-
-    ss = slice(k,k+1000)
-    print k, ss
-
-    # Loop over energy bins
-    for i in range(0,energy_axis2.nbins):
-
-        es = slice(i*rebin,(i+1)*rebin)
-        ebin = np.sum(energy_axis.center[es])/float(rebin)
-        ew = (10**energy_axis.center[es]/10**ebin)**-args.gamma
-        
-        bexpw = (hp_bexp.counts[es,ss,np.newaxis]*
-                 deltae[es,np.newaxis,np.newaxis]*
-                 ew[:,np.newaxis,np.newaxis])
-        bexps = np.sum(bexpw,axis=0)
-
-        sig = (min_counts*psf_pdf.counts[es,np.newaxis,:]*
-               bexpw/bexps[np.newaxis,:,:])
-        sig_scale = sig[:,:,:,np.newaxis]*scale[np.newaxis,np.newaxis,:]
-
-        print i, sig.shape, bkg[es,ss,:].shape, bexps.shape
-        
-        ts[i,ss] = np.squeeze(np.apply_over_axes(np.sum,poisson_ts(sig,bkg[es,ss,:]),axes=[0,2]))
-        ts_scale[i,ss,:] = np.squeeze(np.apply_over_axes(np.sum,
-                                                         poisson_ts(sig_scale,bkg[es,ss,:,np.newaxis]),
-                                                         axes=[0,2]))
-
-        hp_flux._counts[i,ss] = min_counts/np.squeeze(bexps)
-        
-# Loop over energy bins
-for i in range(0,energy_axis2.nbins):
-
-    # Loop over spatial bins
-    for j in range(hp_flux.axis(1).nbins):
-
-        if ts[i,j] >= ts_threshold: continue
-#            hp_flux._counts[i,j] = min_counts/bexps[j,...]
-#        else:
-
-        try:
-            fn = PolyFn.fit(4,np.log10(scale),np.log10(ts_scale[i,j]))
-            r = fn.roots(offset=np.log10(ts_threshold),imag=False)
-            r = r[(r > np.log10(scale[0]))&(r < np.log10(scale[-1]))]
-        except Exception, e:
-            print ts_scale[j,0], r
-            plt.figure()
-            plt.plot(np.log10(scale),np.log10(ts_scale[j]))
-            plt.plot(np.log10(scale),fn(np.log10(scale)))
-            plt.axhline(np.log10(ts_threshold))
-            plt.show()
-        hp_flux._counts[i,j] *= 10**r
-#*min_counts/bexps[j,...]
-
-#hp_flux.slice(0,2).plot()
-#plt.show()
-
-            
-hp_flux.save('%s_dflux.fits'%filename)
-
