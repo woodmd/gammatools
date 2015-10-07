@@ -736,7 +736,7 @@ class Axis(object):
     dimension.  Axis objects are used to define the N-dimensional
     space of the histogram class."""
 
-    def __init__(self,edges,nbins=None,name=None,label=None,units=None):
+    def __init__(self,edges,nbins=None,center=None,name=None,label=None,units=None):
         """Construct an axis object from a sequence of bins edges."""
 
         self._name = name
@@ -754,7 +754,12 @@ class Axis(object):
 
         self._edges = edges
         self._nbins = len(edges)-1
-        self._center = 0.5*(self._edges[1:] + self._edges[:-1])
+
+        if center is None:
+            self._center = 0.5*(self._edges[1:] + self._edges[:-1])
+        else:
+            self._center = copy.copy(center)
+
         self._err = 0.5*(self._edges[1:] - self._edges[:-1])
         self._width = 2*self._err
 
@@ -776,9 +781,18 @@ class Axis(object):
 
     @staticmethod
     def createFromArray(x,**kwargs):
-        if len(x) == 1: delta = 0.5
-        else: delta = x[1]-x[0]
-        return Axis.create(x[0]-0.5*delta,x[-1]+0.5*delta,len(x),**kwargs)
+
+        x = np.array(x,ndmin=1)
+        if len(x) == 1: 
+            delta = np.array(1.0,ndmin=1)
+        else: 
+            delta = x[1:]-x[:-1]
+
+        center = x
+        edges = 0.5*(center[1:]+center[:-1])
+        edges = np.insert(edges,0,center[0]-0.5*delta[0])
+        edges = np.append(edges,center[-1]+0.5*delta[-1])
+        return Axis(edges,center=center,**kwargs)
 
     def slice(self,lobin,hibin):
         if hibin is None: hibin = self._nbins
@@ -825,12 +839,16 @@ class Axis(object):
         """Return array of bin centers."""
         return self._center
 
-    def binToVal(self,ibin,interpolate=False):
+    def binToVal(self,ibin):
         """Convert bin index to axis coordinate."""
 
-        if not interpolate: return self._center[ibin]
-        else: interpolate(np.linspace(0,self._nbins,self.nbins+1),
-                          self.edges,bin)
+        return self._center[ibin]
+
+    def binCoordToVal(self,ibin):
+        """Convert bin coordinate to axis coordinate."""
+
+        return interpolate(np.linspace(0,self._nbins,self.nbins+1),self.edges,
+                           ibin)
 
     def valToEdge(self,x):
         """Convert axis coordinate to edge index."""
@@ -844,6 +862,9 @@ class Axis(object):
         """Convert axis coordinate to bin index."""
         ibin = np.digitize(np.array(x,ndmin=1),self._edges)-1
         return ibin
+
+    def valToBinCoord(self,x):
+        return interpolate(self.edges,np.linspace(0,self._nbins,self.nbins+1),x)
         
     def valToBinBounded(self,x):
         ibin = self.valToBin(x)
@@ -853,6 +874,7 @@ class Axis(object):
 
     def to_dict(self):
         o = {'edges' : copy.copy(self.edges),
+             'center' : copy.copy(self.center),
              'label' : self._label,
              'name'  : self._name}
         return o
