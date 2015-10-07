@@ -109,5 +109,6 @@ for f in args.files:
     bselect = BinSelectTask(os.path.abspath(f),outfile,opts=args)
 
     pprint.pprint(bselect.config)
+
     bselect.run()
 

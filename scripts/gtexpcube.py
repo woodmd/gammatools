@@ -1,5 +1,13 @@
 #!/usr/bin/env python
 
+import matplotlib
+
+#try:             os.environ['DISPLAY']
+#except KeyError: matplotlib.use('Agg')
+
+matplotlib.interactive(False)
+matplotlib.use('Agg')
+
 import os, sys
 import tempfile
 import re
