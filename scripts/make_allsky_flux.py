@@ -20,20 +20,29 @@ parser = argparse.ArgumentParser(usage=usage,description=description)
 
 parser.add_argument('files', nargs='+')
 parser.add_argument('--prefix', default = '')
+parser.add_argument('--bexpmap', default = None)
 parser.add_argument('--rsmooth', default = 3.0, type=float)
+parser.add_argument('--scale', default = 1.0, type=float)
 
 args = parser.parse_args()
 
-bexpmap_file = args.files[0]
-ccube_file = args.files[1]
 
-bexpcube = SkyCube.createFromFITS(bexpmap_file)
+bexpcube = SkyCube.createFromFITS(args.bexpmap)
 
-hdulist = pyfits.open(bexpmap_file)
-ccube_hp = HealpixSkyCube.createFromFITS(ccube_file)
+ccube_hp = None
+
+for f in args.files:
+    
+    if ccube_hp is None:
+        ccube_hp = HealpixSkyCube.createFromFITS(f)
+    else:
+        ccube_hp += HealpixSkyCube.createFromFITS(f)
+        
 
 # Convert CAR projection to HP map
 bexpcube_hp = HealpixSkyCube.create(ccube_hp.axes()[0],ccube_hp.nside)
+
+
 c = bexpcube_hp.center()
 
 print 'Interpolating'
@@ -41,6 +50,7 @@ exp = bexpcube.interpolate(c[1],c[2],c[0]).reshape(bexpcube_hp.counts.shape)
 
 print 'Copying'
 bexpcube_hp._counts = exp
+bexpcube_hp *= args.scale
 
 flux_hp = ccube_hp/bexpcube_hp
 
@@ -88,6 +98,26 @@ for c in dec_cuts:
 
 
     name = 'flux_cel_colat_%05.1f_%05.1f'%(90.-c['latrange'][1],
+                                           90.-c['latrange'][0])
+    
+    o[name] = flux_sum
+
+for c in glat_cuts:
+    
+    exp_sum = bexpcube_hp.integrate(cuts=[c])
+    flux_sum = flux_hp.integrate(cuts=[c])
+    ccube_sum = ccube_hp.integrate(cuts=[c])
+    
+    m = ccube_hp.slice(0,0).create_mask(cuts=[c])
+    npix = float(np.sum(m))
+    domega = 4.0*np.pi*npix/float(m.size)    
+    expavg = exp_sum/npix
+    
+    flux_sum /= (domega*deltae)
+    flux_sum2 = (ccube_sum/exp_sum)/(domega*npix*deltae)
+
+
+    name = 'flux_gal_colat_%05.1f_%05.1f'%(90.-c['latrange'][1],
                                            90.-c['latrange'][0])
     
     o[name] = flux_sum

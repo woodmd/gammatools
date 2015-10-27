@@ -49,7 +49,7 @@ iso1_spline = UnivariateSpline(np.log10(iso1[0]),iso1[1],k=1,s=0)
 obj0 = load_object(args.files[0])
 obj1 = load_object(args.files[1])
 
-
+    
 
 for k in sorted(obj0):
     
@@ -63,6 +63,11 @@ for k in sorted(obj0):
     ms0 = m0.integrate(latrange=[-5.0,5.0])
     ms1 = m1.integrate(latrange=[-5.0,5.0])
 
+
+    
+    
+    sys.exit(0)
+    
     if ms0 == 0: continue
     
     gplane_ratio = ms0/ms1
@@ -107,12 +112,14 @@ for k in sorted(obj0):
 
     plt.figure()
 #    m0.mask(latrange=[-5,5])    
-    m0.plot(title=title,zscale='pow',zscale_power=4.0,cbar_label='Flux [cm$^{-2}$ MeV$^{-1}$ s$^{-1}$ sr$^{-1}$]')
+    m0.plot(title=title,zscale='pow',zscale_power=4.0,
+            cbar_label='Flux [cm$^{-2}$ MeV$^{-1}$ s$^{-1}$ sr$^{-1}$]')
     plt.savefig('%s_flux0_%02i.png'%(args.prefix,k))
 
     plt.figure()
 #    m1.mask(latrange=[-5,5])    
-    m1.plot(title=title,zscale='pow',zscale_power=4.0,cbar_label='Flux [cm$^{-2}$ MeV$^{-1}$ s$^{-1}$ sr$^{-1}$]')
+    m1.plot(title=title,zscale='pow',zscale_power=4.0,
+            cbar_label='Flux [cm$^{-2}$ MeV$^{-1}$ s$^{-1}$ sr$^{-1}$]')
     plt.savefig('%s_flux1_%02i.png'%(args.prefix,k))
     
     plt.figure()
@@ -120,23 +127,23 @@ for k in sorted(obj0):
     plt.savefig('%s_expratio_%02i.png'%(args.prefix,k))
     
     plt.figure()
-#    resid0.mask(latrange=[-5,5])
+    resid0.mask(latrange=[-5,5])
 #    resid0.plot(vmin=-0.2,vmax=0.2,levels=[-0.1,-0.05,0.05,0.1],
     resid0.plot(vmin=-0.1,vmax=0.1,levels=[-0.07,-0.03,0.03,0.07],
                 title=title,
                cbar_label='Fractional Residual')
 
     plt.savefig('%s_flux_residual_%02i.png'%(args.prefix,k))
-
+    
     plt.figure()
-#    resid1.mask(latrange=[-5,5])    
+    resid1.mask(latrange=[-5,5])    
     resid1.plot(vmin=-0.5,vmax=0.5,levels=[-0.4,-0.2,0.2,0.4],title=title,
                cbar_label='Fractional Residual (Isotropic Flux Units)')
 
     plt.savefig('%s_flux_residual_isotropic_%02i.png'%(args.prefix,k))
 
     plt.figure()
-#    residc1.mask(latrange=[-5,5])    
+    residc1.mask(latrange=[-5,5])    
     residc1.plot(vmin=-0.5,vmax=0.5,levels=[-0.4,-0.2,0.2,0.4],title=title,
                  cbar_label='Fractional Residual (Isotropic Flux Units)')
 

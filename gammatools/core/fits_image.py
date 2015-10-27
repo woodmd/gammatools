@@ -89,7 +89,7 @@ class FITSImage(HistogramND):
 
     def slice(self,sdims,dim_index):
 
-        h = HistogramND.sliceByValue(self,sdims,dim_index)
+        h = HistogramND.slice(self,sdims,dim_index)
         if h.ndim() == 3:
             return SkyCube(self._wcs,h.axes(),h.counts,
                            self._roi_radius_deg,self._roi_msk)
