@@ -260,6 +260,8 @@ class SkyCube(FITSImage):
         if energy_axis is None:
             energy_axis = Axis(self.axis(2).pix_to_coord(self.axis(2).edges,True))
 
+
+
         hp = HealpixSkyCube.create(energy_axis,nside)
         c = hp.center()
         counts = self.interpolate(c[1],c[2],c[0]).reshape(hp.counts.shape)
@@ -288,13 +290,17 @@ class SkyCube(FITSImage):
         hdunames = [t.name for t in hdulist]
         
         if 'ENERGIES' in hdunames and hdulist[1].name == 'ENERGIES':
+
             v = bintable_to_array(hdulist[1].data)
             v = np.log10(v)
             energy_axis = Axis.createFromArray(v)
+
             axes = copy.deepcopy(FITSAxis.create_axes(header))
+
             axes[2]._crval = energy_axis.edges[0]
             axes[2]._delta = energy_axis.width[0]
             axes[2]._crpix = 0.0
+
         else:        
             axes = copy.deepcopy(FITSAxis.create_axes(header))
         return SkyCube(wcs,axes,

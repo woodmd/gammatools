@@ -200,14 +200,14 @@ class ExposureCalc(object):
         self._irfm = irfm
         self._ltc = ltc
 
-    def getExpByName(self,src_names,egy_axis,cth_axis=None):
+    def getExpByName(self,src_names,egy_axis,cth_axis=None,weights=None):
 
         exph = None
         cat = Catalog.get()
         for s in src_names:
             src = cat.get_source_by_name(s) 
             h = self.eval(src['RAJ2000'], src['DEJ2000'],egy_axis,
-                          cth_axis)
+                          cth_axis,weights=weights)
        
             if exph is None: exph = h
             else: exph += h
@@ -215,7 +215,7 @@ class ExposureCalc(object):
         exph /= float(len(src_names))        
         return exph
 
-    def eval(self,ra,dec,egy_axis,cth_axis=None):
+    def eval(self,ra,dec,egy_axis,cth_axis=None,weights=None):
 
         if cth_axis is None:
             cth_axis = self._ltc._cth_axis
@@ -229,9 +229,29 @@ class ExposureCalc(object):
         exph = Histogram(egy_axis)
         lthist = self._ltc.get_src_lthist(ra,dec,cth_axis)
 
-#        lthist = Histogram(cth_axis,counts=1,var=0)
+        exp = np.sum(aeff*lthist.counts[np.newaxis,:],axis=1)
 
-        exph._counts = np.sum(aeff*lthist.counts[np.newaxis,:],axis=1)
+
+        if weights is not None:
+            edisp = self._irfm.edisp(egy[:,np.newaxis,np.newaxis],
+                                 egy[np.newaxis,:,np.newaxis],
+                                 cth[np.newaxis,np.newaxis,:])
+
+            wedisp = edisp*aeff[np.newaxis,:,:]*lthist.counts[np.newaxis,np.newaxis,:]            
+            wedisp = np.sum(wedisp,axis=2)/exp[np.newaxis,:]
+            wedisp /= np.sum(wedisp,axis=1)[:,np.newaxis]
+            wexp = np.dot(wedisp,weights*exp)/weights
+            exph._counts[...] = wexp
+        else:
+            exph._counts[...] = exp
+#        plt.figure()
+#        plt.imshow(wedisp,aspect='auto',interpolation='nearest')
+#        
+
+
+#        print exp/wexp
+
+#        exph._counts[...] = exp#np.sum(aeff*lthist.counts[np.newaxis,:],axis=1)
  #       exph._counts = np.sum(aeff,axis=1)
         return exph
 

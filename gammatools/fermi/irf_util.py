@@ -25,7 +25,7 @@ class IRFManager(object):
 
     load_irf = False
 
-    defaults = {'irf_dir'         : 'custom_irfs',
+    defaults = {'irf_dir'         : None,
                 'expand_irf_name' : False,
                 'load_from_file'  : True }
     
@@ -207,8 +207,8 @@ class IRF(object):
             aeff_file = os.path.join(irf_dir,'aeff_%s.fits'%(irf_name))
             edisp_file = os.path.join(irf_dir,'edisp_%s.fits'%(irf_name))
         else:
-            irf_name = irf_name.replace('FRONT','front')
-            irf_name = irf_name.replace('BACK','back')
+#            irf_name = irf_name.replace('FRONT','front')
+#            irf_name = irf_name.replace('BACK','back')
             psf_file = os.path.join(irf_dir,'psf_%s.fits'%(irf_name))
             aeff_file = os.path.join(irf_dir,'aeff_%s.fits'%(irf_name))
             edisp_file = os.path.join(irf_dir,'edisp_%s.fits'%(irf_name))
@@ -486,6 +486,10 @@ class EDispIRF(IRFComponent):
                 
         return 10**self._edisp_hist.interpolate(cth,egy,erec-egy)
     
+    def __call__(self,erec,egy,cth):
+
+        return self.eval(erec,egy,cth)
+
     @staticmethod
     def base_function(x,s,k,b,p):
 

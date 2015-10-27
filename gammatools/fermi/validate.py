@@ -117,28 +117,34 @@ class AeffData(Data):
         self.type_id = kwargs.get('type_id',[])
         self.fn = kwargs.get('fn',None)
 
-        self.alpha_hist = Histogram(egy_axis)
+        self.alpha_hist = Histogram2D(egy_axis,cth_axis)
 
         # Excess (S - a*B)
-        self.sig_hist = Histogram(egy_axis)
+        self.sig_hist = Histogram2D(egy_axis,cth_axis)
 
         # Off (Background)
-        self.off_hist = Histogram(egy_axis)
+        self.off_hist = Histogram2D(egy_axis,cth_axis)
 
         # On (S + B)
-        self.on_hist = Histogram(egy_axis)
+        self.on_hist = Histogram2D(egy_axis,cth_axis)
 
         # Unscaled Background
-        self.bkg_hist = Histogram(egy_axis)
+        self.bkg_hist = Histogram2D(egy_axis,cth_axis)
         
         # Data Efficiency
-        self.eff_hist = Histogram(egy_axis)
+        self.eff_hist = Histogram2D(egy_axis,cth_axis)
 
         # IRF Efficiency
-        self.irf_eff_hist = Histogram(egy_axis)
+        self.irf_eff_hist = Histogram2D(egy_axis,cth_axis)
+
+        # IRF Efficiency
+        self.irf_weff_hist = Histogram2D(egy_axis,cth_axis)
+
+        # Exposure
+        self.exp_hist = Histogram2D(egy_axis,cth_axis)
 
         # Weighted Exposure
-        self.exp_hist = Histogram(egy_axis)
+        self.wexp_hist = Histogram2D(egy_axis,cth_axis)
 
 class PSFData(Data):
 
@@ -256,7 +262,7 @@ class IRFValidate(Configurable):
         }
     
     def __init__(self, config, opts,**kwargs):
-        super(IRFValidate,self).__init__(config,opts,**kwargs)
+        super(IRFValidate,self).__init__(config,None,**kwargs)
 #        self.update_default_config(IRFManager.defaults)  
 
         self._ft = FigTool(opts=opts)
@@ -324,9 +330,9 @@ class AeffValidate(IRFValidate):
         super(AeffValidate,self).__init__(config,opts,**kwargs)
         cfg = self.config
         
-        import pprint
-        pprint.pprint(cfg)
-        pprint.pprint(config)
+#        import pprint
+#       pprint.pprint(cfg)
+#        pprint.pprint(config)
 
         if cfg['egy_bin_edge'] is not None:
             self.egy_axis = Axis(cfg['egy_bin_edge'])
@@ -378,48 +384,66 @@ class AeffValidate(IRFValidate):
 
             print 'Creating IRF ', class_name, type_names
 
+            print self.config['irfmanager']['irf_dir']
+
+
+
             irfm = IRFManager.create(class_name, type_names,True,
                                      irf_dir=self.config['irfmanager']['irf_dir'])
 
             exp = ExposureCalc(irfm,self._ltc)
 
-            cth_axis = Axis.create(0.2,1.0,80)
 
-            exph = exp.getExpByName(self.config['ft1loader']['src_list'],
-                                    self.egy_axis,cth_axis)
+            for i in range(self.cth_axis.nbins):
 
-            m = PSFModelLT(irfm,
-                           src_type=self.config['ft1loader']['src_list'],
-                           ltcube=self._ltc)
+                print 'Bin ', i
+                print self.cth_axis.edges
+
+                cth_axis = Axis.create(self.cth_axis.edges[i],
+                                       self.cth_axis.edges[i+1],
+                                       40)
+                exph = exp.getExpByName(self.config['ft1loader']['src_list'],
+                                        self.egy_axis,cth_axis)
+
+                wexph = exp.getExpByName(self.config['ft1loader']['src_list'],
+                                         self.egy_axis,cth_axis,
+                                         weights=10**(-2*self.egy_axis.center))
+
+                m = PSFModelLT(irfm,
+                               src_type=self.config['ft1loader']['src_list'],
+                               ltcube=self._ltc)
 #                           spectrum=sp,spectrum_pars=sp_pars)
 
-            cd[k].exp_hist += exph
+                cd[k].exp_hist.counts[:,i] += exph.counts
+                cd[k].wexp_hist.counts[:,i] += wexph.counts
 
-            psf_corr = np.zeros(self.egy_axis.nbins)
+                psf_corr = np.zeros(self.egy_axis.nbins)
 
-            for i in range(self.egy_axis.nbins):
-                r, cdf = m.cdf(10**self.egy_axis.edges[i],
-                               10**self.egy_axis.edges[i+1],0.2,1.0)
+                for j in range(self.egy_axis.nbins):
+                    r, cdf = m.cdf(10**self.egy_axis.edges[j],
+                                   10**self.egy_axis.edges[j+1],
+                                   self.cth_axis.edges[i],
+                                   self.cth_axis.edges[i+1])
 
-                s = cd[k].fn(self.egy_axis.center[i])
-#                print i, self.egy_axis.center[i], interpolate(r,cdf,0.1), interpolate(r,cdf,1.0), interpolate(r,cdf,s)
-#                plt.figure()
-#                plt.plot(r,cdf)
-#                plt.axvline(0.1)
-#                plt.axhline(interpolate(r,cdf,0.1))
-#                plt.gca().set_xscale('log')
-#                plt.show()
+                    s = cd[k].fn(self.egy_axis.center[j])
+                    psf_corr[j] = interpolate(r,cdf,s)
 
-                psf_corr[i] = interpolate(r,cdf,s)
-
-            cd[k].exp_hist *= psf_corr
+                cd[k].exp_hist.counts[:,i] *= psf_corr
+                cd[k].wexp_hist.counts[:,i] *= psf_corr
 
         # Renormalize
         exp_hist0 = self._class_data[self.config['refclass']].exp_hist
         for k,v in self._class_data.items():
             self._class_data[k].irf_eff_hist = v.exp_hist/exp_hist0
 
+        wexp_hist0 = self._class_data[self.config['refclass']].wexp_hist
+        for k,v in self._class_data.items():
+            self._class_data[k].irf_weff_hist = v.wexp_hist/wexp_hist0
+
     def fill(self,data):
+
+        print 'filling ', self.data_type
+
 
         if self.data_type =='agn':
             self.fill_agn(data)
@@ -479,6 +503,8 @@ class AeffValidate(IRFValidate):
 
     def fill_agn(self,data):
 
+        print 'filling'
+
         cd = self._class_data
         
         # Loop over classes
@@ -487,10 +513,11 @@ class AeffValidate(IRFValidate):
             fn = cd[k].fn
 
             theta0 = fn(cd[k].alpha_hist.axis(0).center)
-
-            print theta0
-
-            cd[k].alpha_hist._counts[:] = theta0**2/(3.5**2-2.5**2)
+            alpha = theta0**2/(3.5**2-2.5**2)
+            alpha = alpha[:,np.newaxis]*np.ones((self.egy_axis.nbins,
+                                                 self.cth_axis.nbins))
+                                              
+            cd[k].alpha_hist.set_counts(alpha)
 
 #            domega_on = 1.0**2*np.pi
 #            domega_off = (3.5**2-2.5**2)*np.pi
@@ -512,8 +539,8 @@ class AeffValidate(IRFValidate):
             msk_on &= data['dtheta'] < fn(bin_energy)
 
             
-            cd[k].on_hist.fill(data['energy'][msk_on])
-            cd[k].off_hist.fill(data['energy'][msk_off])
+            cd[k].on_hist.fill(data['energy'][msk_on],data['cth'][msk_on])
+            cd[k].off_hist.fill(data['energy'][msk_off],data['cth'][msk_off])
         
     def compute_eff(self):
 
@@ -554,20 +581,28 @@ class AeffValidate(IRFValidate):
 
         for k,v in self._class_data.items():
 
-            figname = self.config['output_prefix'] + '_' + k
-            figname = os.path.join(self.config['output_dir'],figname)
+            for i in range(self.cth_axis.nbins):
 
-            fig = self._ft.create(figname,figstyle='residual2',
-                                  norm_interpolation='lin',
-                                  legend_loc='best',
-                                  ylim=[0.0,1.1],
-                                  ylim_ratio=[-0.2,0.2])
+                print 'plotting ', i
 
-            fig[0].ax().set_title(k)
+                figname = self.config['output_prefix'] + '_' + k 
+                figname += '_%05.2f_%05.2f'%(self.cth_axis.edges[i],
+                                            self.cth_axis.edges[i+1])
+                figname = os.path.join(self.config['output_dir'],figname)
 
-            fig[0].add_hist(v.irf_eff_hist,label='model',hist_style='line')
-            fig[0].add_hist(v.eff_hist,label='data')
-            fig.plot()
+                fig = self._ft.create(figname,figstyle='residual2',
+                                      norm_interpolation='lin',
+                                      legend_loc='best',
+                                      ylim=[0.0,1.1],
+                                      ylim_ratio=[-0.2,0.2])
+
+                fig[0].ax().set_title(k + ' CosTheta = [%.2f, %.2f]'%(self.cth_axis.edges[i],
+                                                                      self.cth_axis.edges[i+1]))
+                
+                fig[0].add_hist(v.irf_eff_hist.slice(1,i),label='model',hist_style='line')
+                fig[0].add_hist(v.irf_weff_hist.slice(1,i),label='model (edisp)',hist_style='line')
+                fig[0].add_hist(v.eff_hist.slice(1,i),label='data',color='k',linestyle='None')
+                fig.plot()
 
     def run(self):
 
