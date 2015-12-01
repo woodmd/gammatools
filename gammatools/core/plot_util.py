@@ -51,6 +51,7 @@ class FigureSubplot(object):
               'hist_style' : None,
               'hist_xerr' : True,
               'nolegend'  : False,
+              'grid'      : True,
               'legend' : {'loc' : 'best',
                           'ncol' : 1,
                           'frameon' : True,
@@ -256,7 +257,7 @@ class FigureSubplot(object):
         for i, t in enumerate(self._text):
             ax.text(*t,transform=ax.transAxes, **self._text_style[i])
 
-        ax.grid(True)
+        ax.grid(style['grid'])
         if len(labels) > 0 and not style['nolegend']:
             
             legkwargs = copy.deepcopy(style['legend'])

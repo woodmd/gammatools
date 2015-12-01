@@ -577,6 +577,8 @@ class Catalog(object):
 #        ax.autoscale(enable=False, axis='both')
 #        ax.set_autoscale_on(False)
 
+        size = kwargs.get('size',8)
+
         for i in range(len(labels)):
 
             scale = (min(max(signif_avg[i],5.0),50.0)-5.0)/45.
@@ -586,18 +588,21 @@ class Catalog(object):
 
             mew = 1.0
             ms = 5.0
+
+            mew = None
+            ms = None
             
             if label_threshold is not None and signif_avg[i] > label_threshold:
 
                 ax.text(pixcrd[0][i]+2.0,pixcrd[1][i]+2.0,labels[i],
-                        color=src_color,size=8,clip_on=True,
+                        color=src_color,size=size,clip_on=True,
                         fontweight=fontweight)
 
             if marker_threshold is not None and \
                     signif_avg[i] > marker_threshold:      
                 ax.plot(pixcrd[0][i],pixcrd[1][i],
                         linestyle='None',marker='+',
-                        color='g', markerfacecolor = 'None',mew=mew,ms=ms,
+                        color='g', markerfacecolor = 'None',#mew=mew,ms=ms,
                         markeredgecolor=src_color,clip_on=True)
         
         plt.gca().set_xlim(im.axis(0).lims())
