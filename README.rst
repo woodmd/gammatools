@@ -30,6 +30,10 @@ Project Status
 .. image:: https://coveralls.io/repos/woodmd/gammatools/badge.svg
   :target: https://coveralls.io/r/woodmd/gammatools
 
+#.. image:: https://pypip.in/py_versions/woodmd/gammatools/badge.svg
+#    :target: https://pypi.python.org/pypi/<PYPI_PKG_NAME>/
+#    :alt: Supported Python versions
+
 License
 -------
 gammatools is licensed under a 3-clause BSD style license - see the

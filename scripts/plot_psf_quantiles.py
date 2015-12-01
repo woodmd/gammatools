@@ -238,10 +238,13 @@ parser = argparse.ArgumentParser(usage=usage, description=description)
 parser.add_argument('--config', default = None, 
                     help = '')
 
+parser.add_argument('--mode', default = 'psf', 
+                    help = '')
+
 parser.add_argument('--show', default = False, action='store_true', 
                     help = '')
 
-#parser.add_argument('files', nargs='+')
+parser.add_argument('files', nargs='*')
 
 FigTool.add_arguments(parser)
 
@@ -256,16 +259,89 @@ if not args.config is None:
 #plt.rc('font', family='serif')
 #plt.rc('font', serif='Times New Roman')
 
-ft = FigTool(args,legend_loc='upper right')
+ft = FigTool(opts=args,legend_loc='upper right')
 
 data_colors = ['k','b']
 
 model_colors = ['g','m','k','b']
 
-common_kwargs = { 'xlabel' : 'Energy [log$_{10}$(E/MeV)]',
-                  'ylabel' : 'Containment Radius [deg]',
-                  'yscale' : 'log',
-                  'figstyle' : 'residual2', 'xlim': [1.5,5.5] }
+common_psf_kwargs = { 'xlabel' : 'Energy [log$_{10}$(E/MeV)]',
+                      'ylabel' : 'Containment Radius [deg]',
+                      'yscale' : 'log','legend_loc' : 'best',
+                      'figstyle' : 'residual2', 'xlim': [1.5,5.5],
+                      'ylim_ratio' : [-0.2,0.2]}
+
+
+common_aeff_kwargs = { 'xlabel' : 'Energy [log$_{10}$(E/MeV)]',
+                       'ylabel' : 'Efficiency',
+                       'yscale' : 'lin','legend_loc' : 'best',
+                       'figstyle' : 'residual2', 'xlim': [1.5,5.5],
+                       'ylim_ratio' : [-0.2,0.2]}
+
+
+data_labels = ['Vela','AGN']
+
+data = []
+
+for f in args.files:
+    data.append(load_object(f))
+
+for k,v in data[0].items():
+
+    if isinstance(data[0][k],PSFData):
+
+        figlabel = '_psf_quantile'
+
+        for i, (q,ql) in enumerate(zip(data[0][k].quantiles,
+                                       data[0][k].quantile_labels)):
+
+            
+
+            fig = ft.create(args.prefix + k + '%s_%s'%(figlabel,ql),color=data_colors,
+                            **common_psf_kwargs)
+
+            hm = data[0][k].irf_qdata[i]        
+            for j in range(1,len(data)):
+                hm = hm.merge(data[j][k].irf_qdata[i])
+
+            fig[0].add_hist(hm,hist_style='line',color='g',label='P8V6')
+
+            for j in range(len(data)):
+                fig[0].add_hist(data[j][k].qdata[i],
+                                linestyle='None',#msk=msk,
+                                label=data_labels[j])
+
+            fig[0].ax().set_title(k + ' ' + ql)
+            fig.plot()
+
+    else:
+
+        figlabel = '_cuteff'
+
+        if 'PSF' in k or 'EDISP' in k:
+            ylim = [0.0,0.3]
+        else:
+            ylim = [0.0,1.1]
+
+        fig = ft.create(args.prefix + k + '%s'%(figlabel),color=data_colors,ylim=ylim,
+                        **common_aeff_kwargs)
+
+        hm = data[0][k].irf_eff_hist        
+        for j in range(1,len(data)):
+            hm = hm.merge(data[j][k].irf_eff_hist)
+
+        fig[0].add_hist(hm,hist_style='line',color='g',label='P8V6')
+        
+        for j in range(len(data)):
+            fig[0].add_hist(data[j][k].eff_hist,
+                            linestyle='None',#msk=msk,
+                            label=data_labels[j])
+
+        fig[0].ax().set_title(k)
+        fig.plot()
+
+
+sys.exit(0)
 
 for k,v in config['plots'].iteritems():
 

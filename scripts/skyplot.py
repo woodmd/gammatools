@@ -5,7 +5,7 @@ import os
 import sys
 import copy
 import argparse
-import pyfits
+import astropy.io.fits as pyfits
 
 import numpy as np
 

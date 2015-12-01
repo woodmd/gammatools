@@ -13,9 +13,8 @@ import re
 import copy
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-import pywcsgrid2
-import pywcsgrid2.allsky_axes
-from pywcsgrid2.allsky_axes import make_allsky_axes_from_header
+from matplotlib.colors import PowerNorm
+import wcsaxes
 #import astropy.wcs as pywcs
 from astropy_helper import pywcs
 from astropy_helper import pyfits
@@ -24,10 +23,10 @@ import numpy as np
 import healpy as hp
 from gammatools.core.algebra import Vector3D
 from gammatools.fermi.catalog import *
-from gammatools.core.util import *
 from gammatools.core.histogram import *
 from gammatools.core.fits_util import *
 from gammatools.core.healpix import *
+
 
 class FITSImage(HistogramND):
     """Base class for SkyImage and SkyCube classes.  Handles common
@@ -360,7 +359,7 @@ class SkyImage(FITSImage):
     def createFromFITS(fitsfile,ihdu=0):
         
         hdulist = pyfits.open(fitsfile)
-        return SkyImage.createFromFITS(hdulist[ihdu])
+        return SkyImage.createFromHDU(hdulist[ihdu])
 
 
 
@@ -508,10 +507,9 @@ class SkyImage(FITSImage):
         elif zscale == 'log': kwargs_imshow['norm'] = LogNorm()
         else: kwargs_imshow['norm'] = Normalize()
 
-#        ax = kwargs.get('ax',None)        
-#        if ax is None:
-        ax = pywcsgrid2.subplot(subplot, header=self._wcs.to_header())
-#        ax = pywcsgrid2.axes(header=self._wcs.to_header())
+        fig = plt.gcf()
+        ax = fig.add_subplot(subplot,
+                             projection=wcsaxes.WCS(self._wcs.to_header()))
 
         load_ds9_cmap()
         colormap = mpl.cm.get_cmap(cmap)
@@ -538,9 +536,8 @@ class SkyImage(FITSImage):
         #        plt.clabel(cs, fontsize=5, inline=0)
         
 #        im.set_clim(vmin=np.min(self._counts[~self._roi_msk]),
-#                    vmax=np.max(self._counts[~self._roi_msk]))
-        
-        ax.set_ticklabel_type("d", "d")
+#                    vmax=np.max(self._counts[~self._roi_msk]))       
+#        ax.set_ticklabel_type("d", "d")
 
 
 
@@ -572,8 +569,8 @@ class SkyImage(FITSImage):
 #        ax.set_display_coord_system("gal")       
  #       ax.locator_params(axis="x", nbins=12)
 
-        ax.add_size_bar(1./self._axes[0]._delta, # 30' in in pixel
-                        r"$1^{\circ}$",loc=3,color='w')
+#        ax.add_size_bar(1./self._axes[0]._delta, 
+#                        r"$1^{\circ}$",loc=3,color='w')
             
         if beam_size is not None:
             ax.add_beam_size(2.0*beam_size[0]/self._axes[0]._delta,

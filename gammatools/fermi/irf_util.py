@@ -166,14 +166,20 @@ class IRFManager(object):
 
         return v
 
-    def edisp(self,*args,**kwargs):
-
+    def edisp(self,erec,egy,cth,**kwargs):
+        
+        aeff_tot = self.aeff(egy,cth,**kwargs)
+        aeff_tot[aeff_tot<=0] = 1E-8
+        
         v = None
-        for i in range(len(self._irfs)):
-            if i == 0: v = self._irfs[i].edisp(*args,**kwargs)
-            else: v += self._irfs[i].edisp(*args,**kwargs)
+        for i, irf in enumerate(self._irfs):
 
-        return v
+            aeff = irf.aeff(egy,cth,**kwargs)            
+            edisp = irf.edisp(erec,egy,cth,**kwargs)*aeff
+            if i == 0: v  = edisp
+            else: v += edisp
+            
+        return v/aeff_tot
 
     def dump(self):
         for irf in self._irfs: irf.dump()
@@ -458,11 +464,14 @@ class EDispIRF(IRFComponent):
         egy = np.array(egy,ndmin=1)
         cth = np.array(cth,ndmin=1)
 
+        cth[cth<0.25]=0.25
+        cth[cth>0.95]=0.95
+
 #        print 'eval ', erec.shape, egy.shape, cth.shape
         
         sd = self.eval_scale_factor(egy,cth)
 
-        x = (10**erec-10**egy)/10**egy/sd
+        x = (10**erec-10**egy)/(sd*10**egy)
         
         f = self._param_hists['f'].interpolate(cth,egy)
         s1 = self._param_hists['s1'].interpolate(cth,egy)
@@ -474,7 +483,8 @@ class EDispIRF(IRFComponent):
         pindex1 = self._param_hists['pindex1'].interpolate(cth,egy)
         pindex2 = self._param_hists['pindex2'].interpolate(cth,egy)
         
-        v = f*EDispIRF.base_function(x,s1,k1,bias,pindex1)+(1-f)*EDispIRF.base_function(x,s2,k2,bias2,pindex2)
+        v = (f*EDispIRF.base_function(x,s1,k1,bias,pindex1)+
+             (1-f)*EDispIRF.base_function(x,s2,k2,bias2,pindex2))
 
         return v/(10**egy*sd)
 
@@ -483,11 +493,10 @@ class EDispIRF(IRFComponent):
         erec = np.array(erec,ndmin=1)
         egy = np.array(egy,ndmin=1)
         cth = np.array(cth,ndmin=1)
-                
+
         return 10**self._edisp_hist.interpolate(cth,egy,erec-egy)
     
     def __call__(self,erec,egy,cth):
-
         return self.eval(erec,egy,cth)
 
     @staticmethod
@@ -498,12 +507,6 @@ class EDispIRF(IRFComponent):
         m0 = dx >= 0
         m1 = dx < 0
 
-#        print '---------------'
-#        print x.shape
-#        print m0.shape, np.sum(m0)
-#        print m1.shape, np.sum(m1)
-#        print s.shape, k.shape, b.shape, p.shape
-        
         exp0 = np.power(k/s*np.abs(dx),p)
         exp1 = np.power(1./(k*s)*np.abs(dx),p)
 
@@ -513,7 +516,8 @@ class EDispIRF(IRFComponent):
 #        v = np.zeros(x.shape)
 
         prefact = p/(s*spfn.gamma(1./p))*(k/(1+k**2))
-
+        prefact[prefact<0] = 0
+        v = prefact*np.exp(-exp0)*np.exp(-exp1)
         return prefact*np.exp(-exp0)*np.exp(-exp1)
         
         if np.any(m0):
@@ -522,6 +526,8 @@ class EDispIRF(IRFComponent):
         if np.any(m1):
             v[m1] = prefact*np.exp(-np.power(1./(k*s)*np.abs(dx),p))
         
+
+
         return v
         
 

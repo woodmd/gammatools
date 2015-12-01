@@ -23,7 +23,7 @@ class MPLUtil(object):
                        'drawstyle']
     hist_kwargs = ['color','alpha','histtype','label']
 
-class PowerNorm(matplotlib.colors.Normalize):
+class PowerNorm2(matplotlib.colors.Normalize):
     """
     Normalize a given value to the ``[0, 1]`` interval with a power-law
     scaling. This will clip any negative data points to 0.

@@ -1516,7 +1516,7 @@ class Histogram(HistogramND):
         else:
             f = sys.stdout
 
-        for i in range(len(self._x)):
+        for i in range(self.axis(0).nbins):
             s = '%5i %10.5g %10.5g '%(i,self._axes[0].edges[i],
                                       self._axes[0].edges[i+1])
             s += '%10.5g %10.5g\n'%(self._counts[i],self._var[i])

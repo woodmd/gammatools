@@ -26,7 +26,7 @@ from gammatools.fermi.catalog import Catalog
 from gammatools.core.plot_util import *
 from gammatools.core.config import Configurable
 
-from gammatools.core.fits_util import SkyImage
+from gammatools.core.fits_image import SkyImage
 from analysis_util import *
 
 #from psf_lnl import BinnedPulsarLnLFn
@@ -37,6 +37,10 @@ from irf_util import IRFManager
 from gammatools.core.mpl_util import SqrtScale, PowerNormalize
 from matplotlib import scale as mscale
 mscale.register_scale(SqrtScale)
+
+def velafn(logx):
+    x = 10**logx
+    return (x/16.5)**-1*np.exp(-(x/255.7)**0.47)
 
 vela_phase_selection = {'on_phase' : '0.0/0.15,0.6/0.7',
                         'off_phase' : '0.2/0.5' }
@@ -255,6 +259,7 @@ class IRFValidate(Configurable):
         'on_phase'        : (None),
         'off_phase'       : (None),
         'refclass'        : (None,'',''),
+        'data_type'       : ('agn'),
         'event_class_selections' : (None,'',''),
         'event_type_selections'  : (None,'',''),
         'event_class_irfs'       : (None,'',''),
@@ -275,9 +280,10 @@ class IRFValidate(Configurable):
 
         self.conversion_type = cfg['conversion_type']
 
-        if not cfg['on_phase'] is None: self.data_type = 'pulsar'
+        if not cfg['on_phase'] is None: 
+            self.config['data_type'] = 'pulsar'
 
-        if self.data_type == 'pulsar':
+        if self.config['data_type'] == 'pulsar':
             self.phases = parse_phases(cfg['on_phase'],cfg['off_phase'])
             self.on_phases = self.phases[0]
             self.off_phases = self.phases[1]
@@ -321,10 +327,12 @@ class IRFValidate(Configurable):
             d['dtheta'] = np.degrees(d['dtheta'])
             self.fill(d)
 
-
 class AeffValidate(IRFValidate):
 
-    default_config = { }
+    default_config = { 
+        'spectrum'        : (None),
+        'spectrum_pars'   : (None), 
+        }
 
     def __init__(self, config, opts,**kwargs):
         super(AeffValidate,self).__init__(config,opts,**kwargs)
@@ -369,13 +377,11 @@ class AeffValidate(IRFValidate):
     def build_models(self):
 
         cd = self._class_data
-
         for k,v in self._class_data.items():
             
             class_name = '%s_%s_%s'%(self.config['event_class_irfs']['release'],
                                      v.class_name,
                                      self.config['event_class_irfs']['version'])
-
             
             type_names = []
             for t in v.type_id:
@@ -383,53 +389,61 @@ class AeffValidate(IRFValidate):
             
 
             print 'Creating IRF ', class_name, type_names
-
             print self.config['irfmanager']['irf_dir']
-
-
 
             irfm = IRFManager.create(class_name, type_names,True,
                                      irf_dir=self.config['irfmanager']['irf_dir'])
 
             exp = ExposureCalc(irfm,self._ltc)
 
-
+            plt.figure()
             for i in range(self.cth_axis.nbins):
 
-                print 'Bin ', i
-                print self.cth_axis.edges
+                print 'Bin ', i, self.cth_axis.edges[i:i+2]
 
                 cth_axis = Axis.create(self.cth_axis.edges[i],
                                        self.cth_axis.edges[i+1],
-                                       40)
+                                       10)
+
+                print self.config['ft1loader']['src_list']
+
                 exph = exp.getExpByName(self.config['ft1loader']['src_list'],
                                         self.egy_axis,cth_axis)
 
+#                wexph = copy.deepcopy(exph)
+
+                if self.config['spectrum'] == 'vela':
+                    wfn = velafn
+                else:
+                    wfn = lambda t: 10**(-2.0*t)
+
                 wexph = exp.getExpByName(self.config['ft1loader']['src_list'],
                                          self.egy_axis,cth_axis,
-                                         weights=10**(-2*self.egy_axis.center))
-
-                m = PSFModelLT(irfm,
-                               src_type=self.config['ft1loader']['src_list'],
-                               ltcube=self._ltc)
-#                           spectrum=sp,spectrum_pars=sp_pars)
+                                         weights=wfn)
 
                 cd[k].exp_hist.counts[:,i] += exph.counts
                 cd[k].wexp_hist.counts[:,i] += wexph.counts
 
-                psf_corr = np.zeros(self.egy_axis.nbins)
 
-                for j in range(self.egy_axis.nbins):
-                    r, cdf = m.cdf(10**self.egy_axis.edges[j],
-                                   10**self.egy_axis.edges[j+1],
-                                   self.cth_axis.edges[i],
-                                   self.cth_axis.edges[i+1])
+                if self.config['data_type'] != 'ridge':
+                    m = PSFModelLT(irfm,
+                                   src_type=self.config['ft1loader']['src_list'],
+                                   ltcube=self._ltc)
+#                           spectrum=sp,spectrum_pars=sp_pars)
 
-                    s = cd[k].fn(self.egy_axis.center[j])
-                    psf_corr[j] = interpolate(r,cdf,s)
+                    psf_corr = np.zeros(self.egy_axis.nbins)
+                    for j in range(self.egy_axis.nbins):
+                        r, cdf = m.cdf(10**self.egy_axis.edges[j],
+                                       10**self.egy_axis.edges[j+1],
+                                       self.cth_axis.edges[i],
+                                       self.cth_axis.edges[i+1])
 
-                cd[k].exp_hist.counts[:,i] *= psf_corr
-                cd[k].wexp_hist.counts[:,i] *= psf_corr
+                        s = cd[k].fn(self.egy_axis.center[j])
+                        psf_corr[j] = interpolate(r,cdf,s)
+
+                    cd[k].exp_hist.counts[:,i] *= psf_corr
+                    cd[k].wexp_hist.counts[:,i] *= psf_corr
+                
 
         # Renormalize
         exp_hist0 = self._class_data[self.config['refclass']].exp_hist
@@ -442,11 +456,11 @@ class AeffValidate(IRFValidate):
 
     def fill(self,data):
 
-        print 'filling ', self.data_type
-
-
-        if self.data_type =='agn':
+        print 'filling ', self.config['data_type']
+        if self.config['data_type'] =='agn':
             self.fill_agn(data)
+        elif self.config['data_type'] =='ridge':
+            self.fill_ridge(data)
         else:
             self.fill_pulsar(data)
 
@@ -460,7 +474,7 @@ class AeffValidate(IRFValidate):
             evclass = list_to_bitfield(v.class_id)
             evtype = list_to_bitfield(v.type_id)
 
-            cd[k].alpha_hist._counts[:] = self.alpha
+            cd[k].alpha_hist._counts[...] = self.alpha
 
             fn = cd[k].fn
 
@@ -481,8 +495,8 @@ class AeffValidate(IRFValidate):
                                           phases=self.off_phases,
                                           theta_fn=[fn])
             
-            cd[k].on_hist.fill(data['energy'][msk_on])
-            cd[k].off_hist.fill(data['energy'][msk_off])
+            cd[k].on_hist.fill(data['energy'][msk_on],data['cth'][msk_on])
+            cd[k].off_hist.fill(data['energy'][msk_off],data['cth'][msk_off])
 
 #            emsk = (data['energy'] >3.0)&(data['energy']<3.5)
 #            h0 = Histogram(Axis.create(0,1,40))
@@ -501,6 +515,42 @@ class AeffValidate(IRFValidate):
 
 #            plt.show()
 
+    def fill_ridge(self,data):
+
+        cd = self._class_data
+
+        for k,v in self._class_data.items():
+
+            cd[k].alpha_hist._counts[...] = 1./1.54
+            evclass = list_to_bitfield(v.class_id)
+            evtype = list_to_bitfield(v.type_id)
+
+            msk_on = PhotonData.get_mask(data,
+                                         {'cth': self.cth_axis.lims(), 'glat' : [-5.0,5.0] },
+                                         evclass=evclass,evtype=evtype)
+
+            msk_off0 = PhotonData.get_mask(data,
+                                           {'cth': self.cth_axis.lims(), 'glat' : [60.0,90.0]},
+                                           evclass=evclass,evtype=evtype)
+            
+            msk_off1 = PhotonData.get_mask(data,
+                                           {'cth': self.cth_axis.lims(), 'glat' : [-90.0,-60.0]},
+                                           evclass=evclass,evtype=evtype)
+
+            msk_off = msk_off0|msk_off1
+
+            ebin = self.egy_axis.valToBinBounded(data['energy'])
+            bin_energy = self.egy_axis.center[ebin]
+
+            cd[k].on_hist.fill(data['energy'][msk_on],data['cth'][msk_on])
+            cd[k].off_hist.fill(data['energy'][msk_off],data['cth'][msk_off])
+
+#            plt.figure()
+#            print k
+#            cd[k].on_hist.slice(1,3).plot()
+#            cd[k].off_hist.slice(1,3).plot()
+#            plt.show()
+            
     def fill_agn(self,data):
 
         print 'filling'
@@ -593,15 +643,17 @@ class AeffValidate(IRFValidate):
                 fig = self._ft.create(figname,figstyle='residual2',
                                       norm_interpolation='lin',
                                       legend_loc='best',
-                                      ylim=[0.0,1.1],
+                                      ylim=[0.0,1.2],
                                       ylim_ratio=[-0.2,0.2])
 
                 fig[0].ax().set_title(k + ' CosTheta = [%.2f, %.2f]'%(self.cth_axis.edges[i],
                                                                       self.cth_axis.edges[i+1]))
-                
-                fig[0].add_hist(v.irf_eff_hist.slice(1,i),label='model',hist_style='line')
-                fig[0].add_hist(v.irf_weff_hist.slice(1,i),label='model (edisp)',hist_style='line')
-                fig[0].add_hist(v.eff_hist.slice(1,i),label='data',color='k',linestyle='None')
+                fig[0].add_hist(v.irf_weff_hist.slice(1,i),
+                                label='model (edisp)',hist_style='line')
+                fig[0].add_hist(v.irf_eff_hist.slice(1,i),
+                                label='model (noedisp)',hist_style='line')                
+                fig[0].add_hist(v.eff_hist.slice(1,i),
+                                label='data',color='k',linestyle='None')
                 fig.plot()
 
     def run(self):
@@ -646,7 +698,6 @@ class AeffValidate(IRFValidate):
 class PSFValidate(IRFValidate):
 
     default_config = {
-        'data_type'       : 'agn',
         'spectrum'        : (None),
         'spectrum_pars'   : (None), 
         'theta_max'       : (30.0),
@@ -795,7 +846,7 @@ class PSFValidate(IRFValidate):
 
     def fill(self,data):
 
-        if self.data_type == 'pulsar':
+        if self.config['data_type'] == 'pulsar':
             self.fill_pulsar(data)
         else:
             self.fill_agn(data)
@@ -1294,7 +1345,7 @@ class PSFValidate(IRFValidate):
 
 #                alpha_hist = cd[k].alpha_hist.slice(0,i)
                 
-                if self.data_type == 'pulsar':
+                if self.config['data_type'] == 'pulsar':
                     hq = HistQuantileOnOff(on_hist, off_hist, alpha[i])
                 else:
                     bkg_counts = cd[k].bkg.counts[i]

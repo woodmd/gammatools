@@ -55,6 +55,8 @@ class PhotonData(object):
     def __init__(self):
         self._data = { 'ra'            : np.array([]),
                        'dec'           : np.array([]),
+                       'glon'          : np.array([]),
+                       'glat'          : np.array([]),
                        'delta_ra'      : np.array([]),
                        'delta_dec'     : np.array([]),
                        'delta_phi'     : np.array([]),

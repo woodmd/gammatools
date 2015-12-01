@@ -205,14 +205,81 @@ class ExposureCalc(object):
         exph = None
         cat = Catalog.get()
         for s in src_names:
-            src = cat.get_source_by_name(s) 
-            h = self.eval(src['RAJ2000'], src['DEJ2000'],egy_axis,
-                          cth_axis,weights=weights)
+
+            if s == 'ridge':
+                
+                glon = np.linspace(0,360.,30.)
+                glat = np.zeros(30)
+                ra,dec = eq2gal(glon,glat)
+
+                for i in range(30):
+#                    print i, ra[i], dec[i]
+                    h = self.eval2(ra[i],dec[i],egy_axis,
+                                   cth_axis,wfn=weights)
        
-            if exph is None: exph = h
-            else: exph += h
+                    if exph is None: exph = h
+                    else: exph += h
+            else:
+                src = cat.get_source_by_name(s) 
+                h = self.eval2(src['RAJ2000'], src['DEJ2000'],egy_axis,
+                               cth_axis,wfn=weights)
+       
+                if exph is None: exph = h
+                else: exph += h
 
         exph /= float(len(src_names))        
+        return exph
+
+    def eval2(self,ra,dec,egy_axis,cth_axis=None,wfn=None):
+
+        if cth_axis is None:
+            cth_axis = self._ltc._cth_axis
+
+        cth = cth_axis.center
+
+        rebin_factor = 8
+
+        erec_axis = Axis.create(egy_axis.edges[0],egy_axis.edges[-1],rebin_factor*egy_axis.nbins)
+        etrue_axis = Axis.create(egy_axis.edges[0]-0.2,egy_axis.edges[-1]+0.2,rebin_factor*egy_axis.nbins)
+
+        erec = erec_axis.center
+        etrue = etrue_axis.center
+        
+        exph = Histogram(egy_axis)
+        lthist = self._ltc.get_src_lthist(ra,dec,cth_axis)
+        
+        if wfn is not None:
+
+#            print 'eval2 ', ra, dec,erec_axis.nbins
+
+            x, y = np.meshgrid(etrue,cth,indexing='ij')
+            aeff = self._irfm.aeff(x,y)
+            exp = np.sum(aeff*lthist.counts[np.newaxis,:],axis=1)
+            weights = wfn(etrue)
+            erec_delta = 10**erec_axis.edges[1:] - 10**erec_axis.edges[:-1] 
+            etrue_delta = 10**etrue_axis.edges[1:] - 10**etrue_axis.edges[:-1] 
+            edisp = self._irfm.edisp(erec[:,np.newaxis,np.newaxis],
+                                     etrue[np.newaxis,:,np.newaxis],
+                                     cth[np.newaxis,np.newaxis,:])
+
+#            print '----------------------'
+#            print np.sum(edisp[:,:,0]*erec_delta[:,np.newaxis],axis=0)
+#            print np.sum(edisp[:,:,0]*etrue_delta[np.newaxis,:],axis=1)
+
+            wedisp = edisp*aeff[np.newaxis,:,:]*lthist.counts[np.newaxis,np.newaxis,:]        
+            wedisp = np.sum(wedisp,axis=2)/exp[np.newaxis,:]
+            wedisp *= erec_delta[:,np.newaxis]
+
+            wexp = np.dot(wedisp,weights*exp*etrue_delta)/(erec_delta*wfn(erec))
+            exph.fill(erec_axis.center,wexp)
+            exph /= float(rebin_factor)
+        else:
+            x, y = np.meshgrid(egy_axis.center,cth,indexing='ij')
+            aeff = self._irfm.aeff(x,y)
+            exp = np.sum(aeff*lthist.counts[np.newaxis,:],axis=1)
+            exph._counts[...] = exp
+
+        exph._var[...]=0
         return exph
 
     def eval(self,ra,dec,egy_axis,cth_axis=None,weights=None):
@@ -225,17 +292,19 @@ class ExposureCalc(object):
 
         x, y = np.meshgrid(egy,cth,indexing='ij')
         aeff = self._irfm.aeff(x,y)
-
         exph = Histogram(egy_axis)
-        lthist = self._ltc.get_src_lthist(ra,dec,cth_axis)
 
+        lthist = self._ltc.get_src_lthist(ra,dec,cth_axis)
         exp = np.sum(aeff*lthist.counts[np.newaxis,:],axis=1)
 
-
         if weights is not None:
+
+            weights = copy.deepcopy(weights)
+            weights *= 10**egy
+
             edisp = self._irfm.edisp(egy[:,np.newaxis,np.newaxis],
-                                 egy[np.newaxis,:,np.newaxis],
-                                 cth[np.newaxis,np.newaxis,:])
+                                     egy[np.newaxis,:,np.newaxis],
+                                     cth[np.newaxis,np.newaxis,:])
 
             wedisp = edisp*aeff[np.newaxis,:,:]*lthist.counts[np.newaxis,np.newaxis,:]            
             wedisp = np.sum(wedisp,axis=2)/exp[np.newaxis,:]
@@ -244,15 +313,7 @@ class ExposureCalc(object):
             exph._counts[...] = wexp
         else:
             exph._counts[...] = exp
-#        plt.figure()
-#        plt.imshow(wedisp,aspect='auto',interpolation='nearest')
-#        
 
-
-#        print exp/wexp
-
-#        exph._counts[...] = exp#np.sum(aeff*lthist.counts[np.newaxis,:],axis=1)
- #       exph._counts = np.sum(aeff,axis=1)
         return exph
 
     @staticmethod

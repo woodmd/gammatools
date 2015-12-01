@@ -22,9 +22,9 @@ from astropy_helper import pyfits
 import numpy as np
 import healpy as hp
 from gammatools.core.algebra import Vector3D
-from gammatools.fermi.catalog import *
-from gammatools.core.util import *
-from gammatools.core.histogram import *
+#from gammatools.fermi.catalog import *
+#from gammatools.core.util import *
+from gammatools.core.histogram import HistogramND, Axis
 
 def bintable_to_array(data):
 

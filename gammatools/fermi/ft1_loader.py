@@ -115,77 +115,62 @@ class FT1Loader(Configurable):
 
             vsrc = Vector3D.createLatLon(np.radians(src_dec),
                                          np.radians(src_ra))
-            
-            msk = ((table.field('DEC')>(src_dec-self.config['max_dist'])) & 
-                   (table.field('DEC')<(src_dec+self.config['max_dist'])))
-            table_src = table[msk]
 
-            vra = np.array(table_src.field('RA'),dtype=float)
-            vdec = np.array(table_src.field('DEC'),dtype=float)
-            
-            vptz_ra = np.array(table_src.field('PtRaz'),dtype=float)
-            vptz_dec = np.array(table_src.field('PtDecz'),dtype=float)
-            
-            dth = separation_angle(self.src_radec[isrc][0],
-                                   self.src_radec[isrc][1],
-                                   np.radians(vra),
-                                   np.radians(vdec))
+            if self.src_names[isrc] != 'ridge':                
 
-            print 'Applying distance max'
-            msk = dth < np.radians(self.config['max_dist'])
-            table_src = table_src[msk]
+                msk = ((table.field('DEC')>(src_dec-self.config['max_dist'])) & 
+                       (table.field('DEC')<(src_dec+self.config['max_dist'])))
+                table_src = table[msk]
 
-            vra = vra[msk]
-            vdec = vdec[msk]
-            vptz_ra = vptz_ra[msk]
-            vptz_dec = vptz_dec[msk]
+                vra = np.array(table_src.field('RA'),dtype=float)
+                vdec = np.array(table_src.field('DEC'),dtype=float)
             
-            veq = Vector3D.createLatLon(np.radians(vdec),
-                                        np.radians(vra))
+                vptz_ra = np.array(table_src.field('PtRaz'),dtype=float)
+                vptz_dec = np.array(table_src.field('PtDecz'),dtype=float)
+            
 
-            eptz = Vector3D.createLatLon(np.radians(vptz_dec),
-                                         np.radians(vptz_ra))
 
-            # True incidenge angle from source
-            src_theta = vsrc.separation(eptz)
-            
-            print 'Getting projected direction'
-            vp = veq.project2d(vsrc)
-            vx = np.degrees(vp.theta()*np.sin(vp.phi()))
-            vy = -np.degrees(vp.theta()*np.cos(vp.phi()))            
-            vptz = eptz.project2d(vsrc)
+                dth = separation_angle(self.src_radec[isrc][0],
+                                       self.src_radec[isrc][1],
+                                       np.radians(vra),
+                                       np.radians(vdec))
 
-            vp2 = copy.deepcopy(vp)
-            vp2.rotatez(-vptz.phi())
+                msk = dth < np.radians(self.config['max_dist'])
+                table_src = table_src[msk]
 
-            print 'Getting projected direction2'
-            vx2 = np.degrees(vp2.theta()*np.sin(vp2.phi()))
-            vy2 = -np.degrees(vp2.theta()*np.cos(vp2.phi()))  
+                vra = vra[msk]
+                vdec = vdec[msk]
+                vptz_ra = vptz_ra[msk]
+                vptz_dec = vptz_dec[msk]
+            
+                veq = Vector3D.createLatLon(np.radians(vdec),
+                                            np.radians(vra))
 
-            
-#            import matplotlib.pyplot as plt
+                eptz = Vector3D.createLatLon(np.radians(vptz_dec),
+                                             np.radians(vptz_ra))
 
-#            print vp.theta()[:10]
-#            print vp2.theta()[:10]
-            
-#            print np.sqrt(vx**2+vy**2)[:10]
-#            print np.sqrt(vx2**2+vy2**2)[:10]
-            
-            
-#            plt.figure()
-#            plt.plot(vx2,vy2,marker='o',linestyle='None')
+                # True incidenge angle from source
+                src_theta = vsrc.separation(eptz)
+                vp = veq.project2d(vsrc)
+                vx = np.degrees(vp.theta()*np.sin(vp.phi()))
+                vy = -np.degrees(vp.theta()*np.cos(vp.phi()))            
+                vptz = eptz.project2d(vsrc)
 
-#            plt.gca().set_xlim(-80,80)
-#            plt.gca().set_ylim(-80,80)
-            
-#            plt.figure()
-#            plt.plot(vx,vy,marker='o',linestyle='None')
-            
-#            plt.show()
+                vp2 = copy.deepcopy(vp)
+                vp2.rotatez(-vptz.phi())
+                vx2 = np.degrees(vp2.theta()*np.sin(vp2.phi()))
+                vy2 = -np.degrees(vp2.theta()*np.cos(vp2.phi()))  
 
-            
-#            vx2 = np.degrees(vp.theta()*np.sin(vp.phi()))
-#            vy2 = -np.degrees(vp.theta()*np.cos(vp.phi()))   
+                costheta = np.cos(src_theta)
+                dth = dth[msk]
+            else:
+                table_src = table
+                costheta = np.cos(np.radians(table_src.field('THETA')))
+                vx = np.zeros(len(costheta))
+                vy = np.zeros(len(costheta))
+                vx2 = np.zeros(len(costheta))
+                vy2 = np.zeros(len(costheta))
+                dth = np.zeros(len(costheta))
                         
             src_index = np.zeros(len(table_src),dtype=int)
             src_index[:] = isrc
@@ -208,12 +193,14 @@ class FT1Loader(Configurable):
             pd.append('time',table_src.field('TIME'))
             pd.append('ra',table_src.field('RA'))
             pd.append('dec',table_src.field('DEC'))
+            pd.append('glon',table_src.field('L'))
+            pd.append('glat',table_src.field('B'))
             pd.append('delta_ra',vx)
             pd.append('delta_dec',vy)
             pd.append('delta_phi',vx2)
             pd.append('delta_theta',vy2)            
             pd.append('energy',np.log10(table_src.field('ENERGY')))
-            pd.append('dtheta',dth[msk])
+            pd.append('dtheta',dth)
             pd.append('event_class',event_class)
             pd.append('event_type',event_type)
             pd.append('conversion_type',
@@ -221,7 +208,7 @@ class FT1Loader(Configurable):
             pd.append('src_index',src_index) 
             pd.append('phase',src_phase)
 
-            pd.append('cth',np.cos(src_theta))
+            pd.append('cth',costheta)
 #            pd.append('cth',np.cos(np.radians(table_src.field('THETA'))))
 #            costheta2 = np.cos(src_theta)
 #            costheta = np.cos(np.radians(table_src.field('THETA')))
@@ -266,6 +253,14 @@ class FT1Loader(Configurable):
         cat = Catalog.get()
         
         for name in src_names:
+
+            if name == 'ridge':
+                self.src_names.append('ridge')
+                self.src_ra_deg.append(0.0)
+                self.src_dec_deg.append(0.0)
+                self.src_radec.append((np.radians(0.0),np.radians(0.0)))
+                continue
+
             src = cat.get_source_by_name(name)
             name = src['Source_Name']
             ra = src['RAJ2000']
