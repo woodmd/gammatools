@@ -16,9 +16,10 @@ in the default location::
 
     python setup.py install
 
-or in a specific location with the prefix option::
+If you are a non-privileged user (i.e. without write permission to
+site-packages directory) you can install with the *user* flag::
 
-    python setup.py install --prefix=$HOME/local
+    python setup.py install --user
 
 Project Status
 --------------

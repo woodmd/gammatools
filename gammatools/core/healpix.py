@@ -2,10 +2,6 @@ import re
 import copy
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-import pywcsgrid2
-import pywcsgrid2.allsky_axes
-from pywcsgrid2.allsky_axes import make_allsky_axes_from_header
-#import astropy.wcs as pywcs
 from astropy_helper import pywcs
 from astropy_helper import pyfits
 #from astropy.io.fits.header import Header
