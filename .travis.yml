@@ -4,6 +4,8 @@ python:
   - 2.7
   - 3.4
 
+sudo: false
+
 notifications:
   email: false
  
@@ -17,7 +19,7 @@ before_install:
   - export PATH=/home/travis/miniconda/bin:$PATH
   - conda update --yes conda
   - conda info -a
-  - sudo apt-get update
+#  - sudo apt-get update
 
 # Install packages
 install:
@@ -25,7 +27,6 @@ install:
   # Coverage packages are on my binstar channel
   - conda install --yes -c dan_blanchard python-coveralls
   - pip install coveralls
-  - pip install ez_setup
   - python setup.py install
  
 # Run test
