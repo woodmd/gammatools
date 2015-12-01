@@ -134,5 +134,5 @@ print command_ft1
 print command_ft2
 
 os.system(command_ft1)
-#os.system(command_ft2)
+os.system(command_ft2)
 

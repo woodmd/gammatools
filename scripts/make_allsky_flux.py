@@ -10,7 +10,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from gammatools.core.astropy_helper import pyfits
 from gammatools.core.mpl_util import *
-from gammatools.core.fits_util import *
+from gammatools.core.fits_image import *
+from gammatools.core.healpix import *
 from gammatools.core.util import save_object
 import argparse
 

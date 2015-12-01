@@ -26,8 +26,8 @@ parser.add_argument('--output', default = None,
 #parser.add_argument("-q", "--quiet", action="store_true", dest="quiet", 
 #                  help="do not log to console")
 
-parser.add_argument('--queue', default = None,
-                    help='Set the batch queue.')
+parser.add_argument('--W', default = None,
+                    help='Set the batch time.')
 
 LTCubeTask.add_arguments(parser)
 
@@ -36,8 +36,8 @@ args = parser.parse_args()
 if len(args.files) < 1:
     parser.error("At least one argument required.")
 
-if not args.queue is None:
-    dispatch_jobs(os.path.abspath(__file__),args.files,args,args.queue)
+if not args.W is None:
+    dispatch_jobs(os.path.abspath(__file__),args.files,args,W=args.W)
     sys.exit(0)
  
 for f in args.files:

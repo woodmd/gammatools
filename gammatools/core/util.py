@@ -209,16 +209,12 @@ def extract_dict_by_keys(d,keys,exclusive=False):
     else:
         return dict((k, d[k]) for k in d.keys() if k in keys)
 
-def dispatch_jobs(exe,args,opts,queue=None,
+def dispatch_jobs(exe,args,opts,W=300,
                   resources='rhel60',skip=None,split_args=True):
 
-    skip_keywords = ['queue','resources','batch']
+    skip_keywords = ['queue','resources','batch','W']
 
     if not skip is None: skip_keywords += skip
-    
-    if queue is None and 'queue' in opts.__dict__ and \
-            not opts.queue is None:
-        queue = opts.queue
         
     cmd_opts = ''
     for k, v in opts.__dict__.items():
@@ -233,14 +229,14 @@ def dispatch_jobs(exe,args,opts,queue=None,
 
         for x in args:
             cmd = '%s %s '%(exe,x)
-            batch_cmd = 'bsub -q %s -R %s '%(queue,resources)
+            batch_cmd = 'bsub -W %s -R %s '%(W,resources)
             batch_cmd += ' %s %s '%(cmd,cmd_opts)        
             print(batch_cmd)
             os.system(batch_cmd)
 
     else:
         cmd = '%s %s '%(exe,' '.join(args))
-        batch_cmd = 'bsub -q %s -R %s '%(queue,resources)
+        batch_cmd = 'bsub -W %s -R %s '%(W,resources)
         batch_cmd += ' %s %s '%(cmd,cmd_opts)        
         print(batch_cmd)
         os.system(batch_cmd)

@@ -15,9 +15,6 @@ import re
 import copy
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-import pywcsgrid2
-import pywcsgrid2.allsky_axes
-from pywcsgrid2.allsky_axes import make_allsky_axes_from_header
 #import astropy.wcs as pywcs
 from astropy_helper import pywcs
 from astropy_helper import pyfits
@@ -33,15 +30,30 @@ def bintable_to_array(data):
 
     return copy.deepcopy(data.view((data.dtype[0], len(data.dtype.names))))
 
-def stack_images(files,output_file,hdu_index=0):
+def stack_images(files,output_file,hdu_index=0,erange=None):
 
-    hdulist0 = None
+    hdu = None
     for i, f in enumerate(files):
-        hdulist = pyfits.open(f)
-        if i == 0: hdulist0 = hdulist
-        else:
-            hdulist0[hdu_index].data += hdulist[hdu_index].data
-    hdulist0.writeto(output_file,clobber=True)
+        hl = pyfits.open(f)
+        if i == 0: hdu = hl[hdu_index].copy()
+        else: hdu.data += hl[hdu_index].data
+
+    if erange:
+        header = copy.deepcopy(hdu.header) #pywcs.WCS(hdulist0[hdu_index].header).to_header()
+        header.remove('CRPIX3')
+        header.remove('CRVAL3')
+        header.remove('CDELT3')
+        header.remove('CUNIT3')
+        header.remove('CTYPE3')
+        header.remove('NAXIS3')
+        header['NAXIS'] = 2
+        hdu_image = pyfits.PrimaryHDU(data=np.sum(hdu.data[erange[0]:erange[1],:,:],axis=0),header=header)
+#                                      header=wcs.to_header())
+    else:
+        hdu_image = pyfits.PrimaryHDU(data=hdu.data,header=hdu.header)
+        
+    hdulist = pyfits.HDUList([hdu_image])        
+    hdulist.writeto(output_file,clobber=True)
 
 def load_ds9_cmap():
     # http://tdc-www.harvard.edu/software/saoimage/saoimage.color.html
