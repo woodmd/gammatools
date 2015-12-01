@@ -6,7 +6,7 @@ from setuptools import setup
 from gammatools.version import get_git_version
 
 setup(name='gammatools',
-      version='1.0.0',
+      version='0.1.0',
       author='Matthew Wood',
       author_email='mdwood@slac.stanford.edu',
       packages=['gammatools'],
