@@ -34,7 +34,7 @@
 __all__ = ("get_git_version")
 
 import os
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE, check_output
 
 _refname = '$Format: %D$'
 _tree_hash = '$Format: %t$'
@@ -50,6 +50,9 @@ def call_git_describe(abbrev=4):
                   cwd=os.path.join('..',dirname))
         p.stderr.close()
         line = p.stdout.readlines()[0]
+
+        line = check_output(['git', 'describe', '--abbrev=%d' % abbrev, '--dirty'])
+
         return line.strip()
 
     except:

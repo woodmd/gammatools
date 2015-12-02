@@ -1,5 +1,5 @@
 """
-@file  fits_util.py
+@file  fits_image.py
 
 @brief Various utility classes for manipulating FITS data.
 
@@ -9,8 +9,6 @@
 __author__   = "Matthew Wood"
 __date__     = "01/01/2014"
 
-import re
-import copy
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib.colors import PowerNorm
@@ -18,14 +16,15 @@ import wcsaxes
 #import astropy.wcs as pywcs
 from astropy_helper import pywcs
 from astropy_helper import pyfits
-#from astropy.io.fits.header import Header
 import numpy as np
 import healpy as hp
 from gammatools.core.algebra import Vector3D
 from gammatools.fermi.catalog import *
-from gammatools.core.histogram import *
-from gammatools.core.fits_util import *
-from gammatools.core.healpix import *
+from gammatools.core.histogram import HistogramND, Histogram, get_vector, Axis
+from gammatools.core.fits_util import bintable_to_array, FITSAxis, get_circle
+from gammatools.core.fits_util import load_ds9_cmap
+from gammatools.core.util import update_dict, interpolate2d
+from gammatools.core.healpix import HealpixSkyCube
 
 
 class FITSImage(HistogramND):

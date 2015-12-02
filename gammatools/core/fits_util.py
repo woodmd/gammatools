@@ -9,21 +9,14 @@
 __author__   = "Matthew Wood"
 __date__     = "01/01/2014"
 
-
-
 import re
 import copy
 import matplotlib.pyplot as plt
-import matplotlib as mpl
-#import astropy.wcs as pywcs
+
 from astropy_helper import pywcs
 from astropy_helper import pyfits
-#from astropy.io.fits.header import Header
 import numpy as np
-import healpy as hp
 from gammatools.core.algebra import Vector3D
-#from gammatools.fermi.catalog import *
-#from gammatools.core.util import *
 from gammatools.core.histogram import HistogramND, Axis
 
 def bintable_to_array(data):
