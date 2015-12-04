@@ -6,9 +6,10 @@ from setuptools import setup, find_packages
 from gammatools.version import get_git_version
 
 setup(name='gammatools',
-      version=str(get_git_version()),
+      version=get_git_version(),
       author='Matthew Wood',
       author_email='mdwood@slac.stanford.edu',
+      license='BSD',
       packages=find_packages(exclude='tests'),
       url = "https://github.com/woodmd/gammatools",
       download_url = "https://github.com/woodmd/gammatools/tarball/master",
