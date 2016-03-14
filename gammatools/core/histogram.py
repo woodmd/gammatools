@@ -1126,16 +1126,17 @@ class Histogram(HistogramND):
 
     def hist(self,ax=None,counts=None,**kwargs):
         """Plot this histogram using the 'hist' matplotlib method."""
-        if ax is None: ax = plt.gca()
-        if counts is None: counts = self._counts
+        if ax is None:
+            ax = plt.gca()
+        if counts is None:
+            counts = self._counts
 
         style = kwargs
         
         kw = extract_dict_by_keys(style,MPLUtil.hist_kwargs)
         clear_dict_by_vals(kw,None)
         
-        hist = ax.hist(self._axes[0].center, self._axes[0].nbins,
-                       range=[self._axes[0].lo_edge(),self._axes[0].hi_edge()],
+        hist = ax.hist(self._axes[0].center, self._axes[0].edges,
                        weights=counts,**kw)
         return [hist]
 

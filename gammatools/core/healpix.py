@@ -475,8 +475,13 @@ class HealpixSkyCube(HealpixImage):
         coordsys = header.get('COORDSYS','GAL')            
         
         if image_hdu == 'SKYMAP':
-            dtype = v.dtype[0]
-            image_data = copy.deepcopy(v.view((dtype, len(v.dtype.names)))).T
+
+            image_data = np.zeros((len(v.columns),len(v)))            
+            for i,c in enumerate(v.columns):
+                image_data[i,:] = v[c.name]
+            
+#            dtype = v.dtype[0]
+#            image_data = copy.deepcopy(v.view((dtype, len(v.dtype.names)))).T
         else:
             image_data = copy.deepcopy(v)
         #np.array(hdulist[image_hdu].data).astype(float)
@@ -493,7 +498,7 @@ class HealpixSkyCube(HealpixImage):
             energy_axis = Axis.createFromArray(np.log10(energies))
         else:
             raise Exception('Unknown HDU name.')
-
+        
         hp_axis = Axis.create(0,image_data.shape[1],image_data.shape[1])
         return HealpixSkyCube([energy_axis,hp_axis],1,image_data,
                               coordsys=coordsys)
