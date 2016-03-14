@@ -24,6 +24,17 @@ from gammatools.core.util import *
 from gammatools.core.mpl_util import *
 from matplotlib.colors import NoNorm, LogNorm, Normalize
 
+def slice_to_index(s):
+
+    if s is None:
+        return None
+    elif isinstance(s,slice):
+        return [s.start,s.stop]
+    elif isinstance(s,int):
+        return [s,s+1]
+    else:
+        raise Exception('Wrong type for slice')
+
 def get_quantile(x,y,f):
     y = np.cumsum(y)    
     fn = UnivariateSpline(x,y,s=0,k=1)
@@ -241,6 +252,17 @@ class HistogramND(object):
 
         return h
 
+    def __getitem__(self, slice):
+
+        if isinstance(slice,tuple):        
+            sdims = list(range(len(slice)))
+            idx = [ slice_to_index(s) for s in slice ] 
+        else:
+            sdims = [0]
+            idx = [ slice_to_index(slice) ]
+            
+        return self.slice(sdims,idx)
+    
     def set_counts(self,counts):
         self._counts = counts
 
@@ -275,40 +297,49 @@ class HistogramND(object):
         return HistogramND.create(self._axes,counts,var,self._style)
 
     def fill_from_fn(self,fn):
+        """Fill this histogram from a function."""
         
         v = fn(*self.center()).reshape(self.shape())
         self._counts = fn(*self.center()).reshape(self.shape())        
+
+    def fill_from_hist(self,h):
+        """Fill this histogram from another histogram."""
+        HistogramND.fill(self,h.center(),w=np.ravel(h.counts),var=np.ravel(h.var))
+#        self.fill(self,h.center(),w=np.ravel(h.counts),var=np.ravel(h.var))
         
-    def fill(self,z,w=1.0,v=None):
-        """
-        Fill the histogram from a set of points arranged in an NxM
-        matrix where N is the histogram dimension and M is a variable
-        number of points.
+    def fill(self,z,w=1.0,var=None):
+        """Fill the histogram from a set of points arranged in an NxM matrix
+        where N is the histogram dimension and M is the number of
+        points.
 
         @param z: Array of NxM points.
         @param w: Array of M bin weights (optional).
-        @param v: Array of M bin variances (optional).
+        @param var: Array of M bin variances (optional).
         @return:
-        """
 
+        """
         z = np.array(z,ndmin=2)
         w = np.array(w,ndmin=1)
-        if v is None: v = w
-        else: v = np.array(v,ndmin=1)
-
+        var = w if var is None else np.array(var,ndmin=1)
+        
         if z.shape[0] != self._ndim:
             print(z.shape, self._ndim)
             raise Exception('Coordinate dimension of input array must be '
                             'equal to histogram dimension.')
 
-        if w.shape[0] < z.shape[1]: w = np.ones(z.shape[1])*w
-        if v.shape[0] < z.shape[1]: v = np.ones(z.shape[1])*v
+        if w.shape[0] < z.shape[1]:
+            w = np.ones(z.shape[1])*w
+        if var.shape[0] < z.shape[1]:
+            var = np.ones(z.shape[1])*var
 
+
+            
         edges = []
-        for i in self._dims: edges.append(self._axes[i].edges)
+        for i in self._dims:
+            edges.append(self._axes[i].edges)
 
         counts = np.histogramdd(z.T,bins=edges,weights=w)[0]
-        var = np.histogramdd(z.T,bins=edges,weights=v)[0]
+        var = np.histogramdd(z.T,bins=edges,weights=var)[0]
 
         self._counts += counts
         self._var += var
@@ -450,15 +481,15 @@ class HistogramND(object):
         return np.array([np.sum(self._counts),np.sqrt(np.sum(self._var))])
     
     def slice(self,sdims,dim_index):
-        """Generate a new histogram from a subspace of this histogram.
-        The subspace of the new histogram is defined by providing a
-        list of slice dimensions and list of bin indices for the
-        dimensions along which the slice will be performed.  The size
-        of any dimensions not in this list will be preserved in the
-        output histogram."""
+        """Generate a new histogram from a subspace of this histogram.  The
+        subspace is defined by a list of slice dimensions and list of
+        bin indices for the dimensions along which the slice will be
+        performed.  The size of any dimensions not in this list will
+        be preserved in the output histogram.
+        """
 
-        sdims = np.array(sdims,ndmin=1,copy=True)
-        dim_index = np.array(dim_index,ndmin=1,copy=True)
+        sdims = np.array(sdims,ndmin=1)
+        dim_index = np.array(dim_index,ndmin=1)
         dims = np.setdiff1d(self._dims,sdims)
 
         axes= len(self._dims)*[None]
@@ -493,12 +524,11 @@ class HistogramND(object):
                 slices[idim] = slice(index_range[0],index_range[0]+1)
 
         axes = list(filter(None,axes))
-        new_shape = list(filter(None,new_shape))
-        
+        new_shape = list(filter(None,new_shape))        
         c = self._counts[slices].reshape(new_shape)
-        v = self._var[slices].reshape(new_shape)
+        var = self._var[slices].reshape(new_shape)
 
-        return HistogramND.create(axes,c,v,self._style)
+        return HistogramND.create(axes,c,var,self._style)
 
     def sliceByValue(self,sdims,dim_coord):
 
@@ -516,7 +546,8 @@ class HistogramND(object):
         """Note: All input arrays must have the same dimension."""
 
         center = []
-        for i in range(self._ndim): center.append(self._axes[i].center)
+        for i in range(self._ndim):
+            center.append(self._axes[i].center)
         
         if len(x) == 1:
             xv = x[0]
@@ -538,8 +569,10 @@ class HistogramND(object):
         x = np.zeros(shape=(self._ndim,h._counts.size))
         c = h.center
 
-        for i, idim in enumerate(dims): x[idim] = c[i]
-        for i, idim in enumerate(sdims): x[idim,:] = dim_coord[i]
+        for i, idim in enumerate(dims):
+            x[idim] = c[i]
+        for i, idim in enumerate(sdims):
+            x[idim,:] = dim_coord[i]
 
         center = []
         for i in range(self._ndim): center.append(self._axes[i].center)
@@ -641,6 +674,19 @@ class HistogramND(object):
             return self.__mul__(x)
 
     @staticmethod
+    def createFromDict(o):
+
+        axes = []
+        for ax in o['axes']:
+            axes += [Axis.createFromDict(ax)]
+
+        o.setdefault('name',None)
+        o.setdefault('label',None)
+        return HistogramND.create(axes,c=o['counts'],var=o['var'],
+                                  label=o['label'])
+                           
+            
+    @staticmethod
     def createFromFn(axes,fn,style=None,label='__nolabel__'):
 
         if not isinstance(axes,list): axes = [axes]
@@ -650,17 +696,18 @@ class HistogramND(object):
         return h
         
     @staticmethod
-    def create(axes,c=None,v=None,style=None,label='__nolabel__'):
+    def create(axes,c=None,var=None,style=None,label='__nolabel__'):
         """Factory method for instantiating an empty histogram object.
         Will automatically produce a 1D or 2D histogram if appropriate
         based on the length of the input axes array."""
         ndim = len(axes)
         if ndim == 1:
-            return Histogram(axes[0],counts=c,var=v,style=style,label=label)
+            return Histogram(axes[0],counts=c,var=var,style=style,label=label)
         elif ndim == 2: 
-            return Histogram2D(axes[0],axes[1],counts=c,var=v,
+            return Histogram2D(axes[0],axes[1],counts=c,var=var,
                                style=style,label=label)
-        else: return HistogramND(axes,counts=c,var=v,style=style,label=label)
+        else:
+            return HistogramND(axes,counts=c,var=v,style=style,label=label)
 
     @staticmethod
     def createFromTree(t,vars,axes,cut=None,fraction=1.0,
@@ -769,8 +816,10 @@ class Axis(object):
         kw = {'name' : None, 'label' : None}
         kw = merge_dict(kw,d)
         
-        if 'edges' in d: return Axis(d['edges'],**kw)
-        elif 'lo' in d: return Axis.create(d['lo'],d['hi'],d['nbin'],**kw)
+        if 'edges' in d:
+            return Axis(d['edges'],**kw)
+        elif 'lo' in d:
+            return Axis.create(d['lo'],d['hi'],d['nbin'],**kw)
 
         
     @staticmethod
@@ -1366,7 +1415,8 @@ class Histogram(HistogramND):
 
     def set(self,i,w,var=None):
         self._counts[i] = w
-        if not var is None: self._var[i] = var
+        if not var is None:
+            self._var[i] = var
     
     def fill(self,x,w=1,var=None):
         """
@@ -1829,32 +1879,12 @@ class Histogram2D(HistogramND):
         x = np.array(x,copy=True,ndmin=1)
         y = np.array(y,copy=True,ndmin=1)
 
-        if len(x) < len(y): x = np.ones(len(y))*x[0]
-        if len(y) < len(x): y = np.ones(len(x))*y[0]
+        if len(x) < len(y):
+            x = np.ones(len(y))*x[0]
+        if len(y) < len(x):
+            y = np.ones(len(x))*y[0]
 
         HistogramND.fill(self,np.vstack((x,y)),w,var)
-
-    def fill2(self,x,y,w=1,var=None):
-
-        x = np.array(x,ndmin=1)
-        y = np.array(y,ndmin=1)
-        w = np.array(w,ndmin=0)
-
-        if var is None: var = w
-
-        bins = [self._xaxis.edges,self._yaxis.edges]
-
-        if w.ndim == 1:
-            c1 = np.histogram2d(x,y,bins=bins,weights=w)[0]
-            c2 = np.histogram2d(x,y,bins=bins,weights=var)[0]
-
-            self._counts += c1
-            self._var += c2
-        else:
-            c = np.histogram2d(x,y,bins=bins)[0]
-
-            self._counts += w*c
-            self._var += var*c
 
     def smooth(self,sigma):
 
