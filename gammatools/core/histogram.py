@@ -269,6 +269,10 @@ class HistogramND(object):
     def set_label(self,label):
         self._style['label'] = label
 
+    def transpose(self):
+        """Transpose this histogram."""
+        return HistogramND.create(self._axes[::-1],self.counts.T,self.var.T,self._style)
+        
     def inverse(self):
         c = 1./self._counts
         var = c**2*self._var/self._counts**2
@@ -302,9 +306,14 @@ class HistogramND(object):
         v = fn(*self.center()).reshape(self.shape())
         self._counts = fn(*self.center()).reshape(self.shape())        
 
-    def fill_from_hist(self,h):
+    def fill_from_hist(self,h,interpolate=False):
         """Fill this histogram from another histogram."""
-        HistogramND.fill(self,h.center(),w=np.ravel(h.counts),var=np.ravel(h.var))
+
+        if not interpolate:
+            self.fill(h.center(),w=np.ravel(h.counts),var=np.ravel(h.var))
+        else:
+            w = h.interpolate(*self.center())
+            self.fill(self.center(),w=np.ravel(w),var=0.0)
 #        self.fill(self,h.center(),w=np.ravel(h.counts),var=np.ravel(h.var))
         
     def fill(self,z,w=1.0,var=None):
@@ -318,6 +327,10 @@ class HistogramND(object):
         @return:
 
         """
+
+        if not isinstance(z,np.ndarray):
+            z = np.vstack(z)
+        
         z = np.array(z,ndmin=2)
         w = np.array(w,ndmin=1)
         var = w if var is None else np.array(var,ndmin=1)
@@ -331,8 +344,6 @@ class HistogramND(object):
             w = np.ones(z.shape[1])*w
         if var.shape[0] < z.shape[1]:
             var = np.ones(z.shape[1])*var
-
-
             
         edges = []
         for i in self._dims:
@@ -689,7 +700,8 @@ class HistogramND(object):
     @staticmethod
     def createFromFn(axes,fn,style=None,label='__nolabel__'):
 
-        if not isinstance(axes,list): axes = [axes]
+        if not isinstance(axes,list):
+            axes = [axes]
 
         h = HistogramND.create(axes,style=style,label=label)
         h.fill_from_fn(fn)
@@ -1875,17 +1887,16 @@ class Histogram2D(HistogramND):
         self._counts[ix,iy] = w
         if not var is None: self._var[ix,iy] = var
 
-    def fill(self,x,y,w=1,var=None):
-    
-        x = np.array(x,copy=True,ndmin=1)
-        y = np.array(y,copy=True,ndmin=1)
-
-        if len(x) < len(y):
-            x = np.ones(len(y))*x[0]
-        if len(y) < len(x):
-            y = np.ones(len(x))*y[0]
-
-        HistogramND.fill(self,np.vstack((x,y)),w,var)
+#    def fill(self,x,y,w=1,var=None):
+#    
+#        x = np.array(x,copy=True,ndmin=1)
+#        y = np.array(y,copy=True,ndmin=1)
+#
+#        if len(x) < len(y):
+#            x = np.ones(len(y))*x[0]
+#        if len(y) < len(x):
+#            y = np.ones(len(x))*y[0]
+#        HistogramND.fill(self,np.vstack((x,y)),w,var)
 
     def smooth(self,sigma):
 
