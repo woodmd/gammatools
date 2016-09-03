@@ -470,7 +470,6 @@ def interpolatend(x0,z,x):
     which the interpolation should be evaluated.
 
     """
-
     x = np.array(x,ndmin=2)
     ndim = len(x0)
 
@@ -485,8 +484,7 @@ def interpolatend(x0,z,x):
         ix[ix<0]=0
         ix[ix > x0[i].shape[0] -2 ] = len(x0[i]) - 2
         xs = (x[i] - x0[i][:-1][ix])/w[ix]
-
-
+        
         for j in range(len(psum)):
             if j & (1<<i):
                 index[j][i] = ix+1
@@ -495,10 +493,13 @@ def interpolatend(x0,z,x):
                 index[j][i] = ix
                 psum[j] *= (1.0-xs)
 
+    
+                
     for j in range(len(psum)):
 
         idx = []
-        for i in range(ndim): idx.append(index[j][i])
+        for i in range(ndim):
+            idx.append(index[j][i])
         psum[j] *= z[idx]
 
     return np.sum(psum,axis=0)

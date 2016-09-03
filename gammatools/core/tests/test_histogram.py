@@ -221,7 +221,8 @@ class TestHistogram(unittest.TestCase):
         # Scalar w/ scalar weight
         wv = np.cos(xv)
         wl = np.cos(xv).tolist()
-        for x, w in zip(xv,wv): h.fill(x,w)
+        for x, w in zip(xv,wv):
+            h.fill(x,w)
 
         assert_almost_equal(h.counts,wv)
         assert_almost_equal(h.var,wv)
@@ -288,14 +289,15 @@ class TestHistogram(unittest.TestCase):
         yv = np.ravel(yv)
 
         # Scalar w/ unit weight
-        for x, y in zip(xv,yv): h.fill(x,y)
+        for x, y in zip(xv,yv):
+            h.fill((x,y))
 
         assert_almost_equal(h.counts,unitw)
         assert_almost_equal(h.var,unitw)
         h.clear()
 
         # Vector w/ unit weight
-        h.fill(xv,yv)
+        h.fill((xv,yv))
         assert_almost_equal(h.counts,unitw)
         assert_almost_equal(h.var,unitw)
         h.clear()
@@ -305,19 +307,20 @@ class TestHistogram(unittest.TestCase):
         wl = wv.tolist()
         vv = wv*np.abs(np.sin(xv))
 
-        for x, y, w in zip(xv,yv,wv): h.fill(x,y,w)
+        for x, y, w in zip(xv,yv,wv):
+            h.fill((x,y),w)
         assert_almost_equal(h.counts,wv.reshape(5,5))
         assert_almost_equal(h.var,wv.reshape(5,5))
         h.clear()
 
         # Vector w/ vector weight
-        h.fill(xv,yv,wv)
+        h.fill((xv,yv),wv)
         assert_almost_equal(h.counts,wv.reshape(5,5))
         assert_almost_equal(h.var,wv.reshape(5,5))
         h.clear()
         
         # Vector w/ vector weight
-        h.fill(xv,yv,wv,vv)
+        h.fill((xv,yv),wv,vv)
         assert_almost_equal(h.counts,wv.reshape(5,5))
         assert_almost_equal(h.var,vv.reshape(5,5))
         h.clear()
@@ -339,8 +342,8 @@ class TestHistogram(unittest.TestCase):
         w0 = 1.0+np.cos(xv)**2
         w1 = 1.0+np.sin(yv)**2
 
-        h0.fill(xv,yv,w0,np.ones(xaxis.nbins*yaxis.nbins))
-        h1.fill(xv,yv,w1,np.ones(xaxis.nbins*yaxis.nbins))
+        h0.fill((xv,yv),w0,np.ones(xaxis.nbins*yaxis.nbins))
+        h1.fill((xv,yv),w1,np.ones(xaxis.nbins*yaxis.nbins))
 
         h2 = h0 + h1 + 1.0
 

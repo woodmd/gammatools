@@ -252,15 +252,26 @@ class HistogramND(object):
 
         return h
 
-    def __getitem__(self, slice):
+    def __getitem__(self, slices):
 
-        if isinstance(slice,tuple):        
-            sdims = list(range(len(slice)))
-            idx = [ slice_to_index(s) for s in slice ] 
+        if isinstance(slices,tuple):
+
+            sdims = []
+            idx = []
+            for i, s in enumerate(slices):
+                
+                if s == slice(None,None,None):
+                    continue
+
+                sdims += [i]
+                idx += [slice_to_index(s)]
+                
+#            sdims = list(range(len(slice)))
+#            idx = [ slice_to_index(s) for s in slice ] 
         else:
             sdims = [0]
-            idx = [ slice_to_index(slice) ]
-            
+            idx = [ slice_to_index(slices) ]
+
         return self.slice(sdims,idx)
     
     def set_counts(self,counts):
@@ -491,7 +502,7 @@ class HistogramND(object):
 
         return np.array([np.sum(self._counts),np.sqrt(np.sum(self._var))])
     
-    def slice(self,sdims,dim_index):
+    def slice(self,sdims,dim_index,collapse=True):
         """Generate a new histogram from a subspace of this histogram.  The
         subspace is defined by a list of slice dimensions and list of
         bin indices for the dimensions along which the slice will be
@@ -511,18 +522,28 @@ class HistogramND(object):
             axes[i] = self._axes[i]
             new_shape[i] = self._axes[i].nbins
             slices[i] = slice(self._axes[i].nbins)
-            
+
         for i, idim in enumerate(sdims):
 
             if dim_index[i] is None:
                 index_range = np.array([0,self.axis(idim).nbins])
             else:
                 index_range = np.array(dim_index[i],ndmin=1)
-            
+
+            if len(index_range) == 1:
+                index_range = np.array([index_range[0],
+                                        index_range[0]+1])
+                
+            if index_range[1] is None:
+                index_range[1] = self.axis(idim).nbins
+
+            if index_range[0] is None:
+                index_range[0] = 0
+                
             if idim >= self._ndim or index_range[0] >= self._axes[idim].nbins:
                 raise ValueError('Dimension or Index out of range')
             
-            if len(index_range) == 2:
+            if len(index_range) == 2 and index_range[1] - index_range[0] > 1:
                 new_axis = self._axes[idim].slice(index_range[0],
                                                   index_range[1])
 
@@ -538,7 +559,7 @@ class HistogramND(object):
         new_shape = list(filter(None,new_shape))        
         c = self._counts[slices].reshape(new_shape)
         var = self._var[slices].reshape(new_shape)
-
+        
         return HistogramND.create(axes,c,var,self._style)
 
     def sliceByValue(self,sdims,dim_coord):
@@ -712,6 +733,7 @@ class HistogramND(object):
         """Factory method for instantiating an empty histogram object.
         Will automatically produce a 1D or 2D histogram if appropriate
         based on the length of the input axes array."""
+
         ndim = len(axes)
         if ndim == 1:
             return Histogram(axes[0],counts=c,var=var,style=style,label=label)
@@ -719,7 +741,7 @@ class HistogramND(object):
             return Histogram2D(axes[0],axes[1],counts=c,var=var,
                                style=style,label=label)
         else:
-            return HistogramND(axes,counts=c,var=v,style=style,label=label)
+            return HistogramND(axes,counts=c,var=var,style=style,label=label)
 
     @staticmethod
     def createFromTree(t,vars,axes,cut=None,fraction=1.0,
@@ -856,8 +878,13 @@ class Axis(object):
         return Axis(edges,center=center,**kwargs)
 
     def slice(self,lobin,hibin):
-        if hibin is None: hibin = self._nbins
-        if lobin < 0: lobin -= 1
+        if hibin is None:
+            hibin = self._nbins
+
+        if lobin is None:
+            lobin = 0
+        elif lobin < 0:
+            lobin -= 1
         
         edges = self._edges[lobin:hibin+1]        
         return Axis(edges,label=self._label,name=self._label)
@@ -1572,19 +1599,18 @@ class Histogram(HistogramND):
         o -= h
         return o/h
 
-    def dump(self,outfile=None):
+    def dump(self,outfile=None,header=''):
 
         if not outfile is None:
             f = open(outfile,'w')
         else:
             f = sys.stdout
 
-        for i in range(self.axis(0).nbins):
-            s = '%5i %10.5g %10.5g '%(i,self._axes[0].edges[i],
-                                      self._axes[0].edges[i+1])
-            s += '%10.5g %10.5g\n'%(self._counts[i],self._var[i])
-            f.write(s)
+        outcols = np.vstack((self._axes[0].edges[:-1],
+                             self._axes[0].edges[1:],
+                             self.counts,self.err))
 
+        np.savetxt(f,outcols.T,fmt=('%10.5g','%10.5g','%10.5g','%10.5g'),header=header)
 
     def fit(self,expr,p0):
 

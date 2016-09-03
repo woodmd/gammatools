@@ -13,9 +13,8 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib.colors import PowerNorm
 import wcsaxes
-#import astropy.wcs as pywcs
-from astropy_helper import pywcs
-from astropy_helper import pyfits
+from astropy.wcs import WCS
+from astropy.io import fits
 import numpy as np
 import healpy as hp
 from gammatools.core.algebra import Vector3D
@@ -59,7 +58,7 @@ class FITSImage(HistogramND):
 
     def __getnewargs__(self):
 
-        self._wcs = pywcs.WCS(self._header)
+        self._wcs = WCS(self._header)
         return ()
 #        return (self._wcs,self._counts,self._ra,self._dec,self._roi_radius)
         
@@ -177,7 +176,7 @@ class FITSImage(HistogramND):
     @staticmethod
     def createFromFITS(fitsfile,ihdu=0):
         """ """
-        hdu = pyfits.open(fitsfile)[ihdu]
+        hdu = fits.open(fitsfile)[ihdu]
         header = hdu.header
 
         if header['NAXIS'] == 3: return SkyCube.createFromFITS(fitsfile,ihdu)
@@ -270,20 +269,20 @@ class SkyCube(FITSImage):
     @staticmethod
     def createFromHDU(hdu):
         
-        header = pyfits.Header.fromstring(hdu.header.tostring())
+        header = fits.Header.fromstring(hdu.header.tostring())
 #        header = hdu.header
 
-        wcs = pywcs.WCS(header,naxis=[1,2])#,relax=True)
-#        wcs1 = pywcs.WCS(header,naxis=[3])
+        wcs = WCS(header,naxis=[1,2])#,relax=True)
+#        wcs1 = WCS(header,naxis=[3])
         axes = copy.deepcopy(FITSAxis.create_axes(header))
         return SkyCube(wcs,axes,copy.deepcopy(hdu.data.astype(float).T))
         
     @staticmethod
     def createFromFITS(fitsfile,ihdu=0):
         
-        hdulist = pyfits.open(fitsfile)        
+        hdulist = fits.open(fitsfile)        
         header = hdulist[ihdu].header
-        wcs = pywcs.WCS(header,naxis=[1,2],relax=True)
+        wcs = WCS(header,naxis=[1,2],relax=True)
 
         hdunames = [t.name for t in hdulist]
         
@@ -349,7 +348,7 @@ class SkyImage(FITSImage):
     def createFromHDU(hdu):
         
         header = hdu.header
-        wcs = pywcs.WCS(header,relax=True)
+        wcs = WCS(header,relax=True)
         axes = copy.deepcopy(FITSAxis.create_axes(header))
         
         return SkyImage(wcs,axes,copy.deepcopy(hdu.data.astype(float).T))
@@ -357,7 +356,7 @@ class SkyImage(FITSImage):
     @staticmethod
     def createFromFITS(fitsfile,ihdu=0):
         
-        hdulist = pyfits.open(fitsfile)
+        hdulist = fits.open(fitsfile)
         return SkyImage.createFromHDU(hdulist[ihdu])
 
 
@@ -366,7 +365,7 @@ class SkyImage(FITSImage):
     def createWCS(ra,dec,roi_radius_deg,bin_size_deg=0.2,coordsys='cel'):
         nbin = np.ceil(2.0*roi_radius_deg/bin_size_deg)
         deg_to_pix = bin_size_deg
-        wcs = pywcs.WCS(naxis=2)
+        wcs = WCS(naxis=2)
 
         wcs.wcs.crpix = [nbin/2.+0.5, nbin/2.+0.5]
         wcs.wcs.cdelt = np.array([-deg_to_pix,deg_to_pix])
