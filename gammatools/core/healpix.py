@@ -2,8 +2,8 @@ import re
 import copy
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from astropy_helper import pywcs
-from astropy_helper import pyfits
+from matplotlib.colors import PowerNorm
+from astropy.io import fits
 #from astropy.io.fits.header import Header
 import numpy as np
 import healpy as hp
@@ -360,13 +360,13 @@ class HealpixSkyImage(HealpixImage):
     
     def save(self,fitsfile):
 
-        hdu_image = pyfits.PrimaryHDU()
-        col = pyfits.Column(name='CHANNEL1', format='D', array=self._counts)
-        hdu = pyfits.BinTableHDU.from_columns([col],name='SKYMAP')
+        hdu_image = fits.PrimaryHDU()
+        col = fits.Column(name='CHANNEL1', format='D', array=self._counts)
+        hdu = fits.BinTableHDU.from_columns([col],name='SKYMAP')
 
         fill_header(hdu,self.nside,scheme=self.scheme)
                 
-        hdulist = pyfits.HDUList([hdu_image,hdu])
+        hdulist = fits.HDUList([hdu_image,hdu])
         hdulist.writeto(fitsfile,clobber=True)
     
 class HealpixSkyCube(HealpixImage):
@@ -468,7 +468,7 @@ class HealpixSkyCube(HealpixImage):
     def createFromFITS(fitsfile,image_hdu='SKYMAP',energy_hdu='EBOUNDS'):
         """ """
 
-        hdulist = pyfits.open(fitsfile)        
+        hdulist = fits.open(fitsfile)        
 
 #        hdulist.info()
 
@@ -507,31 +507,31 @@ class HealpixSkyCube(HealpixImage):
 
     def save(self,fitsfile):
 
-        #        hdu_image = pyfits.PrimaryHDU(self._counts)
-        hdu_image = pyfits.PrimaryHDU()
+        #        hdu_image = fits.PrimaryHDU(self._counts)
+        hdu_image = fits.PrimaryHDU()
 
         cols = []
         for i in range(len(self._counts)):
-            col = pyfits.Column(name='CHANNEL%i'%(i+1), format='D', array=self._counts[i])
+            col = fits.Column(name='CHANNEL%i'%(i+1), format='D', array=self._counts[i])
             cols += [col]
-        hdu = pyfits.BinTableHDU.from_columns(cols,name='SKYMAP')
+        hdu = fits.BinTableHDU.from_columns(cols,name='SKYMAP')
 
         fill_header(hdu,self.nside,scheme=self.scheme)
 
         ecols = []
-        ecols += [pyfits.Column(name='CHANNEL', format='I',
+        ecols += [fits.Column(name='CHANNEL', format='I',
                                 array=1+np.arange(len(self._counts)))]
 
-        ecols += [pyfits.Column(name='E_MIN', format='1E',
+        ecols += [fits.Column(name='E_MIN', format='1E',
                                 array=self.axis(0).edges[:-1])]
 
-        ecols += [pyfits.Column(name='E_MAX', format='1E',
+        ecols += [fits.Column(name='E_MAX', format='1E',
                                 array=self.axis(0).edges[1:])]
         
-#        ecol = pyfits.Column(name='ENERGIES', format='D', 
+#        ecol = fits.Column(name='ENERGIES', format='D', 
 #                             array=10**self.axis(0).center)
-#        hdu_energies = pyfits.BinTableHDU.from_columns([ecol],name='ENERGIES')
-        hdu_energies = pyfits.BinTableHDU.from_columns(ecols,name='EBOUNDS')
-        hdulist = pyfits.HDUList([hdu_image,hdu,hdu_energies])
+#        hdu_energies = fits.BinTableHDU.from_columns([ecol],name='ENERGIES')
+        hdu_energies = fits.BinTableHDU.from_columns(ecols,name='EBOUNDS')
+        hdulist = fits.HDUList([hdu_image,hdu,hdu_energies])
 
         hdulist.writeto(fitsfile,clobber=True)

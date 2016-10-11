@@ -13,9 +13,11 @@ import re
 import copy
 import matplotlib.pyplot as plt
 
-from astropy_helper import pywcs
-from astropy_helper import pyfits
+
 import numpy as np
+from astropy.wcs import WCS
+from astropy.io import fits
+
 from gammatools.core.algebra import Vector3D
 from gammatools.core.histogram import HistogramND, Axis
 
@@ -27,12 +29,12 @@ def stack_images(files,output_file,hdu_index=0,erange=None):
 
     hdu = None
     for i, f in enumerate(files):
-        hl = pyfits.open(f)
+        hl = fits.open(f)
         if i == 0: hdu = hl[hdu_index].copy()
         else: hdu.data += hl[hdu_index].data
 
     if erange:
-        header = copy.deepcopy(hdu.header) #pywcs.WCS(hdulist0[hdu_index].header).to_header()
+        header = copy.deepcopy(hdu.header) #WCS(hdulist0[hdu_index].header).to_header()
         header.remove('CRPIX3')
         header.remove('CRVAL3')
         header.remove('CDELT3')
@@ -40,12 +42,12 @@ def stack_images(files,output_file,hdu_index=0,erange=None):
         header.remove('CTYPE3')
         header.remove('NAXIS3')
         header['NAXIS'] = 2
-        hdu_image = pyfits.PrimaryHDU(data=np.sum(hdu.data[erange[0]:erange[1],:,:],axis=0),header=header)
+        hdu_image = fits.PrimaryHDU(data=np.sum(hdu.data[erange[0]:erange[1],:,:],axis=0),header=header)
 #                                      header=wcs.to_header())
     else:
-        hdu_image = pyfits.PrimaryHDU(data=hdu.data,header=hdu.header)
+        hdu_image = fits.PrimaryHDU(data=hdu.data,header=hdu.header)
         
-    hdulist = pyfits.HDUList([hdu_image])        
+    hdulist = fits.HDUList([hdu_image])        
     hdulist.writeto(output_file,clobber=True)
 
 def load_ds9_cmap():

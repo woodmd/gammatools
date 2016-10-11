@@ -94,6 +94,10 @@ class IRFManager(object):
             irfset.add_irf(irf)
         return irfset
 
+    @property
+    def irfs(self):
+        return self._irfs
+    
     def add_irf(self,irf):
         self._irfs.append(irf)
 
@@ -182,10 +186,12 @@ class IRFManager(object):
         return v/aeff_tot
 
     def dump(self):
-        for irf in self._irfs: irf.dump()
+        for irf in self._irfs:
+            irf.dump()
     
     def save(self,irf_name):
-        for irf in self._irfs: irf.save(irf_name)
+        for irf in self._irfs:
+            irf.save(irf_name)
 
 class IRF(object):
 
@@ -242,15 +248,18 @@ class IRF(object):
         edisp = EDispPyIRF(irfs.edisp())
 
         return IRF(psf,aeff,edisp)
-        
-    def aeff(self,*args,**kwargs):
-        return self._aeff(*args,**kwargs)
 
-    def psf(self,*args,**kwargs):
-        return self._psf(*args,**kwargs)
+    @property
+    def aeff(self):
+        return self._aeff
 
-    def edisp(self,*args,**kwargs):
-        return self._edisp(*args,**kwargs)
+    @property
+    def psf(self):
+        return self._psf
+
+    @property
+    def edisp(self):
+        return self._edisp
 
     def fisheye(self,*args,**kwargs):
         return self._psf.fisheye(*args,**kwargs)
@@ -309,6 +318,10 @@ class AeffIRF(IRFComponent):
                                       counts=self._aeff,var=0)
 #        hdulist.close()
 
+    @property
+    def hist(self):
+        return self._aeff_hist
+        
     def dump(self):
         self._hdulist.info()
 
