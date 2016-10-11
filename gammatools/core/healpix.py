@@ -7,11 +7,13 @@ from astropy_helper import pyfits
 #from astropy.io.fits.header import Header
 import numpy as np
 import healpy as hp
+from matplotlib.colors import LogNorm, Normalize, PowerNorm
 from gammatools.core.algebra import Vector3D
 from gammatools.fermi.catalog import *
 from gammatools.core.util import *
 from gammatools.core.histogram import *
 from gammatools.core.fits_util import *
+
 
 
 def fill_header(hdu,nside,galactic=True,scheme='RING'):
